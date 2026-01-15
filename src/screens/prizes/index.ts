@@ -1,0 +1,1 @@
+export {PrizesScreen} from './PrizesScreen';
