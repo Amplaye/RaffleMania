@@ -1,14 +1,21 @@
 import React from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator, NativeStackScreenProps} from '@react-navigation/native-stack';
+import {View, Text, StyleSheet, StatusBar, Platform} from 'react-native';
 import {useAuthStore} from '../store';
+import {useThemeColors} from '../hooks/useThemeColors';
 import {AuthNavigator} from './AuthNavigator';
 import {TabNavigator} from './TabNavigator';
 import {COLORS, FONT_SIZE, FONT_WEIGHT} from '../utils/constants';
-
-// Placeholder screens for stack navigation
-import {View, Text, StyleSheet} from 'react-native';
 import {ScreenContainer, Button} from '../components/common';
+
+// Import actual screens
+import {CreditsScreen} from '../screens/credits';
+import {MyWinsScreen} from '../screens/mywins';
+import {ReferralScreen} from '../screens/referral';
+import {AddressFormScreen} from '../screens/address';
+import {SettingsScreen} from '../screens/settings';
+import {TicketDetailScreen} from '../screens/ticketdetail';
 
 // Stack param list
 export type RootStackParamList = {
@@ -25,7 +32,7 @@ export type RootStackParamList = {
 
 type PlaceholderProps = NativeStackScreenProps<RootStackParamList, keyof RootStackParamList>;
 
-// Placeholder screens
+// Placeholder for screens still in development
 const PlaceholderScreen: React.FC<{title: string} & PlaceholderProps> = ({
   title,
   navigation,
@@ -43,30 +50,12 @@ const PlaceholderScreen: React.FC<{title: string} & PlaceholderProps> = ({
   </ScreenContainer>
 );
 
-// Create typed placeholder components
-const TicketDetailScreen = (props: NativeStackScreenProps<RootStackParamList, 'TicketDetail'>) => (
-  <PlaceholderScreen title="Dettaglio Biglietto" {...props} />
-);
+// Placeholder for screens not yet implemented
 const PrizeDetailScreen = (props: NativeStackScreenProps<RootStackParamList, 'PrizeDetail'>) => (
   <PlaceholderScreen title="Dettaglio Premio" {...props} />
 );
-const CreditsScreen = (props: NativeStackScreenProps<RootStackParamList, 'Credits'>) => (
-  <PlaceholderScreen title="Acquista Crediti" {...props} />
-);
 const WinnersScreen = (props: NativeStackScreenProps<RootStackParamList, 'Winners'>) => (
   <PlaceholderScreen title="Tutti i Vincitori" {...props} />
-);
-const ReferralScreen = (props: NativeStackScreenProps<RootStackParamList, 'Referral'>) => (
-  <PlaceholderScreen title="Programma Referral" {...props} />
-);
-const SettingsScreen = (props: NativeStackScreenProps<RootStackParamList, 'Settings'>) => (
-  <PlaceholderScreen title="Impostazioni" {...props} />
-);
-const AddressFormScreen = (props: NativeStackScreenProps<RootStackParamList, 'AddressForm'>) => (
-  <PlaceholderScreen title="Indirizzo di Spedizione" {...props} />
-);
-const MyWinsScreen = (props: NativeStackScreenProps<RootStackParamList, 'MyWins'>) => (
-  <PlaceholderScreen title="I Miei Premi Vinti" {...props} />
 );
 
 const placeholderStyles = StyleSheet.create({
@@ -91,17 +80,26 @@ const placeholderStyles = StyleSheet.create({
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const MainStack: React.FC = () => {
+  const {colors} = useThemeColors();
+
+  // Get status bar height for Android (the status bar is translucent in ScreenContainer)
+  const statusBarHeight = Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0;
+
   return (
     <Stack.Navigator
       screenOptions={{
         headerStyle: {
-          backgroundColor: COLORS.surface,
+          backgroundColor: colors.background,
         },
-        headerTintColor: COLORS.text,
+        headerTintColor: colors.text,
         headerTitleStyle: {
           fontWeight: FONT_WEIGHT.semibold,
         },
         headerShadowVisible: false,
+        headerBackTitleVisible: false,
+        statusBarTranslucent: true,
+        statusBarStyle: 'auto',
+        headerStatusBarHeight: statusBarHeight + 10,
       }}>
       <Stack.Screen
         name="MainTabs"

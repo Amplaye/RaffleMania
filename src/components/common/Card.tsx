@@ -1,6 +1,7 @@
 import React from 'react';
 import {View, StyleSheet, ViewStyle, TouchableOpacity} from 'react-native';
 import {COLORS, RADIUS, SPACING} from '../../utils/constants';
+import {useThemeColors} from '../../hooks/useThemeColors';
 
 interface CardProps {
   children: React.ReactNode;
@@ -17,8 +18,11 @@ export const Card: React.FC<CardProps> = ({
   padding = 'medium',
   elevated = true,
 }) => {
+  const {colors} = useThemeColors();
+
   const cardStyle: ViewStyle[] = [
     styles.card,
+    {backgroundColor: colors.card},
     styles[`${padding}Padding`],
     elevated && styles.elevated,
     style,

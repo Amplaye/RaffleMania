@@ -201,8 +201,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+    <LinearGradient
+      colors={['#FFFFFF', '#FFFCF5', '#FFF5E6', '#FFECD2', '#FFE0BD']}
+      locations={[0, 0.25, 0.5, 0.75, 1]}
+      start={{x: 0.5, y: 0}}
+      end={{x: 0.5, y: 1}}
+      style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       {/* Animated Background Particles */}
       <View style={styles.particlesContainer} pointerEvents="none">
@@ -336,14 +341,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
           </TouchableOpacity>
         </Animated.View>
       </KeyboardAvoidingView>
-    </View>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   particlesContainer: {
     position: 'absolute',

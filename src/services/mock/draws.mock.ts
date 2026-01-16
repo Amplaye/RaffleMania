@@ -13,13 +13,27 @@ const getRelativeDate = (
   return date.toISOString();
 };
 
+// Helper to get the next scheduled time (always in future)
+const getNextScheduledTime = (): string => {
+  const now = new Date();
+  const target = new Date();
+  target.setHours(20, 0, 0, 0); // 8 PM today
+
+  // If it's past 8 PM today, schedule for tomorrow
+  if (now >= target) {
+    target.setDate(target.getDate() + 1);
+  }
+
+  return target.toISOString();
+};
+
 export const mockDraws: Draw[] = [
-  // Next scheduled draw (today or tomorrow at 8 PM)
+  // Next scheduled draw (today or tomorrow at 8 PM - always in future)
   {
     id: 'draw_001',
     prizeId: 'prize_001',
     prize: mockPrizes[0],
-    scheduledAt: getRelativeDate(0, 20, 0), // Today at 8 PM
+    scheduledAt: getNextScheduledTime(), // Always in the future
     status: 'scheduled',
     totalTickets: 1247,
   },

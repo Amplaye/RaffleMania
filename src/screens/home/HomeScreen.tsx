@@ -13,12 +13,14 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   Easing,
+  Modal,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {AnimatedBackground} from '../../components/common';
 import {useTicketsStore, usePrizesStore} from '../../store';
 import {useCountdown} from '../../hooks/useCountdown';
+import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
   SPACING,
@@ -255,7 +257,205 @@ interface HomeScreenProps {
   navigation: any;
 }
 
+// Ticket Success Modal Component
+interface TicketModalInfo {
+  ticketCode: string;
+  prizeName: string;
+}
+
+const TicketSuccessModal: React.FC<{
+  visible: boolean;
+  ticketInfo: TicketModalInfo | null;
+  onClose: () => void;
+}> = ({visible, ticketInfo, onClose}) => {
+  const scaleAnim = useRef(new Animated.Value(0.5)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const ticketScaleAnim = useRef(new Animated.Value(0.8)).current;
+  const confettiAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      scaleAnim.setValue(0.5);
+      opacityAnim.setValue(0);
+      ticketScaleAnim.setValue(0.8);
+      confettiAnim.setValue(0);
+
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 6,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        Animated.sequence([
+          Animated.spring(ticketScaleAnim, {
+            toValue: 1.1,
+            friction: 4,
+            useNativeDriver: true,
+          }),
+          Animated.spring(ticketScaleAnim, {
+            toValue: 1,
+            friction: 4,
+            useNativeDriver: true,
+          }),
+        ]).start();
+
+        Animated.loop(
+          Animated.timing(confettiAnim, {
+            toValue: 1,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ).start();
+      });
+    }
+  }, [visible]);
+
+  if (!ticketInfo) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}>
+      <Animated.View style={[styles.modalOverlay, {opacity: opacityAnim}]}>
+        <Animated.View
+          style={[
+            styles.modalContent,
+            {transform: [{scale: scaleAnim}]},
+          ]}>
+          {/* Success Icon */}
+          <View style={styles.modalIconContainer}>
+            <LinearGradient
+              colors={[COLORS.primary, '#FF8500']}
+              style={styles.modalIconGradient}>
+              <Ionicons name="ticket" size={40} color={COLORS.white} />
+            </LinearGradient>
+          </View>
+
+          {/* Title */}
+          <Text style={styles.modalTitle}>Biglietto Ottenuto!</Text>
+          <Text style={styles.modalSubtitle}>Hai un nuovo biglietto per partecipare</Text>
+
+          {/* Ticket Card */}
+          <Animated.View
+            style={[
+              styles.modalTicketCard,
+              {transform: [{scale: ticketScaleAnim}]},
+            ]}>
+            <LinearGradient
+              colors={[COLORS.primary, '#FF6B00']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}
+              style={styles.modalTicketGradient}>
+              <View style={styles.modalTicketHeader}>
+                <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalTicketLabel}>CODICE BIGLIETTO</Text>
+              </View>
+              <Text style={styles.modalTicketCode}>{ticketInfo.ticketCode}</Text>
+              <View style={styles.modalTicketDivider} />
+              <View style={styles.modalTicketPrizeRow}>
+                <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
+              </View>
+            </LinearGradient>
+          </Animated.View>
+
+          {/* Good Luck Message */}
+          <View style={styles.modalLuckContainer}>
+            <Ionicons name="star" size={16} color="#FFD700" />
+            <Text style={styles.modalLuckText}>Buona fortuna!</Text>
+            <Ionicons name="star" size={16} color="#FFD700" />
+          </View>
+
+          {/* Close Button */}
+          <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
+            <Text style={styles.modalCloseButtonText}>Continua</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
+    </Modal>
+  );
+};
+
+// Animated Step Indicator Component - pill style
+interface StepIndicatorProps {
+  currentIndex: number;
+  totalCount: number;
+}
+
+const StepIndicator: React.FC<StepIndicatorProps> = ({currentIndex, totalCount}) => {
+  return (
+    <View style={styles.stepIndicatorContainer}>
+      {Array.from({length: totalCount}).map((_, index) => {
+        const isActive = index === currentIndex;
+        return (
+          <View
+            key={index}
+            style={[
+              styles.stepPill,
+              isActive && styles.stepPillActive,
+            ]}>
+            {isActive && (
+              <LinearGradient
+                colors={[COLORS.primary, '#FF8500']}
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 0}}
+                style={styles.stepPillGradient}
+              />
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+};
+
+// Shimmer Logo Component
+const ShimmerLogo: React.FC = () => {
+  const shimmerPosition = useRef(new Animated.Value(-1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(shimmerPosition, {
+        toValue: 2,
+        duration: 2500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    ).start();
+  }, []);
+
+  const shimmerTranslate = shimmerPosition.interpolate({
+    inputRange: [-1, 2],
+    outputRange: [-150, 150],
+  });
+
+  return (
+    <View style={styles.logoContainer}>
+      <Text style={styles.logoLarge}>
+        <Text style={styles.logoRaffleLarge}>Raffle</Text>
+        <Text style={styles.logoManiaLarge}>Mania</Text>
+      </Text>
+      <Animated.View
+        style={[
+          styles.logoShimmer,
+          {transform: [{translateX: shimmerTranslate}]},
+        ]}
+      />
+    </View>
+  );
+};
+
 export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
+  const {colors, gradientColors, isDark} = useThemeColors();
   const {
     activeTickets,
     fetchTickets,
@@ -268,7 +468,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const {prizes, currentDraw, fetchPrizes, fetchDraws, incrementAdsForPrize} = usePrizesStore();
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [currentPrizeIndex, setCurrentPrizeIndex] = useState(0);
+  const [showTicketModal, setShowTicketModal] = useState(false);
+  const [newTicketInfo, setNewTicketInfo] = useState<TicketModalInfo | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+  const isManualScroll = useRef(false);
+  const autoScrollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const {countdown, isExpired} = useCountdown(currentDraw?.scheduledAt);
 
@@ -282,20 +486,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     fetchDraws();
   }, []);
 
+  // Auto-scroll with infinite loop
   useEffect(() => {
     if (activePrizes.length === 0) return;
 
-    const interval = setInterval(() => {
-      const nextIndex = (currentPrizeIndex + 1) % activePrizes.length;
-      setCurrentPrizeIndex(nextIndex);
-      scrollViewRef.current?.scrollTo({
-        x: nextIndex * (width - 48),
-        animated: true,
-      });
-    }, 5000);
+    const startAutoScroll = () => {
+      autoScrollTimer.current = setInterval(() => {
+        if (!isManualScroll.current) {
+          const nextIndex = (currentPrizeIndex + 1) % activePrizes.length;
+          setCurrentPrizeIndex(nextIndex);
+          scrollViewRef.current?.scrollTo({
+            x: nextIndex * (width - 48),
+            animated: true,
+          });
+        }
+      }, 5000);
+    };
 
-    return () => clearInterval(interval);
+    startAutoScroll();
+
+    return () => {
+      if (autoScrollTimer.current) {
+        clearInterval(autoScrollTimer.current);
+      }
+    };
   }, [currentPrizeIndex, activePrizes.length]);
+
+  const handleScrollBegin = () => {
+    isManualScroll.current = true;
+    if (autoScrollTimer.current) {
+      clearInterval(autoScrollTimer.current);
+    }
+  };
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
@@ -303,6 +525,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     if (index !== currentPrizeIndex && index >= 0 && index < activePrizes.length) {
       setCurrentPrizeIndex(index);
     }
+  };
+
+  const handleScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const contentOffsetX = event.nativeEvent.contentOffset.x;
+    const index = Math.round(contentOffsetX / (width - 48));
+
+    if (index >= 0 && index < activePrizes.length) {
+      setCurrentPrizeIndex(index);
+    }
+
+    // Resume auto-scroll after manual interaction
+    isManualScroll.current = false;
   };
 
   const handleWatchAd = async () => {
@@ -325,53 +559,66 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
 
     if (currentDraw) {
       const newTicket = addTicket('ad', currentDraw.id, currentPrize.id);
-      Alert.alert(
-        'Biglietto Ottenuto!',
-        `Codice: ${newTicket.uniqueCode}\n\nPremio: ${currentPrize.name}\nBuona fortuna!`,
-      );
+      setNewTicketInfo({
+        ticketCode: newTicket.uniqueCode,
+        prizeName: currentPrize.name,
+      });
+      setShowTicketModal(true);
     }
 
     setIsWatchingAd(false);
   };
 
+  const handleCloseModal = () => {
+    setShowTicketModal(false);
+    setNewTicketInfo(null);
+  };
+
   if (activePrizes.length === 0) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <LinearGradient
+        colors={gradientColors as unknown as string[]}
+        locations={[0, 0.25, 0.5, 0.75, 1]}
+        start={{x: 0.5, y: 0}}
+        end={{x: 0.5, y: 1}}
+        style={styles.container}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Caricamento premi...</Text>
+          <Text style={[styles.loadingText, {color: colors.textMuted}]}>Caricamento premi...</Text>
         </View>
-      </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+    <LinearGradient
+      colors={gradientColors as unknown as string[]}
+      locations={[0, 0.25, 0.5, 0.75, 1]}
+      start={{x: 0.5, y: 0}}
+      end={{x: 0.5, y: 1}}
+      style={styles.container}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
       <AnimatedBackground particleCount={6} />
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.ticketBadge}>
+        <TouchableOpacity
+          style={styles.ticketBadge}
+          onPress={() => navigation.navigate('Tickets')}
+          activeOpacity={0.7}>
           <Ionicons name="ticket" size={16} color={COLORS.white} />
           <Text style={styles.ticketCount}>{activeTickets.length}</Text>
-        </View>
-        <Text style={styles.logo}>
-          <Text style={styles.logoRaffle}>Raffle</Text>
-          <Text style={styles.logoMania}>Mania</Text>
-        </Text>
+        </TouchableOpacity>
+        <ShimmerLogo />
         <TouchableOpacity
           style={styles.profileButton}
           onPress={() => navigation.navigate('Profile')}>
-          <Ionicons name="person-circle-outline" size={28} color={COLORS.text} />
+          <Ionicons name="person-circle-outline" size={28} color={colors.text} />
         </TouchableOpacity>
       </View>
 
-      {/* Main Content */}
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.contentContainer}>
+      {/* Main Content - Centered Layout */}
+      <View style={styles.mainContent}>
         {/* Prize Carousel */}
         <View style={styles.carouselContainer}>
           <ScrollView
@@ -379,7 +626,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={handleScroll}
+            onScrollBeginDrag={handleScrollBegin}
+            onMomentumScrollEnd={handleScrollEnd}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
             contentContainerStyle={styles.carouselContent}
             decelerationRate="fast"
             snapToInterval={width - 48}>
@@ -390,23 +640,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
                   style={styles.prizeImage}
                   resizeMode="contain"
                 />
-                <Text style={styles.prizeName}>{prize.name}</Text>
+                <Text style={[styles.prizeName, {color: colors.text}]}>{prize.name}</Text>
               </View>
             ))}
           </ScrollView>
 
-          {/* Carousel Indicators */}
-          <View style={styles.indicators}>
-            {activePrizes.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.indicator,
-                  currentPrizeIndex === index && styles.indicatorActive,
-                ]}
-              />
-            ))}
-          </View>
+          {/* Step Indicator */}
+          <StepIndicator
+            currentIndex={currentPrizeIndex}
+            totalCount={activePrizes.length}
+          />
         </View>
 
         {/* Timer Section */}
@@ -429,42 +672,40 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
           )}
         </View>
 
-        {/* Prize Progress Bar */}
-        {currentPrize && (
-          <SmoothProgressBar
-            current={currentPrize.currentAds}
-            goal={currentPrize.goalAds}
-            prizeId={currentPrize.id}
-          />
-        )}
-      </ScrollView>
-
-      {/* Watch Ad Button */}
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[
-            styles.watchButton,
-            (!canWatchAd() || isWatchingAd) && styles.watchButtonDisabled,
-          ]}
-          onPress={handleWatchAd}
-          disabled={!canWatchAd() || isWatchingAd}
-          activeOpacity={0.8}>
-          <Ionicons
-            name={isWatchingAd ? 'hourglass' : 'play-circle'}
-            size={24}
-            color={COLORS.white}
-          />
-          <Text style={styles.watchButtonText}>
-            {isWatchingAd ? 'Guardando...' : 'Guarda e Vinci'}
-          </Text>
-          <View style={styles.adsCounter}>
-            <Text style={styles.adsCounterText}>
-              {todayAdsWatched}/{maxAdsPerDay}
+        {/* Watch Ad Button - Bottom Position */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.watchButton,
+              (!canWatchAd() || isWatchingAd) && styles.watchButtonDisabled,
+            ]}
+            onPress={handleWatchAd}
+            disabled={!canWatchAd() || isWatchingAd}
+            activeOpacity={0.8}>
+            <Ionicons
+              name={isWatchingAd ? 'hourglass' : 'play-circle'}
+              size={24}
+              color={COLORS.white}
+            />
+            <Text style={styles.watchButtonText}>
+              {isWatchingAd ? 'Guardando...' : 'Guarda e Vinci'}
             </Text>
-          </View>
-        </TouchableOpacity>
+            <View style={styles.adsCounter}>
+              <Text style={styles.adsCounterText}>
+                {todayAdsWatched}/{maxAdsPerDay}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+
+      {/* Ticket Success Modal */}
+      <TicketSuccessModal
+        visible={showTicketModal}
+        ticketInfo={newTicketInfo}
+        onClose={handleCloseModal}
+      />
+    </LinearGradient>
   );
 };
 
@@ -487,8 +728,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl + 20,
-    paddingBottom: SPACING.sm,
+    paddingTop: 30,
+    paddingBottom: SPACING.xs,
   },
   ticketBadge: {
     flexDirection: 'row',
@@ -520,16 +761,14 @@ const styles = StyleSheet.create({
   profileButton: {
     padding: 4,
   },
-  content: {
+  mainContent: {
     flex: 1,
-  },
-  contentContainer: {
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.md,
+    justifyContent: 'flex-start',
+    paddingBottom: 140,
   },
   // Carousel
   carouselContainer: {
-    height: height * 0.36,
+    height: height * 0.42,
   },
   carouselContent: {
     paddingHorizontal: 24,
@@ -540,40 +779,75 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   prizeImage: {
-    width: width * 0.42,
-    height: height * 0.22,
-    marginBottom: SPACING.sm,
+    width: width * 0.6,
+    height: height * 0.3,
+    marginBottom: SPACING.md,
   },
   prizeName: {
-    fontSize: FONT_SIZE.xl,
+    fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.text,
     textAlign: 'center',
+    marginTop: SPACING.xs,
   },
-  indicators: {
+  // Step Indicator - pill style
+  stepIndicatorContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-    marginTop: SPACING.sm,
+    gap: 6,
+    marginTop: SPACING.xs,
   },
-  indicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.border,
-  },
-  indicatorActive: {
+  stepPill: {
     width: 24,
-    backgroundColor: COLORS.primary,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  stepPillActive: {
+    width: 40,
+  },
+  stepPillGradient: {
+    flex: 1,
+  },
+  // Logo with shimmer
+  logoContainer: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  logoLarge: {
+    fontSize: FONT_SIZE.xxl,
+    fontFamily: FONT_FAMILY.bold,
+  },
+  logoRaffleLarge: {
+    color: COLORS.text,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  logoManiaLarge: {
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  logoShimmer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 60,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+    transform: [{skewX: '-20deg'}],
+  },
+  buttonContainer: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
   },
   // Timer
   timerSection: {
     alignItems: 'center',
     paddingHorizontal: SPACING.lg,
-    marginTop: SPACING.xs,
-    marginBottom: SPACING.md,
+    marginTop: SPACING.sm,
   },
   liveIndicator: {
     flexDirection: 'row',
@@ -723,12 +997,7 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.regular,
     color: COLORS.textMuted,
   },
-  // Footer
-  footer: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.xl + 10,
-    paddingTop: SPACING.sm,
-  },
+  // Watch Button
   watchButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -765,6 +1034,132 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 340,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 10},
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  modalIconContainer: {
+    marginBottom: SPACING.lg,
+  },
+  modalIconGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: FONT_SIZE.xxl,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  modalSubtitle: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.regular,
+    color: COLORS.textMuted,
+    marginBottom: SPACING.lg,
+    textAlign: 'center',
+  },
+  modalTicketCard: {
+    width: '100%',
+    marginBottom: SPACING.lg,
+  },
+  modalTicketGradient: {
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+  },
+  modalTicketHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  modalTicketLabel: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: 'rgba(255, 255, 255, 0.8)',
+    letterSpacing: 1,
+  },
+  modalTicketCode: {
+    fontSize: 28,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.white,
+    letterSpacing: 2,
+    marginBottom: SPACING.md,
+  },
+  modalTicketDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginBottom: SPACING.md,
+  },
+  modalTicketPrizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalTicketPrize: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.medium,
+    fontWeight: FONT_WEIGHT.medium,
+    color: COLORS.white,
+  },
+  modalLuckContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: SPACING.lg,
+  },
+  modalLuckText: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.medium,
+    fontWeight: FONT_WEIGHT.medium,
+    color: COLORS.textSecondary,
+  },
+  modalCloseButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    paddingHorizontal: SPACING.xl,
+    borderRadius: RADIUS.lg,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  modalCloseButtonText: {
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.white,
   },
 });
 

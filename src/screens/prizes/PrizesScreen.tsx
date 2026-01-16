@@ -9,10 +9,13 @@ import {
   Dimensions,
   TouchableOpacity,
   StatusBar,
+  Modal,
+  Alert,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {usePrizesStore} from '../../store';
+import {usePrizesStore, useTicketsStore} from '../../store';
+import {useThemeColors} from '../../hooks/useThemeColors';
 import {Prize} from '../../types';
 import {
   COLORS,
@@ -24,11 +27,128 @@ import {
 } from '../../utils/constants';
 
 const {width} = Dimensions.get('window');
-const CARD_WIDTH = width - SPACING.lg * 2;
 
 interface PrizesScreenProps {
   navigation: any;
 }
+
+// Ticket Success Modal Component
+interface TicketModalInfo {
+  ticketCode: string;
+  prizeName: string;
+}
+
+const TicketSuccessModal: React.FC<{
+  visible: boolean;
+  ticketInfo: TicketModalInfo | null;
+  onClose: () => void;
+}> = ({visible, ticketInfo, onClose}) => {
+  const scaleAnim = useRef(new Animated.Value(0.5)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const ticketScaleAnim = useRef(new Animated.Value(0.8)).current;
+
+  useEffect(() => {
+    if (visible) {
+      scaleAnim.setValue(0.5);
+      opacityAnim.setValue(0);
+      ticketScaleAnim.setValue(0.8);
+
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 6,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        Animated.sequence([
+          Animated.spring(ticketScaleAnim, {
+            toValue: 1.1,
+            friction: 4,
+            useNativeDriver: true,
+          }),
+          Animated.spring(ticketScaleAnim, {
+            toValue: 1,
+            friction: 4,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      });
+    }
+  }, [visible]);
+
+  if (!ticketInfo) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}>
+      <Animated.View style={[styles.modalOverlay, {opacity: opacityAnim}]}>
+        <Animated.View
+          style={[
+            styles.modalContent,
+            {transform: [{scale: scaleAnim}]},
+          ]}>
+          {/* Success Icon */}
+          <View style={styles.modalIconContainer}>
+            <LinearGradient
+              colors={[COLORS.primary, '#FF8500']}
+              style={styles.modalIconGradient}>
+              <Ionicons name="ticket" size={40} color={COLORS.white} />
+            </LinearGradient>
+          </View>
+
+          {/* Title */}
+          <Text style={styles.modalTitle}>Biglietto Ottenuto!</Text>
+          <Text style={styles.modalSubtitle}>Hai un nuovo biglietto per partecipare</Text>
+
+          {/* Ticket Card */}
+          <Animated.View
+            style={[
+              styles.modalTicketCard,
+              {transform: [{scale: ticketScaleAnim}]},
+            ]}>
+            <LinearGradient
+              colors={[COLORS.primary, '#FF6B00']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}
+              style={styles.modalTicketGradient}>
+              <View style={styles.modalTicketHeader}>
+                <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalTicketLabel}>CODICE BIGLIETTO</Text>
+              </View>
+              <Text style={styles.modalTicketCode}>{ticketInfo.ticketCode}</Text>
+              <View style={styles.modalTicketDivider} />
+              <View style={styles.modalTicketPrizeRow}>
+                <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
+              </View>
+            </LinearGradient>
+          </Animated.View>
+
+          {/* Good Luck Message */}
+          <View style={styles.modalLuckContainer}>
+            <Ionicons name="star" size={16} color="#FFD700" />
+            <Text style={styles.modalLuckText}>Buona fortuna!</Text>
+            <Ionicons name="star" size={16} color="#FFD700" />
+          </View>
+
+          {/* Close Button */}
+          <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
+            <Text style={styles.modalCloseButtonText}>Continua</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
+    </Modal>
+  );
+};
 
 // Smooth Progress Bar Component
 const SmoothProgressBar: React.FC<{
@@ -85,7 +205,7 @@ const SmoothProgressBar: React.FC<{
 const PrizeCard: React.FC<{
   item: Prize;
   index: number;
-  onWatchAd: (prizeId: string) => void;
+  onWatchAd: (prize: Prize) => void;
 }> = ({item, index, onWatchAd}) => {
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -109,7 +229,7 @@ const PrizeCard: React.FC<{
   }, []);
 
   const handleWatchAd = () => {
-    onWatchAd(item.id);
+    onWatchAd(item);
   };
 
   return (
@@ -165,8 +285,14 @@ const PrizeCard: React.FC<{
 };
 
 export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
-  const {prizes, fetchPrizes, incrementAdsForPrize, isLoading} = usePrizesStore();
+  const {colors, gradientColors, isDark} = useThemeColors();
+  const {prizes, fetchPrizes, incrementAdsForPrize} = usePrizesStore();
+  const {addTicket, canWatchAd, incrementAdsWatched, todayAdsWatched, maxAdsPerDay} = useTicketsStore();
+  const {currentDraw} = usePrizesStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [isWatchingAd, setIsWatchingAd] = useState(false);
+  const [showTicketModal, setShowTicketModal] = useState(false);
+  const [newTicketInfo, setNewTicketInfo] = useState<TicketModalInfo | null>(null);
 
   useEffect(() => {
     fetchPrizes();
@@ -178,10 +304,39 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     setRefreshing(false);
   };
 
-  const handleWatchAd = (prizeId: string) => {
-    // TODO: Integrate real AdMob here
-    // For now, simulate ad completion
-    incrementAdsForPrize(prizeId);
+  const handleWatchAd = async (prize: Prize) => {
+    if (!canWatchAd()) {
+      Alert.alert(
+        'Limite raggiunto',
+        `Hai raggiunto il limite di ${maxAdsPerDay} ads per oggi. Torna domani!`,
+      );
+      return;
+    }
+
+    setIsWatchingAd(true);
+
+    // Simulate watching ad
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
+
+    // Increment ads for this prize
+    incrementAdsForPrize(prize.id);
+    incrementAdsWatched();
+
+    if (currentDraw) {
+      const newTicket = addTicket('ad', currentDraw.id, prize.id);
+      setNewTicketInfo({
+        ticketCode: newTicket.uniqueCode,
+        prizeName: prize.name,
+      });
+      setShowTicketModal(true);
+    }
+
+    setIsWatchingAd(false);
+  };
+
+  const handleCloseModal = () => {
+    setShowTicketModal(false);
+    setNewTicketInfo(null);
   };
 
   const activePrizes = prizes.filter(p => p.isActive);
@@ -196,8 +351,8 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
 
   const renderHeader = () => (
     <View style={styles.header}>
-      <Text style={styles.title}>Premi</Text>
-      <Text style={styles.subtitle}>
+      <Text style={[styles.title, {color: colors.text}]}>Premi</Text>
+      <Text style={[styles.subtitle, {color: colors.textMuted}]}>
         Guarda le ads per partecipare alle estrazioni
       </Text>
     </View>
@@ -205,17 +360,22 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Ionicons name="gift-outline" size={64} color={COLORS.border} />
-      <Text style={styles.emptyTitle}>Nessun premio disponibile</Text>
-      <Text style={styles.emptySubtitle}>
+      <Ionicons name="gift-outline" size={64} color={colors.border} />
+      <Text style={[styles.emptyTitle, {color: colors.text}]}>Nessun premio disponibile</Text>
+      <Text style={[styles.emptySubtitle, {color: colors.textMuted}]}>
         Torna presto per nuovi fantastici premi!
       </Text>
     </View>
   );
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+    <LinearGradient
+      colors={gradientColors as unknown as string[]}
+      locations={[0, 0.25, 0.5, 0.75, 1]}
+      start={{x: 0.5, y: 0}}
+      end={{x: 0.5, y: 1}}
+      style={styles.container}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
       <FlatList
         data={activePrizes}
         renderItem={renderPrize}
@@ -227,18 +387,24 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
       />
-    </View>
+
+      {/* Ticket Success Modal */}
+      <TicketSuccessModal
+        visible={showTicketModal}
+        ticketInfo={newTicketInfo}
+        onClose={handleCloseModal}
+      />
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   listContent: {
     paddingTop: SPACING.xl + 30,
-    paddingBottom: SPACING.xl,
+    paddingBottom: 140,
   },
   header: {
     paddingHorizontal: SPACING.lg,
@@ -367,6 +533,132 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.regular,
     color: COLORS.textMuted,
     textAlign: 'center',
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 340,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 10},
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  modalIconContainer: {
+    marginBottom: SPACING.lg,
+  },
+  modalIconGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: FONT_SIZE.xxl,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  modalSubtitle: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.regular,
+    color: COLORS.textMuted,
+    marginBottom: SPACING.lg,
+    textAlign: 'center',
+  },
+  modalTicketCard: {
+    width: '100%',
+    marginBottom: SPACING.lg,
+  },
+  modalTicketGradient: {
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+  },
+  modalTicketHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  modalTicketLabel: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: 'rgba(255, 255, 255, 0.8)',
+    letterSpacing: 1,
+  },
+  modalTicketCode: {
+    fontSize: 28,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.white,
+    letterSpacing: 2,
+    marginBottom: SPACING.md,
+  },
+  modalTicketDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginBottom: SPACING.md,
+  },
+  modalTicketPrizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalTicketPrize: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.medium,
+    fontWeight: FONT_WEIGHT.medium,
+    color: COLORS.white,
+  },
+  modalLuckContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: SPACING.lg,
+  },
+  modalLuckText: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.medium,
+    fontWeight: FONT_WEIGHT.medium,
+    color: COLORS.textSecondary,
+  },
+  modalCloseButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    paddingHorizontal: SPACING.xl,
+    borderRadius: RADIUS.lg,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  modalCloseButtonText: {
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.white,
   },
 });
 

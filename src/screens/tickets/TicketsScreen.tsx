@@ -12,6 +12,7 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useTicketsStore, usePrizesStore} from '../../store';
+import {useThemeColors} from '../../hooks/useThemeColors';
 import {Ticket} from '../../types';
 import {
   COLORS,
@@ -38,20 +39,38 @@ const AnimatedTab: React.FC<{
   activeCount: number;
   winsCount: number;
 }> = ({activeTab, onTabChange, activeCount, winsCount}) => {
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(activeTab === 'active' ? 0 : 1)).current;
+  const colorAnim = useRef(new Animated.Value(activeTab === 'active' ? 0 : 1)).current;
 
   useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue: activeTab === 'active' ? 0 : 1,
-      friction: 8,
-      tension: 50,
-      useNativeDriver: true,
-    }).start();
-  }, [activeTab]);
+    const toValue = activeTab === 'active' ? 0 : 1;
+    Animated.parallel([
+      Animated.spring(slideAnim, {
+        toValue,
+        friction: 8,
+        tension: 50,
+        useNativeDriver: true,
+      }),
+      Animated.timing(colorAnim, {
+        toValue,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [activeTab, slideAnim, colorAnim]);
 
+  // Calculate the exact width of each tab for proper animation
+  const tabWidth = (width - SPACING.lg * 2 - 8) / 2;
   const translateX = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, (width - SPACING.lg * 2) / 2],
+    outputRange: [0, tabWidth],
+  });
+
+  // Opacity for color transition between two gradients
+  const winsOpacity = colorAnim;
+  const activeOpacity = colorAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
   });
 
   return (
@@ -61,12 +80,24 @@ const AnimatedTab: React.FC<{
           styles.tabIndicator,
           {transform: [{translateX}]},
         ]}>
-        <LinearGradient
-          colors={activeTab === 'wins' ? ['#FFD700', '#FFA000'] : [COLORS.primary, '#FF8500']}
-          start={{x: 0, y: 0}}
-          end={{x: 1, y: 0}}
-          style={styles.tabIndicatorGradient}
-        />
+        {/* Active gradient (orange) */}
+        <Animated.View style={[styles.tabIndicatorGradient, {opacity: activeOpacity}]}>
+          <LinearGradient
+            colors={[COLORS.primary, '#FF8500']}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 0}}
+            style={styles.tabIndicatorGradient}
+          />
+        </Animated.View>
+        {/* Wins gradient (gold) */}
+        <Animated.View style={[styles.tabIndicatorGradient, styles.tabIndicatorOverlay, {opacity: winsOpacity}]}>
+          <LinearGradient
+            colors={['#FFD700', '#FFA000']}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 0}}
+            style={styles.tabIndicatorGradient}
+          />
+        </Animated.View>
       </Animated.View>
       <TouchableOpacity
         style={styles.tab}
@@ -265,6 +296,7 @@ const WinningTicketCard: React.FC<{
 };
 
 export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
+  const {colors, gradientColors, isDark} = useThemeColors();
   const [activeTab, setActiveTab] = useState<TabType>('active');
   const {activeTickets, pastTickets, fetchTickets} = useTicketsStore();
   const {prizes} = usePrizesStore();
@@ -314,8 +346,8 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
   const renderHeader = () => (
     <View style={styles.header}>
       <View style={styles.titleSection}>
-        <Text style={styles.title}>I Miei Biglietti</Text>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.title, {color: colors.text}]}>I Miei Biglietti</Text>
+        <Text style={[styles.subtitle, {color: colors.textMuted}]}>
           I biglietti scaduti vengono rimossi automaticamente
         </Text>
       </View>
@@ -331,17 +363,17 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <View style={styles.emptyIconContainer}>
+      <View style={[styles.emptyIconContainer, {backgroundColor: colors.card}]}>
         {activeTab === 'active' ? (
-          <Ionicons name="ticket-outline" size={48} color={COLORS.border} />
+          <Ionicons name="ticket-outline" size={48} color={colors.border} />
         ) : (
           <Ionicons name="trophy-outline" size={48} color="#FFD700" />
         )}
       </View>
-      <Text style={styles.emptyTitle}>
+      <Text style={[styles.emptyTitle, {color: colors.text}]}>
         {activeTab === 'active' ? 'Nessun biglietto attivo' : 'Nessuna vincita ancora'}
       </Text>
-      <Text style={styles.emptySubtitle}>
+      <Text style={[styles.emptySubtitle, {color: colors.textMuted}]}>
         {activeTab === 'active'
           ? 'Guarda una pubblicità per ottenere il tuo primo biglietto!'
           : 'Le tue vincite appariranno qui. Continua a partecipare!'}
@@ -358,8 +390,13 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
   );
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+    <LinearGradient
+      colors={gradientColors as unknown as string[]}
+      locations={[0, 0.25, 0.5, 0.75, 1]}
+      start={{x: 0.5, y: 0}}
+      end={{x: 0.5, y: 1}}
+      style={styles.container}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
       <FlatList
         data={tickets}
         renderItem={renderTicket}
@@ -371,18 +408,17 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
       />
-    </View>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   listContent: {
     paddingTop: SPACING.xl + 30,
-    paddingBottom: SPACING.xl,
+    paddingBottom: 140,
     flexGrow: 1,
   },
   header: {
@@ -429,6 +465,13 @@ const styles = StyleSheet.create({
   tabIndicatorGradient: {
     flex: 1,
     borderRadius: RADIUS.lg,
+  },
+  tabIndicatorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   tab: {
     flex: 1,

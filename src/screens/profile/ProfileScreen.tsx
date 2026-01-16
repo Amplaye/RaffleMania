@@ -1,7 +1,9 @@
 import React from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, Alert} from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch} from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {ScreenContainer, Card} from '../../components/common';
-import {useAuthStore} from '../../store';
+import {useAuthStore, useTicketsStore, useThemeStore} from '../../store';
+import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
   SPACING,
@@ -16,7 +18,7 @@ interface ProfileScreenProps {
 
 interface MenuItem {
   id: string;
-  icon: string;
+  iconName: string;
   title: string;
   subtitle?: string;
   onPress: () => void;
@@ -25,7 +27,13 @@ interface MenuItem {
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
+  const {colors} = useThemeColors();
   const {user, logout} = useAuthStore();
+  const {pastTickets} = useTicketsStore();
+  const {theme, toggleTheme} = useThemeStore();
+
+  // Count winning tickets
+  const winsCount = pastTickets.filter(t => t.isWinner).length;
 
   const handleLogout = () => {
     Alert.alert('Esci', 'Sei sicuro di voler uscire?', [
@@ -41,35 +49,35 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
   const menuItems: MenuItem[] = [
     {
       id: 'credits',
-      icon: '💎',
+      iconName: 'diamond',
       title: 'I Miei Crediti',
       subtitle: `${user?.credits || 0} crediti disponibili`,
       onPress: () => navigation.navigate('Credits'),
     },
     {
       id: 'wins',
-      icon: '🏆',
+      iconName: 'trophy',
       title: 'Le Mie Vincite',
       subtitle: 'Storico premi vinti',
       onPress: () => navigation.navigate('MyWins'),
     },
     {
       id: 'referral',
-      icon: '🎁',
+      iconName: 'gift',
       title: 'Invita Amici',
       subtitle: `Codice: ${user?.referralCode || 'N/A'}`,
       onPress: () => navigation.navigate('Referral'),
     },
     {
       id: 'address',
-      icon: '📍',
+      iconName: 'location',
       title: 'Indirizzo di Spedizione',
       subtitle: user?.shippingAddress ? 'Configurato' : 'Non configurato',
       onPress: () => navigation.navigate('AddressForm'),
     },
     {
       id: 'settings',
-      icon: '⚙️',
+      iconName: 'settings',
       title: 'Impostazioni',
       subtitle: 'Notifiche, privacy',
       onPress: () => navigation.navigate('Settings'),
@@ -79,16 +87,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
   const renderMenuItem = (item: MenuItem) => (
     <TouchableOpacity
       key={item.id}
-      style={styles.menuItem}
+      style={[styles.menuItem, {borderBottomColor: colors.border}]}
       onPress={item.onPress}>
-      <Text style={styles.menuIcon}>{item.icon}</Text>
+      <View style={[styles.menuIconContainer, {backgroundColor: `${colors.primary}15`}]}>
+        <Ionicons name={item.iconName} size={22} color={colors.primary} />
+      </View>
       <View style={styles.menuContent}>
-        <Text style={styles.menuTitle}>{item.title}</Text>
+        <Text style={[styles.menuTitle, {color: colors.text}]}>{item.title}</Text>
         {item.subtitle && (
-          <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
+          <Text style={[styles.menuSubtitle, {color: colors.textSecondary}]}>{item.subtitle}</Text>
         )}
       </View>
-      <Text style={styles.menuArrow}>›</Text>
+      <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
     </TouchableOpacity>
   );
 
@@ -101,23 +111,23 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
             {user?.displayName?.[0]?.toUpperCase() || '?'}
           </Text>
         </View>
-        <Text style={styles.userName}>{user?.displayName || 'Utente'}</Text>
-        <Text style={styles.userEmail}>{user?.email || ''}</Text>
+        <Text style={[styles.userName, {color: colors.text}]}>{user?.displayName || 'Utente'}</Text>
+        <Text style={[styles.userEmail, {color: colors.textSecondary}]}>{user?.email || ''}</Text>
 
-        <View style={styles.statsRow}>
+        <View style={[styles.statsRow, {borderTopColor: colors.border}]}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{user?.totalTickets || 0}</Text>
-            <Text style={styles.statLabel}>Biglietti</Text>
+            <Text style={[styles.statValue, {color: colors.primary}]}>{winsCount}</Text>
+            <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Vincite</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{user?.watchedAdsCount || 0}</Text>
-            <Text style={styles.statLabel}>Ads Viste</Text>
+            <Text style={[styles.statValue, {color: colors.primary}]}>{user?.watchedAdsCount || 0}</Text>
+            <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Ads Viste</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{user?.credits || 0}</Text>
-            <Text style={styles.statLabel}>Crediti</Text>
+            <Text style={[styles.statValue, {color: colors.primary}]}>{user?.credits || 0}</Text>
+            <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Crediti</Text>
           </View>
         </View>
       </Card>
@@ -127,19 +137,44 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
         {menuItems.map(renderMenuItem)}
       </Card>
 
+      {/* Theme Switcher */}
+      <Card style={styles.themeCard}>
+        <View style={styles.themeRow}>
+          <View style={[styles.themeIconContainer, {backgroundColor: `${colors.primary}15`}]}>
+            <Ionicons
+              name={theme === 'dark' ? 'moon' : 'sunny'}
+              size={22}
+              color={colors.primary}
+            />
+          </View>
+          <View style={styles.themeContent}>
+            <Text style={[styles.themeTitle, {color: colors.text}]}>Tema</Text>
+            <Text style={[styles.themeSubtitle, {color: colors.textSecondary}]}>
+              {theme === 'dark' ? 'Modalita scura' : 'Modalita chiara'}
+            </Text>
+          </View>
+          <Switch
+            value={theme === 'dark'}
+            onValueChange={toggleTheme}
+            trackColor={{false: colors.border, true: colors.primary}}
+            thumbColor={colors.white}
+          />
+        </View>
+      </Card>
+
       {/* Support */}
       <Card style={styles.supportCard}>
         <TouchableOpacity
           style={styles.supportItem}
           onPress={() => Alert.alert('Aiuto', 'Funzionalita in arrivo!')}>
-          <Text style={styles.supportIcon}>❓</Text>
-          <Text style={styles.supportText}>Centro Assistenza</Text>
+          <Ionicons name="help-circle-outline" size={20} color={colors.primary} />
+          <Text style={[styles.supportText, {color: colors.textSecondary}]}>Centro Assistenza</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.supportItem}
           onPress={() => Alert.alert('Feedback', 'Funzionalita in arrivo!')}>
-          <Text style={styles.supportIcon}>💬</Text>
-          <Text style={styles.supportText}>Invia Feedback</Text>
+          <Ionicons name="chatbubble-outline" size={20} color={colors.primary} />
+          <Text style={[styles.supportText, {color: colors.textSecondary}]}>Invia Feedback</Text>
         </TouchableOpacity>
       </Card>
 
@@ -148,7 +183,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
         <Text style={styles.logoutText}>Esci dall'account</Text>
       </TouchableOpacity>
 
-      <Text style={styles.version}>RaffleMania v1.0.0</Text>
+      <Text style={[styles.version, {color: colors.textLight}]}>RaffleMania v1.0.0</Text>
     </ScreenContainer>
   );
 };
@@ -211,6 +246,35 @@ const styles = StyleSheet.create({
   menuCard: {
     marginBottom: SPACING.md,
   },
+  themeCard: {
+    marginBottom: SPACING.md,
+  },
+  themeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  themeIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: `${COLORS.primary}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  themeContent: {
+    flex: 1,
+  },
+  themeTitle: {
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.medium,
+    color: COLORS.text,
+  },
+  themeSubtitle: {
+    fontSize: FONT_SIZE.sm,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -219,8 +283,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  menuIcon: {
-    fontSize: 24,
+  menuIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: `${COLORS.primary}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: SPACING.md,
   },
   menuContent: {
@@ -236,10 +305,6 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 2,
   },
-  menuArrow: {
-    fontSize: FONT_SIZE.xl,
-    color: COLORS.textLight,
-  },
   supportCard: {
     flexDirection: 'row',
     marginBottom: SPACING.lg,
@@ -250,10 +315,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: SPACING.sm,
-  },
-  supportIcon: {
-    fontSize: 20,
-    marginRight: SPACING.sm,
+    gap: SPACING.sm,
   },
   supportText: {
     fontSize: FONT_SIZE.sm,
