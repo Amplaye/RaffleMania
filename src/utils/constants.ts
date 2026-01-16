@@ -13,33 +13,42 @@ export const APP_CONFIG = {
   DEFAULT_DRAW_TIME: '20:00', // 8 PM
 };
 
-// Colors
+// Colors - Orange Theme
 export const COLORS = {
-  primary: '#6C5CE7',
-  primaryDark: '#5B4BC7',
-  secondary: '#00CEC9',
-  accent: '#FDCB6E',
+  primary: '#FF6B00',
+  primaryDark: '#E55A00',
+  primaryLight: '#FF8533',
+  secondary: '#1A1A1A',
+  accent: '#FFB366',
   success: '#00B894',
   warning: '#FDCB6E',
-  error: '#FF7675',
+  error: '#E53935',
 
-  background: '#F8F9FA',
+  background: '#FFFFFF',
   surface: '#FFFFFF',
   card: '#FFFFFF',
+  inputBg: '#F8F8F8',
 
-  text: '#2D3436',
-  textSecondary: '#636E72',
+  text: '#1A1A1A',
+  textSecondary: '#666666',
+  textMuted: '#999999',
   textLight: '#B2BEC3',
 
-  border: '#DFE6E9',
+  border: '#E5E5E5',
   divider: '#E9ECEF',
 
   white: '#FFFFFF',
   black: '#000000',
 
   // Gradients
-  gradientStart: '#6C5CE7',
-  gradientEnd: '#A29BFE',
+  gradientStart: '#FF6B00',
+  gradientEnd: '#FF8533',
+};
+
+// Font Family - Comic Sans
+export const FONT_FAMILY = {
+  regular: 'Comic Sans MS',
+  bold: 'Comic Sans MS',
 };
 
 // Spacing

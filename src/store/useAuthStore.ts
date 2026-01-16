@@ -26,7 +26,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({isLoading: true});
 
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
 
     // Mock login - in production this would call the WordPress API
     if (email) {
@@ -46,7 +46,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({isLoading: true});
 
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 1500));
 
     // Mock registration
     const newUser: User = {

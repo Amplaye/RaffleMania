@@ -26,7 +26,7 @@ export const useCreditsStore = create<CreditsState>((set, get) => ({
 
   fetchPackages: async () => {
     set({isLoading: true});
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
     set({
       packages: mockCreditPackages,
       isLoading: false,
@@ -35,7 +35,7 @@ export const useCreditsStore = create<CreditsState>((set, get) => ({
 
   fetchTransactions: async () => {
     set({isLoading: true});
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
     set({
       transactions: getUserTransactions('user_001'),
       isLoading: false,
@@ -46,7 +46,7 @@ export const useCreditsStore = create<CreditsState>((set, get) => ({
     set({isPurchasing: true});
 
     // Simulate IAP purchase
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
 
     const creditPackage = get().packages.find(p => p.id === packageId);
     if (!creditPackage) {

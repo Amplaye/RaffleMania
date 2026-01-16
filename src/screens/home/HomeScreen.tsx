@@ -1,48 +1,308 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useState, useRef} from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   Alert,
+  StatusBar,
+  Animated,
+  Dimensions,
+  Image,
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  Easing,
 } from 'react-native';
-import {ScreenContainer, Card, Button, Badge} from '../../components/common';
-import {useAuthStore, useTicketsStore, usePrizesStore} from '../../store';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import LinearGradient from 'react-native-linear-gradient';
+import {AnimatedBackground} from '../../components/common';
+import {useTicketsStore, usePrizesStore} from '../../store';
 import {useCountdown} from '../../hooks/useCountdown';
 import {
   COLORS,
   SPACING,
   FONT_SIZE,
   FONT_WEIGHT,
+  FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
-import {formatCurrency, padNumber} from '../../utils/formatters';
+import {padNumber} from '../../utils/formatters';
+
+const {width, height} = Dimensions.get('window');
+
+// Timer Card Component - Single digit card with flip animation
+interface TimerCardProps {
+  value: string;
+}
+
+const TimerCard: React.FC<TimerCardProps> = ({value}) => {
+  const flipAnim = useRef(new Animated.Value(0)).current;
+  const [displayValue, setDisplayValue] = useState(value);
+  const prevValue = useRef(value);
+
+  useEffect(() => {
+    if (prevValue.current !== value) {
+      flipAnim.setValue(0);
+      Animated.sequence([
+        Animated.timing(flipAnim, {
+          toValue: 1,
+          duration: 150,
+          easing: Easing.in(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(flipAnim, {
+          toValue: 0,
+          duration: 150,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      setTimeout(() => {
+        setDisplayValue(value);
+      }, 150);
+
+      prevValue.current = value;
+    }
+  }, [value]);
+
+  const rotateX = flipAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '-90deg'],
+  });
+
+  const scale = flipAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 0.95, 0.9],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.timerCard,
+        {
+          transform: [{perspective: 400}, {rotateX}, {scale}],
+        },
+      ]}>
+      <LinearGradient
+        colors={['#2A2A2A', '#1A1A1A', '#0F0F0F']}
+        style={styles.timerCardGradient}>
+        <Text style={styles.timerCardText}>{displayValue}</Text>
+        <View style={styles.timerCardLine} />
+      </LinearGradient>
+    </Animated.View>
+  );
+};
+
+// Timer Unit Component
+interface TimerUnitProps {
+  value: string;
+  label: string;
+}
+
+const TimerUnit: React.FC<TimerUnitProps> = ({value, label}) => {
+  const digits = value.split('');
+  return (
+    <View style={styles.timerUnit}>
+      <View style={styles.timerCards}>
+        <TimerCard value={digits[0] || '0'} />
+        <TimerCard value={digits[1] || '0'} />
+      </View>
+      <Text style={styles.timerLabel}>{label}</Text>
+    </View>
+  );
+};
+
+// Timer Separator
+const TimerSeparator: React.FC = () => {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.3,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, []);
+
+  return (
+    <Animated.View style={[styles.timerSeparator, {opacity: pulseAnim}]}>
+      <View style={styles.separatorDot} />
+      <View style={styles.separatorDot} />
+    </Animated.View>
+  );
+};
+
+// Progress Bar Component
+interface ProgressBarProps {
+  current: number;
+  goal: number;
+  prizeId: string;
+}
+
+const SmoothProgressBar: React.FC<ProgressBarProps> = ({current, goal, prizeId}) => {
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const shimmerPosition = useRef(new Animated.Value(-1)).current;
+  const prevPrizeId = useRef(prizeId);
+
+  const progress = Math.min(current / goal, 1);
+  const percentage = Math.round(progress * 100);
+
+  useEffect(() => {
+    // Reset animation when prize changes
+    if (prevPrizeId.current !== prizeId) {
+      progressAnim.setValue(0);
+      prevPrizeId.current = prizeId;
+    }
+
+    Animated.timing(progressAnim, {
+      toValue: progress,
+      duration: 800,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [progress, prizeId]);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(shimmerPosition, {
+        toValue: 2,
+        duration: 2500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    ).start();
+  }, []);
+
+  const animatedWidth = progressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
+
+  const shimmerTranslate = shimmerPosition.interpolate({
+    inputRange: [-1, 2],
+    outputRange: [-100, width + 100],
+  });
+
+  return (
+    <View style={styles.progressSection}>
+      <View style={styles.progressHeader}>
+        <Text style={styles.progressTitle}>Progresso Estrazione</Text>
+        <Text style={styles.progressPercentage}>{percentage}%</Text>
+      </View>
+
+      <View style={styles.progressBarBg}>
+        <Animated.View style={[styles.progressBarFill, {width: animatedWidth}]}>
+          <LinearGradient
+            colors={['#FF8C00', '#FF6B00', '#FF5500']}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 0}}
+            style={styles.progressGradient}
+          />
+          <Animated.View
+            style={[
+              styles.shimmer,
+              {transform: [{translateX: shimmerTranslate}]},
+            ]}
+          />
+        </Animated.View>
+      </View>
+
+      <View style={styles.progressFooter}>
+        <Text style={styles.progressCount}>
+          {current.toLocaleString()} / {goal.toLocaleString()} ads
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+// Pulsing Dot
+const PulsingDot: React.FC = () => {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.3,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, []);
+
+  return <Animated.View style={[styles.pulsingDot, {opacity: pulseAnim}]} />;
+};
 
 interface HomeScreenProps {
   navigation: any;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
-  const {user} = useAuthStore();
-  const {activeTickets, fetchTickets, addTicket, canWatchAd, incrementAdsWatched, todayAdsWatched, maxAdsPerDay} =
-    useTicketsStore();
-  const {currentDraw, recentWinners, fetchDraws, fetchWinners} = usePrizesStore();
+  const {
+    activeTickets,
+    fetchTickets,
+    addTicket,
+    canWatchAd,
+    incrementAdsWatched,
+    todayAdsWatched,
+    maxAdsPerDay,
+  } = useTicketsStore();
+  const {prizes, currentDraw, fetchPrizes, fetchDraws, incrementAdsForPrize} = usePrizesStore();
   const [isWatchingAd, setIsWatchingAd] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [currentPrizeIndex, setCurrentPrizeIndex] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const {countdown, isExpired} = useCountdown(currentDraw?.scheduledAt);
 
+  // Get active prizes
+  const activePrizes = prizes.filter(p => p.isActive);
+  const currentPrize = activePrizes[currentPrizeIndex];
+
   useEffect(() => {
     fetchTickets();
+    fetchPrizes();
     fetchDraws();
-    fetchWinners();
   }, []);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await Promise.all([fetchTickets(), fetchDraws(), fetchWinners()]);
-    setRefreshing(false);
+  useEffect(() => {
+    if (activePrizes.length === 0) return;
+
+    const interval = setInterval(() => {
+      const nextIndex = (currentPrizeIndex + 1) % activePrizes.length;
+      setCurrentPrizeIndex(nextIndex);
+      scrollViewRef.current?.scrollTo({
+        x: nextIndex * (width - 48),
+        animated: true,
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [currentPrizeIndex, activePrizes.length]);
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const contentOffsetX = event.nativeEvent.contentOffset.x;
+    const index = Math.round(contentOffsetX / (width - 48));
+    if (index !== currentPrizeIndex && index >= 0 && index < activePrizes.length) {
+      setCurrentPrizeIndex(index);
+    }
   };
 
   const handleWatchAd = async () => {
@@ -54,389 +314,457 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       return;
     }
 
-    setIsWatchingAd(true);
+    if (!currentPrize) return;
 
-    // Simulate watching an ad
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    setIsWatchingAd(true);
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
+
+    // Increment ads for current prize
+    incrementAdsForPrize(currentPrize.id);
+    incrementAdsWatched();
 
     if (currentDraw) {
-      const newTicket = addTicket('ad', currentDraw.id, currentDraw.prizeId);
-      incrementAdsWatched();
-
+      const newTicket = addTicket('ad', currentDraw.id, currentPrize.id);
       Alert.alert(
         'Biglietto Ottenuto!',
-        `Codice: ${newTicket.uniqueCode}\n\nBuona fortuna per l'estrazione!`,
+        `Codice: ${newTicket.uniqueCode}\n\nPremio: ${currentPrize.name}\nBuona fortuna!`,
       );
     }
 
     setIsWatchingAd(false);
   };
 
-  const prize = currentDraw?.prize;
+  if (activePrizes.length === 0) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Caricamento premi...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <ScreenContainer refreshing={refreshing} onRefresh={handleRefresh}>
-      {/* Header with user info */}
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <AnimatedBackground particleCount={6} />
+
+      {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Ciao, {user?.displayName}!</Text>
-          <Text style={styles.subtitle}>Pronto a vincere?</Text>
+        <View style={styles.ticketBadge}>
+          <Ionicons name="ticket" size={16} color={COLORS.white} />
+          <Text style={styles.ticketCount}>{activeTickets.length}</Text>
         </View>
+        <Text style={styles.logo}>
+          <Text style={styles.logoRaffle}>Raffle</Text>
+          <Text style={styles.logoMania}>Mania</Text>
+        </Text>
         <TouchableOpacity
-          style={styles.creditsButton}
-          onPress={() => navigation.navigate('Credits')}>
-          <Text style={styles.creditsLabel}>Crediti</Text>
-          <Text style={styles.creditsValue}>{user?.credits || 0}</Text>
+          style={styles.profileButton}
+          onPress={() => navigation.navigate('Profile')}>
+          <Ionicons name="person-circle-outline" size={28} color={COLORS.text} />
         </TouchableOpacity>
       </View>
 
-      {/* Current Prize Card */}
-      {prize && (
-        <Card style={styles.prizeCard} padding="none">
-          <Image
-            source={{uri: prize.imageUrl}}
-            style={styles.prizeImage}
-            resizeMode="cover"
-          />
-          <View style={styles.prizeContent}>
-            <Badge text="Premio di Oggi" variant="primary" />
-            <Text style={styles.prizeName}>{prize.name}</Text>
-            <Text style={styles.prizeValue}>
-              Valore: {formatCurrency(prize.value)}
+      {/* Main Content */}
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.contentContainer}>
+        {/* Prize Carousel */}
+        <View style={styles.carouselContainer}>
+          <ScrollView
+            ref={scrollViewRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={handleScroll}
+            contentContainerStyle={styles.carouselContent}
+            decelerationRate="fast"
+            snapToInterval={width - 48}>
+            {activePrizes.map(prize => (
+              <View key={prize.id} style={styles.prizeCard}>
+                <Image
+                  source={{uri: prize.imageUrl}}
+                  style={styles.prizeImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.prizeName}>{prize.name}</Text>
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* Carousel Indicators */}
+          <View style={styles.indicators}>
+            {activePrizes.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.indicator,
+                  currentPrizeIndex === index && styles.indicatorActive,
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* Timer Section */}
+        <View style={styles.timerSection}>
+          <View style={styles.liveIndicator}>
+            <PulsingDot />
+            <Text style={styles.liveText}>
+              {isExpired ? 'ESTRAZIONE LIVE' : 'PROSSIMA ESTRAZIONE'}
             </Text>
           </View>
-        </Card>
-      )}
 
-      {/* Countdown Timer */}
-      <Card style={styles.countdownCard}>
-        <Text style={styles.countdownLabel}>
-          {isExpired ? 'Estrazione in corso...' : 'Prossima estrazione tra'}
-        </Text>
-        {!isExpired && (
-          <View style={styles.countdownTimer}>
-            <View style={styles.countdownItem}>
-              <Text style={styles.countdownNumber}>
-                {padNumber(countdown.hours)}
-              </Text>
-              <Text style={styles.countdownUnit}>ore</Text>
+          {!isExpired && (
+            <View style={styles.timerContainer}>
+              <TimerUnit value={padNumber(countdown.hours)} label="ORE" />
+              <TimerSeparator />
+              <TimerUnit value={padNumber(countdown.minutes)} label="MIN" />
+              <TimerSeparator />
+              <TimerUnit value={padNumber(countdown.seconds)} label="SEC" />
             </View>
-            <Text style={styles.countdownSeparator}>:</Text>
-            <View style={styles.countdownItem}>
-              <Text style={styles.countdownNumber}>
-                {padNumber(countdown.minutes)}
-              </Text>
-              <Text style={styles.countdownUnit}>min</Text>
-            </View>
-            <Text style={styles.countdownSeparator}>:</Text>
-            <View style={styles.countdownItem}>
-              <Text style={styles.countdownNumber}>
-                {padNumber(countdown.seconds)}
-              </Text>
-              <Text style={styles.countdownUnit}>sec</Text>
-            </View>
-          </View>
+          )}
+        </View>
+
+        {/* Prize Progress Bar */}
+        {currentPrize && (
+          <SmoothProgressBar
+            current={currentPrize.currentAds}
+            goal={currentPrize.goalAds}
+            prizeId={currentPrize.id}
+          />
         )}
-        <Text style={styles.totalTickets}>
-          {currentDraw?.totalTickets.toLocaleString()} biglietti in gioco
-        </Text>
-      </Card>
+      </ScrollView>
 
       {/* Watch Ad Button */}
-      <Card style={styles.adCard}>
-        <View style={styles.adHeader}>
-          <Text style={styles.adTitle}>Ottieni un Biglietto</Text>
-          <Text style={styles.adSubtitle}>
-            Guarda una pubblicita e ricevi un biglietto per l'estrazione
-          </Text>
-        </View>
-
-        <View style={styles.adProgress}>
-          <Text style={styles.adProgressText}>
-            Oggi: {todayAdsWatched}/{maxAdsPerDay} ads
-          </Text>
-          <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressFill,
-                {width: `${(todayAdsWatched / maxAdsPerDay) * 100}%`},
-              ]}
-            />
-          </View>
-        </View>
-
-        <Button
-          title={isWatchingAd ? 'Guardando...' : 'Guarda Pubblicita'}
-          onPress={handleWatchAd}
-          loading={isWatchingAd}
-          disabled={!canWatchAd() || isWatchingAd}
-          fullWidth
-          size="large"
-        />
-
+      <View style={styles.footer}>
         <TouchableOpacity
-          style={styles.skipButton}
-          onPress={() => navigation.navigate('Credits')}>
-          <Text style={styles.skipText}>
-            Oppure usa 5 crediti per saltare la pubblicita
+          style={[
+            styles.watchButton,
+            (!canWatchAd() || isWatchingAd) && styles.watchButtonDisabled,
+          ]}
+          onPress={handleWatchAd}
+          disabled={!canWatchAd() || isWatchingAd}
+          activeOpacity={0.8}>
+          <Ionicons
+            name={isWatchingAd ? 'hourglass' : 'play-circle'}
+            size={24}
+            color={COLORS.white}
+          />
+          <Text style={styles.watchButtonText}>
+            {isWatchingAd ? 'Guardando...' : 'Guarda e Vinci'}
           </Text>
+          <View style={styles.adsCounter}>
+            <Text style={styles.adsCounterText}>
+              {todayAdsWatched}/{maxAdsPerDay}
+            </Text>
+          </View>
         </TouchableOpacity>
-      </Card>
-
-      {/* My Tickets */}
-      <Card
-        style={styles.ticketsCard}
-        onPress={() => navigation.navigate('Tickets')}>
-        <View style={styles.ticketsHeader}>
-          <Text style={styles.ticketsTitle}>I Tuoi Biglietti</Text>
-          <Text style={styles.ticketsCount}>{activeTickets.length}</Text>
-        </View>
-        <Text style={styles.ticketsSubtitle}>
-          per l'estrazione di oggi
-        </Text>
-      </Card>
-
-      {/* Recent Winners */}
-      <View style={styles.winnersSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Vincitori Recenti</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Winners')}>
-            <Text style={styles.seeAll}>Vedi tutti</Text>
-          </TouchableOpacity>
-        </View>
-
-        {recentWinners.slice(0, 3).map(winner => (
-          <Card key={winner.id} style={styles.winnerCard} padding="small">
-            <View style={styles.winnerRow}>
-              <View style={styles.winnerAvatar}>
-                <Text style={styles.winnerInitial}>
-                  {winner.user?.displayName?.[0] || '?'}
-                </Text>
-              </View>
-              <View style={styles.winnerInfo}>
-                <Text style={styles.winnerName}>
-                  {winner.user?.displayName || 'Utente'}
-                </Text>
-                <Text style={styles.winnerPrize}>
-                  Ha vinto: {winner.prize?.name}
-                </Text>
-              </View>
-            </View>
-          </Card>
-        ))}
       </View>
-    </ScreenContainer>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: FONT_SIZE.md,
+    color: COLORS.textMuted,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.lg,
-    marginTop: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.xl + 20,
+    paddingBottom: SPACING.sm,
   },
-  greeting: {
-    fontSize: FONT_SIZE.xl,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
-  },
-  subtitle: {
-    fontSize: FONT_SIZE.md,
-    color: COLORS.textSecondary,
-  },
-  creditsButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.lg,
+  ticketBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
   },
-  creditsLabel: {
-    fontSize: FONT_SIZE.xs,
+  ticketCount: {
     color: COLORS.white,
-    opacity: 0.8,
-  },
-  creditsValue: {
-    fontSize: FONT_SIZE.lg,
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
+  },
+  logo: {
+    fontSize: FONT_SIZE.xl,
+    fontFamily: FONT_FAMILY.bold,
+  },
+  logoRaffle: {
+    color: COLORS.text,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  logoMania: {
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  profileButton: {
+    padding: 4,
+  },
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.md,
+  },
+  // Carousel
+  carouselContainer: {
+    height: height * 0.36,
+  },
+  carouselContent: {
+    paddingHorizontal: 24,
   },
   prizeCard: {
-    marginBottom: SPACING.md,
+    width: width - 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   prizeImage: {
-    width: '100%',
-    height: 180,
-  },
-  prizeContent: {
-    padding: SPACING.md,
+    width: width * 0.42,
+    height: height * 0.22,
+    marginBottom: SPACING.sm,
   },
   prizeName: {
     fontSize: FONT_SIZE.xl,
+    fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.text,
-    marginTop: SPACING.sm,
+    textAlign: 'center',
   },
-  prizeValue: {
-    fontSize: FONT_SIZE.md,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-  },
-  countdownCard: {
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  countdownLabel: {
-    fontSize: FONT_SIZE.md,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
-  },
-  countdownTimer: {
+  indicators: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  countdownItem: {
-    alignItems: 'center',
-    minWidth: 60,
-  },
-  countdownNumber: {
-    fontSize: FONT_SIZE.xxxl,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.primary,
-  },
-  countdownUnit: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
-  },
-  countdownSeparator: {
-    fontSize: FONT_SIZE.xxxl,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.primary,
-    marginHorizontal: SPACING.xs,
-  },
-  totalTickets: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.md,
-  },
-  adCard: {
-    marginBottom: SPACING.md,
-  },
-  adHeader: {
-    marginBottom: SPACING.md,
-  },
-  adTitle: {
-    fontSize: FONT_SIZE.lg,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
-  },
-  adSubtitle: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-  },
-  adProgress: {
-    marginBottom: SPACING.md,
-  },
-  adProgressText: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: COLORS.border,
-    borderRadius: RADIUS.full,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.full,
-  },
-  skipButton: {
-    marginTop: SPACING.md,
-    alignItems: 'center',
-  },
-  skipText: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.primary,
-  },
-  ticketsCard: {
-    marginBottom: SPACING.lg,
-  },
-  ticketsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  ticketsTitle: {
-    fontSize: FONT_SIZE.lg,
-    fontWeight: FONT_WEIGHT.semibold,
-    color: COLORS.text,
-  },
-  ticketsCount: {
-    fontSize: FONT_SIZE.xxl,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.primary,
-  },
-  ticketsSubtitle: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
-  },
-  winnersSection: {
-    marginBottom: SPACING.xl,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  sectionTitle: {
-    fontSize: FONT_SIZE.lg,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
-  },
-  seeAll: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHT.medium,
-  },
-  winnerCard: {
-    marginBottom: SPACING.sm,
-  },
-  winnerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  winnerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: SPACING.md,
+    gap: 8,
+    marginTop: SPACING.sm,
   },
-  winnerInitial: {
+  indicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.border,
+  },
+  indicatorActive: {
+    width: 24,
+    backgroundColor: COLORS.primary,
+  },
+  // Timer
+  timerSection: {
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.md,
+  },
+  liveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  pulsingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
+  },
+  liveText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.primary,
+    letterSpacing: 1.5,
+  },
+  timerContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  timerUnit: {
+    alignItems: 'center',
+  },
+  timerCards: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  timerCard: {
+    width: 44,
+    height: 56,
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  timerCardGradient: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  timerCardText: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: COLORS.white,
+    fontVariant: ['tabular-nums'],
+  },
+  timerCardLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '50%',
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  timerLabel: {
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textMuted,
+    marginTop: 6,
+    letterSpacing: 1,
+  },
+  timerSeparator: {
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  separatorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.primary,
+  },
+  // Progress
+  progressSection: {
+    marginHorizontal: SPACING.lg,
+    padding: SPACING.lg,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.xl,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  progressTitle: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  progressPercentage: {
+    fontSize: FONT_SIZE.xl,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.primary,
+  },
+  progressBarBg: {
+    height: 10,
+    backgroundColor: 'rgba(255,107,0,0.12)',
+    borderRadius: 5,
+    overflow: 'hidden',
+    marginBottom: SPACING.sm,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 5,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  progressGradient: {
+    flex: 1,
+    borderRadius: 5,
+  },
+  shimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 80,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    transform: [{skewX: '-25deg'}],
+  },
+  progressFooter: {
+    alignItems: 'center',
+  },
+  progressCount: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    color: COLORS.textMuted,
+  },
+  // Footer
+  footer: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl + 10,
+    paddingTop: SPACING.sm,
+  },
+  watchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: RADIUS.xl,
+    gap: 10,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  watchButtonDisabled: {
+    backgroundColor: COLORS.border,
+    shadowOpacity: 0,
+  },
+  watchButtonText: {
     color: COLORS.white,
     fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
   },
-  winnerInfo: {
-    flex: 1,
+  adsCounter: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 4,
   },
-  winnerName: {
-    fontSize: FONT_SIZE.md,
-    fontWeight: FONT_WEIGHT.semibold,
-    color: COLORS.text,
-  },
-  winnerPrize: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
+  adsCounterText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
   },
 });
 

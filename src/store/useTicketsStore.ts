@@ -31,7 +31,7 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
     set({isLoading: true});
 
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 800));
 
     set({
       activeTickets: mockUserTickets,

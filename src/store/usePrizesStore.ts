@@ -23,6 +23,7 @@ interface PrizesState {
   fetchDraws: () => Promise<void>;
   fetchWinners: () => Promise<void>;
   fetchMyWins: (userId: string) => Promise<void>;
+  incrementAdsForPrize: (prizeId: string) => void;
 }
 
 export const usePrizesStore = create<PrizesState>((set) => ({
@@ -36,7 +37,7 @@ export const usePrizesStore = create<PrizesState>((set) => ({
 
   fetchPrizes: async () => {
     set({isLoading: true});
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
     set({
       prizes: mockPrizes,
       isLoading: false,
@@ -45,7 +46,7 @@ export const usePrizesStore = create<PrizesState>((set) => ({
 
   fetchDraws: async () => {
     set({isLoading: true});
-    await new Promise(resolve => setTimeout(resolve, 600));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 600));
 
     const nextDraw = getNextDraw();
     const upcoming = getUpcomingDraws();
@@ -61,7 +62,7 @@ export const usePrizesStore = create<PrizesState>((set) => ({
 
   fetchWinners: async () => {
     set({isLoading: true});
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
     set({
       recentWinners: getRecentWinners(10),
       isLoading: false,
@@ -70,10 +71,20 @@ export const usePrizesStore = create<PrizesState>((set) => ({
 
   fetchMyWins: async (userId: string) => {
     set({isLoading: true});
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
     set({
       myWins: getMyWins(userId),
       isLoading: false,
     });
+  },
+
+  incrementAdsForPrize: (prizeId: string) => {
+    set(state => ({
+      prizes: state.prizes.map(prize =>
+        prize.id === prizeId
+          ? {...prize, currentAds: Math.min(prize.currentAds + 1, prize.goalAds)}
+          : prize,
+      ),
+    }));
   },
 }));

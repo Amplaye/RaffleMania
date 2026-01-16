@@ -1,6 +1,6 @@
 import React from 'react';
 import {NavigationContainer} from '@react-navigation/native';
-import {createNativeStackNavigator} from '@react-navigation/native-stack';
+import {createNativeStackNavigator, NativeStackScreenProps} from '@react-navigation/native-stack';
 import {useAuthStore} from '../store';
 import {AuthNavigator} from './AuthNavigator';
 import {TabNavigator} from './TabNavigator';
@@ -8,10 +8,25 @@ import {COLORS, FONT_SIZE, FONT_WEIGHT} from '../utils/constants';
 
 // Placeholder screens for stack navigation
 import {View, Text, StyleSheet} from 'react-native';
-import {ScreenContainer, Card, Button} from '../components/common';
+import {ScreenContainer, Button} from '../components/common';
+
+// Stack param list
+export type RootStackParamList = {
+  MainTabs: undefined;
+  TicketDetail: {ticketId: string};
+  PrizeDetail: {prizeId: string};
+  Credits: undefined;
+  Winners: undefined;
+  Referral: undefined;
+  Settings: undefined;
+  AddressForm: undefined;
+  MyWins: undefined;
+};
+
+type PlaceholderProps = NativeStackScreenProps<RootStackParamList, keyof RootStackParamList>;
 
 // Placeholder screens
-const PlaceholderScreen: React.FC<{title: string; navigation: any}> = ({
+const PlaceholderScreen: React.FC<{title: string} & PlaceholderProps> = ({
   title,
   navigation,
 }) => (
@@ -26,6 +41,32 @@ const PlaceholderScreen: React.FC<{title: string; navigation: any}> = ({
       />
     </View>
   </ScreenContainer>
+);
+
+// Create typed placeholder components
+const TicketDetailScreen = (props: NativeStackScreenProps<RootStackParamList, 'TicketDetail'>) => (
+  <PlaceholderScreen title="Dettaglio Biglietto" {...props} />
+);
+const PrizeDetailScreen = (props: NativeStackScreenProps<RootStackParamList, 'PrizeDetail'>) => (
+  <PlaceholderScreen title="Dettaglio Premio" {...props} />
+);
+const CreditsScreen = (props: NativeStackScreenProps<RootStackParamList, 'Credits'>) => (
+  <PlaceholderScreen title="Acquista Crediti" {...props} />
+);
+const WinnersScreen = (props: NativeStackScreenProps<RootStackParamList, 'Winners'>) => (
+  <PlaceholderScreen title="Tutti i Vincitori" {...props} />
+);
+const ReferralScreen = (props: NativeStackScreenProps<RootStackParamList, 'Referral'>) => (
+  <PlaceholderScreen title="Programma Referral" {...props} />
+);
+const SettingsScreen = (props: NativeStackScreenProps<RootStackParamList, 'Settings'>) => (
+  <PlaceholderScreen title="Impostazioni" {...props} />
+);
+const AddressFormScreen = (props: NativeStackScreenProps<RootStackParamList, 'AddressForm'>) => (
+  <PlaceholderScreen title="Indirizzo di Spedizione" {...props} />
+);
+const MyWinsScreen = (props: NativeStackScreenProps<RootStackParamList, 'MyWins'>) => (
+  <PlaceholderScreen title="I Miei Premi Vinti" {...props} />
 );
 
 const placeholderStyles = StyleSheet.create({
@@ -46,19 +87,6 @@ const placeholderStyles = StyleSheet.create({
     marginBottom: 24,
   },
 });
-
-// Stack param list
-export type RootStackParamList = {
-  MainTabs: undefined;
-  TicketDetail: {ticketId: string};
-  PrizeDetail: {prizeId: string};
-  Credits: undefined;
-  Winners: undefined;
-  Referral: undefined;
-  Settings: undefined;
-  AddressForm: undefined;
-  MyWins: undefined;
-};
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -82,59 +110,43 @@ const MainStack: React.FC = () => {
       />
       <Stack.Screen
         name="TicketDetail"
+        component={TicketDetailScreen}
         options={{title: 'Dettaglio Biglietto'}}
-        component={({navigation}) => (
-          <PlaceholderScreen title="Dettaglio Biglietto" navigation={navigation} />
-        )}
       />
       <Stack.Screen
         name="PrizeDetail"
+        component={PrizeDetailScreen}
         options={{title: 'Dettaglio Premio'}}
-        component={({navigation}) => (
-          <PlaceholderScreen title="Dettaglio Premio" navigation={navigation} />
-        )}
       />
       <Stack.Screen
         name="Credits"
+        component={CreditsScreen}
         options={{title: 'I Miei Crediti'}}
-        component={({navigation}) => (
-          <PlaceholderScreen title="Acquista Crediti" navigation={navigation} />
-        )}
       />
       <Stack.Screen
         name="Winners"
+        component={WinnersScreen}
         options={{title: 'Vincitori'}}
-        component={({navigation}) => (
-          <PlaceholderScreen title="Tutti i Vincitori" navigation={navigation} />
-        )}
       />
       <Stack.Screen
         name="Referral"
+        component={ReferralScreen}
         options={{title: 'Invita Amici'}}
-        component={({navigation}) => (
-          <PlaceholderScreen title="Programma Referral" navigation={navigation} />
-        )}
       />
       <Stack.Screen
         name="Settings"
+        component={SettingsScreen}
         options={{title: 'Impostazioni'}}
-        component={({navigation}) => (
-          <PlaceholderScreen title="Impostazioni" navigation={navigation} />
-        )}
       />
       <Stack.Screen
         name="AddressForm"
+        component={AddressFormScreen}
         options={{title: 'Indirizzo'}}
-        component={({navigation}) => (
-          <PlaceholderScreen title="Indirizzo di Spedizione" navigation={navigation} />
-        )}
       />
       <Stack.Screen
         name="MyWins"
+        component={MyWinsScreen}
         options={{title: 'Le Mie Vincite'}}
-        component={({navigation}) => (
-          <PlaceholderScreen title="I Miei Premi Vinti" navigation={navigation} />
-        )}
       />
     </Stack.Navigator>
   );

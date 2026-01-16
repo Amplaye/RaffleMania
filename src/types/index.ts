@@ -30,6 +30,8 @@ export interface Prize {
   value: number;
   stock: number;
   isActive: boolean;
+  currentAds: number;
+  goalAds: number;
 }
 
 // Ticket Types

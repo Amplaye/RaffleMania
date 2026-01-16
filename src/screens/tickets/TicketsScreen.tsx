@@ -1,12 +1,16 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useState, useRef} from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  Animated,
+  StatusBar,
+  Dimensions,
 } from 'react-native';
-import {ScreenContainer, Card, Badge} from '../../components/common';
+import LinearGradient from 'react-native-linear-gradient';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useTicketsStore, usePrizesStore} from '../../store';
 import {Ticket} from '../../types';
 import {
@@ -14,19 +18,255 @@ import {
   SPACING,
   FONT_SIZE,
   FONT_WEIGHT,
+  FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
 import {formatDate, formatTicketCode} from '../../utils/formatters';
 
-type TabType = 'active' | 'history';
+const {width} = Dimensions.get('window');
+
+type TabType = 'active' | 'wins';
 
 interface TicketsScreenProps {
   navigation: any;
 }
 
+// Animated Tab Component
+const AnimatedTab: React.FC<{
+  activeTab: TabType;
+  onTabChange: (tab: TabType) => void;
+  activeCount: number;
+  winsCount: number;
+}> = ({activeTab, onTabChange, activeCount, winsCount}) => {
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(slideAnim, {
+      toValue: activeTab === 'active' ? 0 : 1,
+      friction: 8,
+      tension: 50,
+      useNativeDriver: true,
+    }).start();
+  }, [activeTab]);
+
+  const translateX = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, (width - SPACING.lg * 2) / 2],
+  });
+
+  return (
+    <View style={styles.tabsContainer}>
+      <Animated.View
+        style={[
+          styles.tabIndicator,
+          {transform: [{translateX}]},
+        ]}>
+        <LinearGradient
+          colors={activeTab === 'wins' ? ['#FFD700', '#FFA000'] : [COLORS.primary, '#FF8500']}
+          start={{x: 0, y: 0}}
+          end={{x: 1, y: 0}}
+          style={styles.tabIndicatorGradient}
+        />
+      </Animated.View>
+      <TouchableOpacity
+        style={styles.tab}
+        onPress={() => onTabChange('active')}>
+        <Ionicons
+          name={activeTab === 'active' ? 'ticket' : 'ticket-outline'}
+          size={18}
+          color={activeTab === 'active' ? COLORS.white : COLORS.textMuted}
+        />
+        <Text
+          style={[
+            styles.tabText,
+            activeTab === 'active' && styles.activeTabText,
+          ]}>
+          Attivi ({activeCount})
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.tab}
+        onPress={() => onTabChange('wins')}>
+        <Ionicons
+          name={activeTab === 'wins' ? 'trophy' : 'trophy-outline'}
+          size={18}
+          color={activeTab === 'wins' ? COLORS.white : COLORS.textMuted}
+        />
+        <Text
+          style={[
+            styles.tabText,
+            activeTab === 'wins' && styles.activeTabText,
+          ]}>
+          Vincite ({winsCount})
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// Active Ticket Card - Simple design
+const ActiveTicketCard: React.FC<{
+  ticket: Ticket;
+  prizeName: string;
+  index: number;
+  onPress: () => void;
+}> = ({ticket, prizeName, index, onPress}) => {
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        delay: index * 60,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 250,
+        delay: index * 60,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        styles.activeCardContainer,
+        {
+          opacity: opacityAnim,
+          transform: [{scale: scaleAnim}],
+        },
+      ]}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={onPress}
+        style={styles.activeCard}>
+        <View style={styles.activeCardLeft}>
+          <View style={styles.ticketIconContainer}>
+            <Ionicons name="ticket" size={24} color={COLORS.primary} />
+          </View>
+          <View style={styles.activeCardInfo}>
+            <Text style={styles.activeCardCode}>{formatTicketCode(ticket.uniqueCode)}</Text>
+            <Text style={styles.activeCardPrize} numberOfLines={1}>{prizeName}</Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+// Winning Ticket Card - Special golden design with emphasis
+const WinningTicketCard: React.FC<{
+  ticket: Ticket;
+  prizeName: string;
+  index: number;
+  onPress: () => void;
+}> = ({ticket, prizeName, index, onPress}) => {
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 40,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Pulsing glow effect
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, []);
+
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.6],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.winCardContainer,
+        {
+          opacity: opacityAnim,
+          transform: [{scale: scaleAnim}],
+        },
+      ]}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={onPress}
+        style={styles.winCard}>
+        {/* Golden Glow Background */}
+        <Animated.View style={[styles.winCardGlow, {opacity: glowOpacity}]} />
+
+        {/* Golden Border */}
+        <LinearGradient
+          colors={['#FFD700', '#FFA000', '#FF8C00']}
+          start={{x: 0, y: 0}}
+          end={{x: 1, y: 1}}
+          style={styles.winCardBorder}>
+          <View style={styles.winCardInner}>
+            {/* Trophy Badge */}
+            <View style={styles.trophyContainer}>
+              <LinearGradient
+                colors={['#FFD700', '#FFA000']}
+                style={styles.trophyBadge}>
+                <Ionicons name="trophy" size={28} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+
+            {/* Win Info */}
+            <View style={styles.winInfo}>
+              <Text style={styles.winLabel}>HAI VINTO!</Text>
+              <Text style={styles.winPrizeName} numberOfLines={2}>{prizeName}</Text>
+              <View style={styles.winCodeContainer}>
+                <Text style={styles.winCodeLabel}>Codice:</Text>
+                <Text style={styles.winCode}>{formatTicketCode(ticket.uniqueCode)}</Text>
+              </View>
+              <Text style={styles.winDate}>{formatDate(ticket.createdAt)}</Text>
+            </View>
+
+            {/* Arrow */}
+            <View style={styles.winArrow}>
+              <Ionicons name="chevron-forward" size={24} color="#FFA000" />
+            </View>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
 export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
   const [activeTab, setActiveTab] = useState<TabType>('active');
-  const {activeTickets, pastTickets, fetchTickets, isLoading} = useTicketsStore();
+  const {activeTickets, pastTickets, fetchTickets} = useTicketsStore();
   const {prizes} = usePrizesStore();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -40,117 +280,86 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
     setRefreshing(false);
   };
 
-  const getSourceLabel = (source: Ticket['source']): string => {
-    switch (source) {
-      case 'ad':
-        return 'Pubblicita';
-      case 'credits':
-        return 'Crediti';
-      case 'referral':
-        return 'Referral';
-      case 'bonus':
-        return 'Bonus';
-      default:
-        return source;
-    }
-  };
+  // Filter: only winning tickets in history
+  const winningTickets = pastTickets.filter(t => t.isWinner);
 
-  const getSourceVariant = (source: Ticket['source']): 'primary' | 'secondary' | 'success' | 'warning' => {
-    switch (source) {
-      case 'ad':
-        return 'primary';
-      case 'credits':
-        return 'secondary';
-      case 'referral':
-        return 'success';
-      case 'bonus':
-        return 'warning';
-      default:
-        return 'primary';
-    }
-  };
+  // Get tickets based on active tab
+  const tickets = activeTab === 'active' ? activeTickets : winningTickets;
 
-  const tickets = activeTab === 'active' ? activeTickets : pastTickets;
-
-  const renderTicket = ({item}: {item: Ticket}) => {
+  const renderTicket = ({item, index}: {item: Ticket; index: number}) => {
     const prize = prizes.find(p => p.id === item.prizeId);
+    const prizeName = prize?.name || 'Premio';
+
+    if (activeTab === 'wins') {
+      return (
+        <WinningTicketCard
+          ticket={item}
+          prizeName={prizeName}
+          index={index}
+          onPress={() => navigation.navigate('TicketDetail', {ticketId: item.id})}
+        />
+      );
+    }
 
     return (
-      <Card
-        style={styles.ticketCard}
-        onPress={() => navigation.navigate('TicketDetail', {ticketId: item.id})}>
-        <View style={styles.ticketHeader}>
-          <Text style={styles.ticketCode}>{formatTicketCode(item.uniqueCode)}</Text>
-          {item.isWinner && (
-            <Badge text="VINCENTE!" variant="success" />
-          )}
-        </View>
-
-        <View style={styles.ticketInfo}>
-          <View style={styles.ticketRow}>
-            <Text style={styles.ticketLabel}>Premio:</Text>
-            <Text style={styles.ticketValue}>{prize?.name || 'N/A'}</Text>
-          </View>
-          <View style={styles.ticketRow}>
-            <Text style={styles.ticketLabel}>Data:</Text>
-            <Text style={styles.ticketValue}>{formatDate(item.createdAt)}</Text>
-          </View>
-        </View>
-
-        <View style={styles.ticketFooter}>
-          <Badge
-            text={getSourceLabel(item.source)}
-            variant={getSourceVariant(item.source)}
-            size="small"
-          />
-        </View>
-      </Card>
+      <ActiveTicketCard
+        ticket={item}
+        prizeName={prizeName}
+        index={index}
+        onPress={() => navigation.navigate('TicketDetail', {ticketId: item.id})}
+      />
     );
   };
 
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <View style={styles.titleSection}>
+        <Text style={styles.title}>I Miei Biglietti</Text>
+        <Text style={styles.subtitle}>
+          I biglietti scaduti vengono rimossi automaticamente
+        </Text>
+      </View>
+
+      <AnimatedTab
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        activeCount={activeTickets.length}
+        winsCount={winningTickets.length}
+      />
+    </View>
+  );
+
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>🎫</Text>
+      <View style={styles.emptyIconContainer}>
+        {activeTab === 'active' ? (
+          <Ionicons name="ticket-outline" size={48} color={COLORS.border} />
+        ) : (
+          <Ionicons name="trophy-outline" size={48} color="#FFD700" />
+        )}
+      </View>
       <Text style={styles.emptyTitle}>
-        {activeTab === 'active' ? 'Nessun biglietto attivo' : 'Nessuno storico'}
+        {activeTab === 'active' ? 'Nessun biglietto attivo' : 'Nessuna vincita ancora'}
       </Text>
       <Text style={styles.emptySubtitle}>
         {activeTab === 'active'
-          ? 'Guarda una pubblicita per ottenere il tuo primo biglietto!'
-          : 'I tuoi biglietti passati appariranno qui'}
+          ? 'Guarda una pubblicità per ottenere il tuo primo biglietto!'
+          : 'Le tue vincite appariranno qui. Continua a partecipare!'}
       </Text>
+      {activeTab === 'active' && (
+        <TouchableOpacity
+          style={styles.emptyButton}
+          onPress={() => navigation.navigate('Home')}>
+          <Ionicons name="play-circle" size={20} color={COLORS.white} />
+          <Text style={styles.emptyButtonText}>Guarda Ads</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
   return (
-    <ScreenContainer scrollable={false} padded={false}>
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'active' && styles.activeTab]}
-          onPress={() => setActiveTab('active')}>
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === 'active' && styles.activeTabText,
-            ]}>
-            Attivi ({activeTickets.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'history' && styles.activeTab]}
-          onPress={() => setActiveTab('history')}>
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === 'history' && styles.activeTabText,
-            ]}>
-            Storico ({pastTickets.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Tickets List */}
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <FlatList
         data={tickets}
         renderItem={renderTicket}
@@ -159,90 +368,248 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
         showsVerticalScrollIndicator={false}
         refreshing={refreshing}
         onRefresh={handleRefresh}
+        ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
       />
-    </ScreenContainer>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  tabs: {
-    flexDirection: 'row',
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.md,
+  container: {
+    flex: 1,
     backgroundColor: COLORS.background,
+  },
+  listContent: {
+    paddingTop: SPACING.xl + 30,
+    paddingBottom: SPACING.xl,
+    flexGrow: 1,
+  },
+  header: {
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+  },
+  titleSection: {
+    marginBottom: SPACING.lg,
+  },
+  title: {
+    fontSize: 32,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.text,
+  },
+  subtitle: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    color: COLORS.textMuted,
+    marginTop: 4,
+  },
+  // Tabs
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.xl,
+    padding: 4,
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  tabIndicator: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: (width - SPACING.lg * 2 - 8) / 2,
+    height: '100%',
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+  },
+  tabIndicatorGradient: {
+    flex: 1,
+    borderRadius: RADIUS.lg,
   },
   tab: {
     flex: 1,
-    paddingVertical: SPACING.md,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  activeTab: {
-    borderBottomColor: COLORS.primary,
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    gap: 6,
+    zIndex: 1,
   },
   tabText: {
-    fontSize: FONT_SIZE.md,
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.medium,
     fontWeight: FONT_WEIGHT.medium,
-    color: COLORS.textSecondary,
+    color: COLORS.textMuted,
   },
   activeTabText: {
-    color: COLORS.primary,
+    color: COLORS.white,
     fontWeight: FONT_WEIGHT.semibold,
   },
-  listContent: {
-    padding: SPACING.md,
-    flexGrow: 1,
+  // Active Ticket Card - Simple
+  activeCardContainer: {
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
-  ticketCard: {
+  activeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  activeCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  ticketIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: `${COLORS.primary}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  activeCardInfo: {
+    flex: 1,
+  },
+  activeCardCode: {
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.text,
+    letterSpacing: 1,
+  },
+  activeCardPrize: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  // Winning Ticket Card - Special Golden Design
+  winCardContainer: {
+    paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.md,
   },
-  ticketHeader: {
+  winCard: {
+    borderRadius: RADIUS.xl,
+    overflow: 'hidden',
+  },
+  winCardGlow: {
+    position: 'absolute',
+    top: -10,
+    left: -10,
+    right: -10,
+    bottom: -10,
+    backgroundColor: '#FFD700',
+    borderRadius: RADIUS.xl + 10,
+  },
+  winCardBorder: {
+    padding: 3,
+    borderRadius: RADIUS.xl,
+  },
+  winCardInner: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.sm,
+    backgroundColor: '#FFFEF5',
+    borderRadius: RADIUS.xl - 2,
+    padding: SPACING.lg,
   },
-  ticketCode: {
-    fontSize: FONT_SIZE.xl,
+  trophyContainer: {
+    marginRight: SPACING.md,
+  },
+  trophyBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FFD700',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  winInfo: {
+    flex: 1,
+  },
+  winLabel: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.primary,
-    letterSpacing: 2,
+    color: '#FFA000',
+    letterSpacing: 1.5,
+    marginBottom: 4,
   },
-  ticketInfo: {
-    marginBottom: SPACING.sm,
-  },
-  ticketRow: {
-    flexDirection: 'row',
+  winPrizeName: {
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.text,
     marginBottom: SPACING.xs,
   },
-  ticketLabel: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
-    width: 60,
-  },
-  ticketValue: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.text,
-    flex: 1,
-  },
-  ticketFooter: {
+  winCodeContainer: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
   },
+  winCodeLabel: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.regular,
+    color: COLORS.textMuted,
+  },
+  winCode: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: '#FFA000',
+    letterSpacing: 1,
+  },
+  winDate: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.regular,
+    color: COLORS.textMuted,
+  },
+  winArrow: {
+    marginLeft: SPACING.sm,
+  },
+  // Empty State
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.xl,
   },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: SPACING.md,
+  emptyIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: COLORS.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   emptyTitle: {
     fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.semibold,
     color: COLORS.text,
     marginBottom: SPACING.sm,
@@ -250,8 +617,26 @@ const styles = StyleSheet.create({
   },
   emptySubtitle: {
     fontSize: FONT_SIZE.md,
-    color: COLORS.textSecondary,
+    fontFamily: FONT_FAMILY.regular,
+    color: COLORS.textMuted,
     textAlign: 'center',
+    marginBottom: SPACING.lg,
+    lineHeight: 22,
+  },
+  emptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 14,
+    borderRadius: RADIUS.lg,
+    gap: 8,
+  },
+  emptyButtonText: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.semibold,
+    color: COLORS.white,
   },
 });
 

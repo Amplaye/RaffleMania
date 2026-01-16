@@ -1,11 +1,12 @@
 import React from 'react';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {View, Text, StyleSheet} from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {HomeScreen} from '../screens/home';
 import {TicketsScreen} from '../screens/tickets';
 import {PrizesScreen} from '../screens/prizes';
 import {ProfileScreen} from '../screens/profile';
-import {COLORS, FONT_SIZE, FONT_WEIGHT} from '../utils/constants';
+import {COLORS, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY} from '../utils/constants';
 
 export type TabParamList = {
   Home: undefined;
@@ -18,18 +19,21 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 interface TabIconProps {
   focused: boolean;
-  icon: string;
-  label: string;
+  iconName: string;
+  iconNameFocused: string;
 }
 
-const TabIcon: React.FC<TabIconProps> = ({focused, icon, label}) => (
+const TabIcon: React.FC<TabIconProps> = ({
+  focused,
+  iconName,
+  iconNameFocused,
+}) => (
   <View style={styles.tabItem}>
-    <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>
-      {icon}
-    </Text>
-    <Text style={[styles.tabLabel, focused && styles.tabLabelFocused]}>
-      {label}
-    </Text>
+    <Ionicons
+      name={focused ? iconNameFocused : iconName}
+      size={26}
+      color={focused ? COLORS.primary : COLORS.textMuted}
+    />
   </View>
 );
 
@@ -46,16 +50,11 @@ export const TabNavigator: React.FC = () => {
         component={HomeScreen}
         options={{
           tabBarIcon: ({focused}) => (
-            <TabIcon focused={focused} icon="🏠" label="Home" />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Tickets"
-        component={TicketsScreen}
-        options={{
-          tabBarIcon: ({focused}) => (
-            <TabIcon focused={focused} icon="🎫" label="Biglietti" />
+            <TabIcon
+              focused={focused}
+              iconName="home-outline"
+              iconNameFocused="home"
+            />
           ),
         }}
       />
@@ -64,7 +63,24 @@ export const TabNavigator: React.FC = () => {
         component={PrizesScreen}
         options={{
           tabBarIcon: ({focused}) => (
-            <TabIcon focused={focused} icon="🎁" label="Premi" />
+            <TabIcon
+              focused={focused}
+              iconName="gift-outline"
+              iconNameFocused="gift"
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Tickets"
+        component={TicketsScreen}
+        options={{
+          tabBarIcon: ({focused}) => (
+            <TabIcon
+              focused={focused}
+              iconName="ticket-outline"
+              iconNameFocused="ticket"
+            />
           ),
         }}
       />
@@ -73,7 +89,11 @@ export const TabNavigator: React.FC = () => {
         component={ProfileScreen}
         options={{
           tabBarIcon: ({focused}) => (
-            <TabIcon focused={focused} icon="👤" label="Profilo" />
+            <TabIcon
+              focused={focused}
+              iconName="person-outline"
+              iconNameFocused="person"
+            />
           ),
         }}
       />
@@ -84,31 +104,18 @@ export const TabNavigator: React.FC = () => {
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    height: 80,
-    paddingTop: 8,
+    borderTopWidth: 0,
+    height: 70,
+    paddingTop: 10,
     paddingBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: -2},
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 10,
   },
   tabItem: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tabIcon: {
-    fontSize: 24,
-    marginBottom: 4,
-    opacity: 0.5,
-  },
-  tabIconFocused: {
-    opacity: 1,
-  },
-  tabLabel: {
-    fontSize: FONT_SIZE.xs,
-    color: COLORS.textSecondary,
-    fontWeight: FONT_WEIGHT.medium,
-  },
-  tabLabelFocused: {
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHT.semibold,
   },
 });
