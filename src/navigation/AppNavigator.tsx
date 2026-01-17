@@ -16,6 +16,7 @@ import {ReferralScreen} from '../screens/referral';
 import {AddressFormScreen} from '../screens/address';
 import {SettingsScreen} from '../screens/settings';
 import {TicketDetailScreen} from '../screens/ticketdetail';
+import {LevelDetailScreen} from '../screens/leveldetail';
 
 // Stack param list
 export type RootStackParamList = {
@@ -28,6 +29,7 @@ export type RootStackParamList = {
   Settings: undefined;
   AddressForm: undefined;
   MyWins: undefined;
+  LevelDetail: undefined;
 };
 
 type PlaceholderProps = NativeStackScreenProps<RootStackParamList, keyof RootStackParamList>;
@@ -88,18 +90,7 @@ const MainStack: React.FC = () => {
   return (
     <Stack.Navigator
       screenOptions={{
-        headerStyle: {
-          backgroundColor: colors.background,
-        },
-        headerTintColor: colors.text,
-        headerTitleStyle: {
-          fontWeight: FONT_WEIGHT.semibold,
-        },
-        headerShadowVisible: false,
-        headerBackTitleVisible: false,
-        statusBarTranslucent: true,
-        statusBarStyle: 'auto',
-        headerStatusBarHeight: statusBarHeight + 10,
+        headerShown: false,
       }}>
       <Stack.Screen
         name="MainTabs"
@@ -145,6 +136,11 @@ const MainStack: React.FC = () => {
         name="MyWins"
         component={MyWinsScreen}
         options={{title: 'Le Mie Vincite'}}
+      />
+      <Stack.Screen
+        name="LevelDetail"
+        component={LevelDetailScreen}
+        options={{title: 'Sistema Livelli'}}
       />
     </Stack.Navigator>
   );

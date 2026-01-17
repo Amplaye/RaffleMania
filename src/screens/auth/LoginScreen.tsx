@@ -31,6 +31,15 @@ const COLORS = {
   error: '#E53935',
 };
 
+// Neon glow effect for login button
+const NEON_GLOW = {
+  shadowColor: '#FF6B00',
+  shadowOffset: {width: 0, height: 0},
+  shadowOpacity: 0.5,
+  shadowRadius: 12,
+  elevation: 12,
+};
+
 // Floating particle component
 const FloatingParticle: React.FC<{delay: number; startX: number; size: number}> = ({
   delay,
@@ -297,7 +306,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
           {/* Login Button */}
           <TouchableOpacity
-            style={styles.loginButton}
+            style={[styles.loginButton, NEON_GLOW]}
             onPress={handleLogin}
             disabled={isLoading}
             activeOpacity={0.85}>

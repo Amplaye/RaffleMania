@@ -83,6 +83,68 @@ export const GRADIENT_COLORS = {
   dark: ['#121212', '#181818', '#1E1E1E', '#252525', '#2A2A2A'] as const,
 };
 
+// Neon Effect Styles
+export const NEON_STYLES = {
+  light: {
+    // Subtle neon for light theme
+    glow: {
+      shadowColor: '#FF6B00',
+      shadowOffset: {width: 0, height: 0},
+      shadowOpacity: 0.4,
+      shadowRadius: 8,
+      elevation: 8,
+    },
+    glowStrong: {
+      shadowColor: '#FF6B00',
+      shadowOffset: {width: 0, height: 0},
+      shadowOpacity: 0.5,
+      shadowRadius: 12,
+      elevation: 12,
+    },
+    glowSubtle: {
+      shadowColor: '#FF6B00',
+      shadowOffset: {width: 0, height: 2},
+      shadowOpacity: 0.3,
+      shadowRadius: 6,
+      elevation: 6,
+    },
+    textShadow: {
+      textShadowColor: 'rgba(255, 107, 0, 0.4)',
+      textShadowOffset: {width: 0, height: 0},
+      textShadowRadius: 8,
+    },
+  },
+  dark: {
+    // Strong neon for dark theme - more visible glow
+    glow: {
+      shadowColor: '#FF6B00',
+      shadowOffset: {width: 0, height: 0},
+      shadowOpacity: 0.8,
+      shadowRadius: 15,
+      elevation: 15,
+    },
+    glowStrong: {
+      shadowColor: '#FF6B00',
+      shadowOffset: {width: 0, height: 0},
+      shadowOpacity: 1,
+      shadowRadius: 25,
+      elevation: 25,
+    },
+    glowSubtle: {
+      shadowColor: '#FF6B00',
+      shadowOffset: {width: 0, height: 2},
+      shadowOpacity: 0.6,
+      shadowRadius: 10,
+      elevation: 10,
+    },
+    textShadow: {
+      textShadowColor: 'rgba(255, 107, 0, 0.8)',
+      textShadowOffset: {width: 0, height: 0},
+      textShadowRadius: 15,
+    },
+  },
+};
+
 // Font Family - Comic Sans
 export const FONT_FAMILY = {
   regular: 'Comic Sans MS',

@@ -41,9 +41,10 @@ const PackageCard: React.FC<{
   pkg: CreditPackage;
   onSelect: () => void;
   colors: any;
-}> = ({pkg, onSelect, colors}) => (
+  neon: any;
+}> = ({pkg, onSelect, colors, neon}) => (
   <TouchableOpacity
-    style={[styles.packageCard, pkg.isPopular && styles.packageCardPopular, {backgroundColor: colors.card}]}
+    style={[styles.packageCard, pkg.isPopular && styles.packageCardPopular, pkg.isPopular && neon.glow, {backgroundColor: colors.card}]}
     onPress={onSelect}
     activeOpacity={0.8}>
     {pkg.isPopular && (
@@ -69,7 +70,7 @@ const PackageCard: React.FC<{
 );
 
 export const CreditsScreen: React.FC<CreditsScreenProps> = ({navigation}) => {
-  const {colors} = useThemeColors();
+  const {colors, neon} = useThemeColors();
   const {user, updateUser} = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -106,10 +107,22 @@ export const CreditsScreen: React.FC<CreditsScreenProps> = ({navigation}) => {
 
   return (
     <ScreenContainer>
+      {/* Custom Header */}
+      <View style={styles.customHeader}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, {color: colors.text}]}>I Miei Crediti</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
+        {/* Balance Card */}
         <View style={styles.header}>
-          <View style={styles.balanceCard}>
+          <View style={[styles.balanceCard, neon.glowStrong]}>
             <LinearGradient
               colors={[COLORS.primary, '#FF6B00']}
               start={{x: 0, y: 0}}
@@ -160,6 +173,7 @@ export const CreditsScreen: React.FC<CreditsScreenProps> = ({navigation}) => {
                 key={pkg.id}
                 pkg={pkg}
                 colors={colors}
+                neon={neon}
                 onSelect={() => handleSelectPackage(pkg)}
               />
             ))}
@@ -233,6 +247,31 @@ export const CreditsScreen: React.FC<CreditsScreenProps> = ({navigation}) => {
 };
 
 const styles = StyleSheet.create({
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xs,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
+  },
   header: {
     paddingVertical: SPACING.md,
   },

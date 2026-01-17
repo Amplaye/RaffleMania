@@ -1,0 +1,490 @@
+import React, {useRef, useEffect} from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Animated,
+  Easing,
+} from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import LinearGradient from 'react-native-linear-gradient';
+import {ScreenContainer, Card} from '../../components/common';
+import {useLevelStore, LEVELS} from '../../store';
+import {useThemeColors} from '../../hooks/useThemeColors';
+import {
+  COLORS,
+  SPACING,
+  FONT_SIZE,
+  FONT_WEIGHT,
+  FONT_FAMILY,
+  RADIUS,
+} from '../../utils/constants';
+
+// Level benefits for each level (discounts: 5% at lv5, 10% at lv7, 15% at lv10)
+const LEVEL_BENEFITS: {[key: number]: string[]} = {
+  1: ['Accesso alle estrazioni base', 'Guadagna XP guardando ads'],
+  2: ['Sblocca badge Apprendista', 'Accesso notifiche prioritarie'],
+  3: ['Accesso anticipato nuovi premi', 'Sblocca badge Esploratore'],
+  4: ['Biglietto bonus mensile', 'Sblocca badge Avventuriero'],
+  5: ['Sconto 5% acquisto crediti', '2 Biglietti bonus mensili', 'Sblocca badge Veterano'],
+  6: ['3 Biglietti bonus mensili', 'Sblocca badge Campione'],
+  7: ['Sconto 10% acquisto crediti', '4 Biglietti bonus mensili', 'Accesso VIP estrazioni speciali', 'Sblocca badge Maestro'],
+  8: ['5 Biglietti bonus mensili', 'Premi esclusivi Leggenda', 'Sblocca badge Leggenda'],
+  9: ['6 Biglietti bonus mensili', 'Accesso estrazioni Mito', 'Sblocca badge Mito'],
+  10: ['Sconto 15% acquisto crediti', 'Biglietti illimitati bonus', 'Accesso a TUTTI i premi esclusivi', 'Status Divinita permanente', 'Sblocca badge Divinita'],
+};
+
+interface LevelDetailScreenProps {
+  navigation: any;
+}
+
+// Level Item Component
+const LevelItem: React.FC<{
+  levelInfo: typeof LEVELS[0];
+  currentLevel: number;
+  totalXP: number;
+  colors: any;
+  index: number;
+}> = ({levelInfo, currentLevel, totalXP, colors, index}) => {
+  const {neon} = useThemeColors();
+  const isUnlocked = currentLevel >= levelInfo.level;
+  const isCurrent = currentLevel === levelInfo.level;
+  const benefits = LEVEL_BENEFITS[levelInfo.level] || [];
+
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: index * 80,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        delay: index * 80,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        styles.levelItemContainer,
+        {
+          opacity: opacityAnim,
+          transform: [{scale: scaleAnim}],
+        },
+      ]}>
+      <Card style={[
+        styles.levelItem,
+        isCurrent && styles.levelItemCurrent,
+        isCurrent && neon.glow,
+        !isUnlocked && styles.levelItemLocked,
+      ]}>
+        {/* Level Badge */}
+        <View style={styles.levelItemHeader}>
+          <View style={[styles.levelBadgeWrapper, isUnlocked && neon.glowStrong]}>
+            {isUnlocked ? (
+              <LinearGradient
+                colors={[levelInfo.color, levelInfo.color + '88']}
+                style={styles.levelBadge}>
+                <Ionicons name={levelInfo.icon as any} size={28} color={COLORS.white} />
+              </LinearGradient>
+            ) : (
+              <View style={[styles.levelBadge, styles.levelBadgeLocked]}>
+                <Ionicons name="lock-closed" size={28} color={COLORS.textMuted} />
+              </View>
+            )}
+            <View style={[
+              styles.levelNumberCircle,
+              {backgroundColor: isUnlocked ? levelInfo.color : COLORS.border},
+            ]}>
+              <Text style={[
+                styles.levelNumberSmall,
+                {color: isUnlocked ? COLORS.white : COLORS.textMuted},
+              ]}>{levelInfo.level}</Text>
+            </View>
+          </View>
+
+          <View style={styles.levelItemInfo}>
+            <Text style={[
+              styles.levelItemName,
+              {color: isUnlocked ? levelInfo.color : COLORS.textMuted},
+            ]}>
+              {levelInfo.name}
+            </Text>
+            <Text style={[styles.levelItemXp, {color: colors.textSecondary}]}>
+              {levelInfo.minXP.toLocaleString()} - {levelInfo.maxXP === 999999 ? '∞' : levelInfo.maxXP.toLocaleString()} XP
+            </Text>
+          </View>
+
+          {isCurrent && (
+            <View style={styles.currentBadge}>
+              <LinearGradient
+                colors={[COLORS.primary, '#FF8500']}
+                style={styles.currentBadgeGradient}>
+                <Text style={styles.currentBadgeText}>ATTUALE</Text>
+              </LinearGradient>
+            </View>
+          )}
+
+          {isUnlocked && !isCurrent && (
+            <View style={[styles.unlockedBadge, {backgroundColor: `${levelInfo.color}20`}]}>
+              <Ionicons name="checkmark-circle" size={20} color={levelInfo.color} />
+            </View>
+          )}
+        </View>
+
+        {/* Benefits List */}
+        <View style={[styles.benefitsContainer, {borderTopColor: colors.border}]}>
+          <Text style={[styles.benefitsTitle, {color: colors.textMuted}]}>
+            {isUnlocked ? 'Vantaggi sbloccati:' : 'Vantaggi da sbloccare:'}
+          </Text>
+          {benefits.map((benefit, idx) => (
+            <View key={idx} style={styles.benefitItem}>
+              <View style={[
+                styles.benefitDot,
+                {backgroundColor: isUnlocked ? levelInfo.color : COLORS.textMuted},
+              ]} />
+              <Text style={[
+                styles.benefitText,
+                {color: isUnlocked ? colors.text : colors.textMuted},
+              ]}>
+                {benefit}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Progress to this level (if not yet reached) */}
+        {!isUnlocked && (
+          <View style={styles.progressToLevel}>
+            <View style={[styles.progressToLevelBar, {backgroundColor: colors.border}]}>
+              <View
+                style={[
+                  styles.progressToLevelFill,
+                  {
+                    width: `${Math.min((totalXP / levelInfo.minXP) * 100, 100)}%`,
+                  },
+                ]}>
+                <LinearGradient
+                  colors={[COLORS.primary, '#FF8500']}
+                  start={{x: 0, y: 0}}
+                  end={{x: 1, y: 0}}
+                  style={styles.progressGradient}
+                />
+              </View>
+            </View>
+            <Text style={[styles.progressToLevelText, {color: colors.textMuted}]}>
+              {totalXP.toLocaleString()} / {levelInfo.minXP.toLocaleString()} XP
+            </Text>
+          </View>
+        )}
+      </Card>
+    </Animated.View>
+  );
+};
+
+export const LevelDetailScreen: React.FC<LevelDetailScreenProps> = ({navigation}) => {
+  const {colors} = useThemeColors();
+  const {level, totalXP, getLevelInfo} = useLevelStore();
+  const currentLevelInfo = getLevelInfo();
+
+  return (
+    <ScreenContainer>
+      {/* Custom Header */}
+      <View style={styles.customHeader}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.screenTitle, {color: colors.text}]}>Sistema Livelli</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Current Level Summary */}
+        <Card style={styles.summaryCard}>
+          <LinearGradient
+            colors={[currentLevelInfo.color, currentLevelInfo.color + '88']}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 1}}
+            style={styles.summaryGradient}>
+            <View style={styles.summaryContent}>
+              <View style={styles.summaryIconContainer}>
+                <Ionicons name={currentLevelInfo.icon as any} size={48} color={COLORS.white} />
+              </View>
+              <View style={styles.summaryInfo}>
+                <Text style={styles.summaryLabel}>Il tuo livello</Text>
+                <Text style={styles.summaryName}>{currentLevelInfo.name}</Text>
+                <Text style={styles.summaryXp}>{totalXP.toLocaleString()} XP totali</Text>
+              </View>
+              <View style={styles.summaryLevelBadge}>
+                <Text style={styles.summaryLevelNumber}>{level}</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </Card>
+
+        {/* All Levels */}
+        <Text style={[styles.sectionTitle, {color: colors.text}]}>Tutti i Livelli</Text>
+
+        {LEVELS.map((levelInfo, index) => (
+          <LevelItem
+            key={levelInfo.level}
+            levelInfo={levelInfo}
+            currentLevel={level}
+            totalXP={totalXP}
+            colors={colors}
+            index={index}
+          />
+        ))}
+
+        <View style={styles.bottomPadding} />
+      </ScrollView>
+    </ScreenContainer>
+  );
+};
+
+const styles = StyleSheet.create({
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xs,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+  },
+  screenTitle: {
+    flex: 1,
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  // Summary Card
+  summaryCard: {
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.md,
+    padding: 0,
+    overflow: 'hidden',
+  },
+  summaryGradient: {
+    padding: SPACING.lg,
+  },
+  summaryContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  summaryIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  summaryInfo: {
+    flex: 1,
+  },
+  summaryLabel: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  summaryName: {
+    fontSize: FONT_SIZE.xxl,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.white,
+    marginTop: 2,
+  },
+  summaryXp: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.medium,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 4,
+  },
+  summaryLevelBadge: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryLevelNumber: {
+    fontSize: FONT_SIZE.xxl,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.white,
+  },
+  // Section Title
+  sectionTitle: {
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    marginBottom: SPACING.md,
+  },
+  // Level Item
+  levelItemContainer: {
+    marginBottom: SPACING.md,
+  },
+  levelItem: {
+    padding: SPACING.md,
+  },
+  levelItemCurrent: {
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  levelItemLocked: {
+    opacity: 0.7,
+  },
+  levelItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  levelBadgeWrapper: {
+    position: 'relative',
+    marginRight: SPACING.md,
+  },
+  levelBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  levelBadgeLocked: {
+    backgroundColor: COLORS.border,
+  },
+  levelNumberCircle: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  levelNumberSmall: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  levelItemInfo: {
+    flex: 1,
+  },
+  levelItemName: {
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  levelItemXp: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    marginTop: 2,
+  },
+  currentBadge: {
+    borderRadius: RADIUS.sm,
+    overflow: 'hidden',
+  },
+  currentBadgeGradient: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+  },
+  currentBadgeText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.white,
+    letterSpacing: 0.5,
+  },
+  unlockedBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Benefits
+  benefitsContainer: {
+    marginTop: SPACING.md,
+    paddingTop: SPACING.md,
+    borderTopWidth: 1,
+  },
+  benefitsTitle: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.semibold,
+    marginBottom: SPACING.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  benefitItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  benefitDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: SPACING.sm,
+  },
+  benefitText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    flex: 1,
+  },
+  // Progress to level
+  progressToLevel: {
+    marginTop: SPACING.md,
+  },
+  progressToLevelBar: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: SPACING.xs,
+  },
+  progressToLevelFill: {
+    height: '100%',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressGradient: {
+    flex: 1,
+  },
+  progressToLevelText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.regular,
+    textAlign: 'right',
+  },
+  bottomPadding: {
+    height: SPACING.xl,
+  },
+});
+
+export default LevelDetailScreen;

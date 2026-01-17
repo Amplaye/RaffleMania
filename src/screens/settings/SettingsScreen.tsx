@@ -41,8 +41,8 @@ interface SettingLink {
   onPress: () => void;
 }
 
-export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
-  const {colors} = useThemeColors();
+export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
+  const {colors, neon} = useThemeColors();
   const [notifications, setNotifications] = useState({
     pushEnabled: true,
     emailEnabled: true,
@@ -123,7 +123,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
 
   const renderToggleSetting = (setting: SettingToggle) => (
     <View key={setting.id} style={styles.settingItem}>
-      <View style={[styles.settingIconContainer, {backgroundColor: `${colors.primary}15`}]}>
+      <View style={[styles.settingIconContainer, {backgroundColor: `${colors.primary}15`}, setting.value && neon.glowSubtle]}>
         <Ionicons name={setting.icon} size={20} color={colors.primary} />
       </View>
       <View style={styles.settingContent}>
@@ -174,6 +174,18 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
 
   return (
     <ScreenContainer>
+      {/* Custom Header */}
+      <View style={styles.customHeader}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.screenTitle, {color: colors.text}]}>Impostazioni</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Notifications Section */}
         <Text style={[styles.sectionTitle, styles.firstSectionTitle, {color: colors.textMuted}]}>Notifiche</Text>
@@ -225,6 +237,31 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
 };
 
 const styles = StyleSheet.create({
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xs,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+  },
+  screenTitle: {
+    flex: 1,
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
+  },
   sectionTitle: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,

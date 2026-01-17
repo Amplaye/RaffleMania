@@ -10,6 +10,20 @@ export interface User {
   referredBy?: string;
   shippingAddress?: ShippingAddress;
   createdAt: string;
+  // Leveling system
+  level: number;
+  currentXP: number;
+  totalXP: number;
+}
+
+// Leveling Types
+export interface LevelInfo {
+  level: number;
+  name: string;
+  minXP: number;
+  maxXP: number;
+  icon: string;
+  color: string;
 }
 
 export interface ShippingAddress {

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {usePrizesStore, useTicketsStore} from '../../store';
+import {usePrizesStore, useTicketsStore, useLevelStore, XP_REWARDS} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {Prize} from '../../types';
 import {
@@ -207,6 +207,7 @@ const PrizeCard: React.FC<{
   index: number;
   onWatchAd: (prize: Prize) => void;
 }> = ({item, index, onWatchAd}) => {
+  const {neon} = useThemeColors();
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -241,7 +242,7 @@ const PrizeCard: React.FC<{
           transform: [{scale: scaleAnim}],
         },
       ]}>
-      <View style={styles.card}>
+      <View style={[styles.card, neon.glowSubtle]}>
         {/* Prize Image */}
         <View style={styles.imageContainer}>
           <Image
@@ -266,7 +267,7 @@ const PrizeCard: React.FC<{
 
           {/* Watch Ad Button */}
           <TouchableOpacity
-            style={styles.watchButton}
+            style={[styles.watchButton, neon.glowStrong]}
             activeOpacity={0.8}
             onPress={handleWatchAd}>
             <LinearGradient
@@ -275,7 +276,7 @@ const PrizeCard: React.FC<{
               end={{x: 1, y: 0}}
               style={styles.watchButtonGradient}>
               <Ionicons name="play-circle" size={20} color={COLORS.white} />
-              <Text style={styles.watchButtonText}>Guarda Ads</Text>
+              <Text style={[styles.watchButtonText, neon.textShadow]}>Guarda Ads</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -289,6 +290,7 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
   const {prizes, fetchPrizes, incrementAdsForPrize} = usePrizesStore();
   const {addTicket, canWatchAd, incrementAdsWatched, todayAdsWatched, maxAdsPerDay} = useTicketsStore();
   const {currentDraw} = usePrizesStore();
+  const addXP = useLevelStore(state => state.addXP);
   const [refreshing, setRefreshing] = useState(false);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
@@ -321,6 +323,9 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     // Increment ads for this prize
     incrementAdsForPrize(prize.id);
     incrementAdsWatched();
+
+    // Add XP for watching ad
+    addXP(XP_REWARDS.WATCH_AD);
 
     if (currentDraw) {
       const newTicket = addTicket('ad', currentDraw.id, prize.id);

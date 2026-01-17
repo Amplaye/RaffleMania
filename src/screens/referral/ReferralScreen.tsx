@@ -26,8 +26,8 @@ interface ReferralScreenProps {
   navigation: any;
 }
 
-export const ReferralScreen: React.FC<ReferralScreenProps> = () => {
-  const {colors} = useThemeColors();
+export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
+  const {colors, neon} = useThemeColors();
   const {user} = useAuthStore();
   const referralCode = user?.referralCode || 'N/A';
 
@@ -65,9 +65,21 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = () => {
 
   return (
     <ScreenContainer>
+      {/* Custom Header */}
+      <View style={styles.customHeader}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.screenTitle, {color: colors.text}]}>Invita Amici</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header Card */}
-        <View style={styles.headerCard}>
+        <View style={[styles.headerCard, neon.glowStrong]}>
           <LinearGradient
             colors={[COLORS.primary, '#FF6B00']}
             start={{x: 0, y: 0}}
@@ -82,7 +94,7 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = () => {
         </View>
 
         {/* Referral Code */}
-        <Card style={styles.codeCard}>
+        <Card style={[styles.codeCard, neon.glowSubtle]}>
           <Text style={[styles.codeLabel, {color: colors.textMuted}]}>Il tuo codice referral</Text>
           <View style={styles.codeContainer}>
             <Text style={[styles.codeText, {color: colors.text}]}>{referralCode}</Text>
@@ -90,7 +102,7 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = () => {
               <Ionicons name="copy-outline" size={20} color={colors.primary} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+          <TouchableOpacity style={[styles.shareButton, neon.glow]} onPress={handleShare}>
             <LinearGradient
               colors={[COLORS.primary, '#FF8500']}
               start={{x: 0, y: 0}}
@@ -126,12 +138,12 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = () => {
         {/* Stats */}
         <Text style={[styles.sectionTitle, {color: colors.text}]}>Le tue statistiche</Text>
         <View style={styles.statsRow}>
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, neon.glowSubtle]}>
             <Ionicons name="people" size={24} color={colors.primary} />
             <Text style={[styles.statValue, {color: colors.text}]}>0</Text>
             <Text style={[styles.statLabel, {color: colors.textMuted}]}>Amici invitati</Text>
           </Card>
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, neon.glowSubtle]}>
             <Ionicons name="diamond" size={24} color={colors.primary} />
             <Text style={[styles.statValue, {color: colors.text}]}>0</Text>
             <Text style={[styles.statLabel, {color: colors.textMuted}]}>Crediti guadagnati</Text>
@@ -143,6 +155,31 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = () => {
 };
 
 const styles = StyleSheet.create({
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xs,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+  },
+  screenTitle: {
+    flex: 1,
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
+  },
   headerCard: {
     borderRadius: RADIUS.xl,
     overflow: 'hidden',

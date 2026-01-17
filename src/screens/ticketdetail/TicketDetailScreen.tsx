@@ -6,6 +6,7 @@ import {
   Image,
   ScrollView,
   Animated,
+  TouchableOpacity,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -27,8 +28,8 @@ interface TicketDetailScreenProps {
   navigation: any;
 }
 
-export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route}) => {
-  const {colors} = useThemeColors();
+export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, navigation}) => {
+  const {colors, neon} = useThemeColors();
   const {ticketId} = route.params;
   const {activeTickets, pastTickets} = useTicketsStore();
   const {prizes} = usePrizesStore();
@@ -72,6 +73,18 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route}) =
 
   return (
     <ScreenContainer>
+      {/* Custom Header */}
+      <View style={styles.customHeader}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.screenTitle, {color: colors.text}]}>Dettaglio Biglietto</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Prize Image Card */}
         <Animated.View
@@ -120,7 +133,7 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route}) =
 
         {/* Status Badge */}
         {!isWinner && (
-          <View style={[styles.statusBadge, isActive ? {backgroundColor: `${colors.primary}15`} : {backgroundColor: `${colors.success}15`}]}>
+          <View style={[styles.statusBadge, isActive ? [{backgroundColor: `${colors.primary}15`}, neon.glowSubtle] : {backgroundColor: `${colors.success}15`}]}>
             <Ionicons
               name={isActive ? 'time' : 'checkmark-circle'}
               size={16}
@@ -136,7 +149,7 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route}) =
         <Text style={[styles.prizeName, {color: colors.text}]}>{prize.name}</Text>
 
         {/* Ticket Info Card */}
-        <Card style={styles.infoCard}>
+        <Card style={[styles.infoCard, neon.glowSubtle]}>
           <Text style={[styles.infoTitle, {color: colors.text}]}>Dettagli Biglietto</Text>
 
           <View style={styles.infoRow}>
@@ -197,6 +210,31 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route}) =
 };
 
 const styles = StyleSheet.create({
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xs,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+  },
+  screenTitle: {
+    flex: 1,
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
+  },
   errorContainer: {
     flex: 1,
     alignItems: 'center',

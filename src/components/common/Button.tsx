@@ -8,6 +8,7 @@ import {
   TextStyle,
 } from 'react-native';
 import {COLORS, RADIUS, SPACING, FONT_SIZE, FONT_WEIGHT} from '../../utils/constants';
+import {useThemeColors} from '../../hooks/useThemeColors';
 
 interface ButtonProps {
   title: string;
@@ -34,6 +35,8 @@ export const Button: React.FC<ButtonProps> = ({
   style,
   textStyle,
 }) => {
+  const {neon} = useThemeColors();
+
   const getButtonStyle = (): ViewStyle[] => {
     const baseStyle: ViewStyle[] = [styles.button, styles[`${size}Button`]];
 
@@ -53,6 +56,8 @@ export const Button: React.FC<ButtonProps> = ({
         break;
       default:
         baseStyle.push(styles.primaryButton);
+        // Add neon glow to primary buttons
+        baseStyle.push(neon.glow as ViewStyle);
     }
 
     if (disabled || loading) {

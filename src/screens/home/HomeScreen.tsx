@@ -18,7 +18,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {AnimatedBackground} from '../../components/common';
-import {useTicketsStore, usePrizesStore} from '../../store';
+import {useTicketsStore, usePrizesStore, useLevelStore, XP_REWARDS} from '../../store';
 import {useCountdown} from '../../hooks/useCountdown';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
@@ -39,6 +39,7 @@ interface TimerCardProps {
 }
 
 const TimerCard: React.FC<TimerCardProps> = ({value}) => {
+  const {neon} = useThemeColors();
   const flipAnim = useRef(new Animated.Value(0)).current;
   const [displayValue, setDisplayValue] = useState(value);
   const prevValue = useRef(value);
@@ -83,6 +84,7 @@ const TimerCard: React.FC<TimerCardProps> = ({value}) => {
     <Animated.View
       style={[
         styles.timerCard,
+        neon.glow,
         {
           transform: [{perspective: 400}, {rotateX}, {scale}],
         },
@@ -90,7 +92,7 @@ const TimerCard: React.FC<TimerCardProps> = ({value}) => {
       <LinearGradient
         colors={['#2A2A2A', '#1A1A1A', '#0F0F0F']}
         style={styles.timerCardGradient}>
-        <Text style={styles.timerCardText}>{displayValue}</Text>
+        <Text style={[styles.timerCardText, neon.textShadow]}>{displayValue}</Text>
         <View style={styles.timerCardLine} />
       </LinearGradient>
     </Animated.View>
@@ -118,6 +120,7 @@ const TimerUnit: React.FC<TimerUnitProps> = ({value, label}) => {
 
 // Timer Separator
 const TimerSeparator: React.FC = () => {
+  const {neon} = useThemeColors();
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -139,8 +142,8 @@ const TimerSeparator: React.FC = () => {
 
   return (
     <Animated.View style={[styles.timerSeparator, {opacity: pulseAnim}]}>
-      <View style={styles.separatorDot} />
-      <View style={styles.separatorDot} />
+      <View style={[styles.separatorDot, neon.glowSubtle]} />
+      <View style={[styles.separatorDot, neon.glowSubtle]} />
     </Animated.View>
   );
 };
@@ -231,6 +234,7 @@ const SmoothProgressBar: React.FC<ProgressBarProps> = ({current, goal, prizeId})
 
 // Pulsing Dot
 const PulsingDot: React.FC = () => {
+  const {neon} = useThemeColors();
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -250,7 +254,7 @@ const PulsingDot: React.FC = () => {
     ).start();
   }, []);
 
-  return <Animated.View style={[styles.pulsingDot, {opacity: pulseAnim}]} />;
+  return <Animated.View style={[styles.pulsingDot, neon.glowStrong, {opacity: pulseAnim}]} />;
 };
 
 interface HomeScreenProps {
@@ -418,44 +422,8 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({currentIndex, totalCount})
   );
 };
 
-// Shimmer Logo Component
-const ShimmerLogo: React.FC = () => {
-  const shimmerPosition = useRef(new Animated.Value(-1)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(shimmerPosition, {
-        toValue: 2,
-        duration: 2500,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    ).start();
-  }, []);
-
-  const shimmerTranslate = shimmerPosition.interpolate({
-    inputRange: [-1, 2],
-    outputRange: [-150, 150],
-  });
-
-  return (
-    <View style={styles.logoContainer}>
-      <Text style={styles.logoLarge}>
-        <Text style={styles.logoRaffleLarge}>Raffle</Text>
-        <Text style={styles.logoManiaLarge}>Mania</Text>
-      </Text>
-      <Animated.View
-        style={[
-          styles.logoShimmer,
-          {transform: [{translateX: shimmerTranslate}]},
-        ]}
-      />
-    </View>
-  );
-};
-
 export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
-  const {colors, gradientColors, isDark} = useThemeColors();
+  const {colors, gradientColors, isDark, neon} = useThemeColors();
   const {
     activeTickets,
     fetchTickets,
@@ -466,6 +434,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     maxAdsPerDay,
   } = useTicketsStore();
   const {prizes, currentDraw, fetchPrizes, fetchDraws, incrementAdsForPrize} = usePrizesStore();
+  const addXP = useLevelStore(state => state.addXP);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [currentPrizeIndex, setCurrentPrizeIndex] = useState(0);
   const [showTicketModal, setShowTicketModal] = useState(false);
@@ -557,6 +526,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     incrementAdsForPrize(currentPrize.id);
     incrementAdsWatched();
 
+    // Add XP for watching ad
+    addXP(XP_REWARDS.WATCH_AD);
+
     if (currentDraw) {
       const newTicket = addTicket('ad', currentDraw.id, currentPrize.id);
       setNewTicketInfo({
@@ -602,18 +574,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
 
       {/* Header */}
       <View style={styles.header}>
+        <View style={styles.logoLeft}>
+          <Text style={[styles.logoTextRaffle, {color: colors.text}]}>Raffle</Text>
+          <Text style={[styles.logoTextMania, neon.textShadow]}>Mania</Text>
+        </View>
         <TouchableOpacity
-          style={styles.ticketBadge}
-          onPress={() => navigation.navigate('Tickets')}
-          activeOpacity={0.7}>
-          <Ionicons name="ticket" size={16} color={COLORS.white} />
-          <Text style={styles.ticketCount}>{activeTickets.length}</Text>
-        </TouchableOpacity>
-        <ShimmerLogo />
-        <TouchableOpacity
-          style={styles.profileButton}
+          style={[styles.profileButton, neon.glowSubtle]}
           onPress={() => navigation.navigate('Profile')}>
-          <Ionicons name="person-circle-outline" size={28} color={colors.text} />
+          <Ionicons name="person-circle-outline" size={42} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -677,6 +645,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
           <TouchableOpacity
             style={[
               styles.watchButton,
+              neon.glowStrong,
               (!canWatchAd() || isWatchingAd) && styles.watchButtonDisabled,
             ]}
             onPress={handleWatchAd}
@@ -687,7 +656,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               size={24}
               color={COLORS.white}
             />
-            <Text style={styles.watchButtonText}>
+            <Text style={[styles.watchButtonText, neon.textShadow]}>
               {isWatchingAd ? 'Guardando...' : 'Guarda e Vinci'}
             </Text>
             <View style={styles.adsCounter}>
@@ -729,34 +698,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: SPACING.lg,
     paddingTop: 30,
-    paddingBottom: SPACING.xs,
+    paddingBottom: SPACING.sm,
   },
-  ticketBadge: {
+  logoLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
   },
-  ticketCount: {
-    color: COLORS.white,
-    fontSize: FONT_SIZE.md,
+  logoTextRaffle: {
+    fontSize: FONT_SIZE.xxl,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-  },
-  logo: {
-    fontSize: FONT_SIZE.xl,
-    fontFamily: FONT_FAMILY.bold,
-  },
-  logoRaffle: {
     color: COLORS.text,
-    fontWeight: FONT_WEIGHT.bold,
   },
-  logoMania: {
-    color: COLORS.primary,
+  logoTextMania: {
+    fontSize: FONT_SIZE.xxl,
+    fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.primary,
   },
   profileButton: {
     padding: 4,
@@ -811,33 +769,6 @@ const styles = StyleSheet.create({
   },
   stepPillGradient: {
     flex: 1,
-  },
-  // Logo with shimmer
-  logoContainer: {
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  logoLarge: {
-    fontSize: FONT_SIZE.xxl,
-    fontFamily: FONT_FAMILY.bold,
-  },
-  logoRaffleLarge: {
-    color: COLORS.text,
-    fontWeight: FONT_WEIGHT.bold,
-  },
-  logoManiaLarge: {
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHT.bold,
-  },
-  logoShimmer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: 60,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-    transform: [{skewX: '-20deg'}],
   },
   buttonContainer: {
     paddingHorizontal: SPACING.lg,

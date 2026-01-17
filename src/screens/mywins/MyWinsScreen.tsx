@@ -111,7 +111,7 @@ const WinCard: React.FC<{
 };
 
 export const MyWinsScreen: React.FC<MyWinsScreenProps> = ({navigation}) => {
-  const {colors} = useThemeColors();
+  const {colors, neon} = useThemeColors();
   const {pastTickets, fetchTickets} = useTicketsStore();
   const {prizes} = usePrizesStore();
 
@@ -146,7 +146,7 @@ export const MyWinsScreen: React.FC<MyWinsScreenProps> = ({navigation}) => {
         Continua a partecipare alle estrazioni!{'\n'}La fortuna potrebbe essere dalla tua parte.
       </Text>
       <TouchableOpacity
-        style={styles.emptyButton}
+        style={[styles.emptyButton, neon.glow]}
         onPress={() => navigation.navigate('MainTabs', {screen: 'Home'})}>
         <LinearGradient
           colors={[colors.primary, '#FF8500']}
@@ -174,6 +174,18 @@ export const MyWinsScreen: React.FC<MyWinsScreenProps> = ({navigation}) => {
 
   return (
     <ScreenContainer>
+      {/* Custom Header */}
+      <View style={styles.customHeader}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.screenTitle, {color: colors.text}]}>Le Mie Vincite</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <FlatList
         data={winningTickets}
         renderItem={renderItem}
@@ -188,6 +200,31 @@ export const MyWinsScreen: React.FC<MyWinsScreenProps> = ({navigation}) => {
 };
 
 const styles = StyleSheet.create({
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xs,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+  },
+  screenTitle: {
+    flex: 1,
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
+  },
   listContent: {
     paddingBottom: SPACING.xl,
     flexGrow: 1,

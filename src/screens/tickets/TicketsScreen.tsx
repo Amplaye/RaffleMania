@@ -39,6 +39,7 @@ const AnimatedTab: React.FC<{
   activeCount: number;
   winsCount: number;
 }> = ({activeTab, onTabChange, activeCount, winsCount}) => {
+  const {neon} = useThemeColors();
   const slideAnim = useRef(new Animated.Value(activeTab === 'active' ? 0 : 1)).current;
   const colorAnim = useRef(new Animated.Value(activeTab === 'active' ? 0 : 1)).current;
 
@@ -78,6 +79,7 @@ const AnimatedTab: React.FC<{
       <Animated.View
         style={[
           styles.tabIndicator,
+          neon.glow,
           {transform: [{translateX}]},
         ]}>
         {/* Active gradient (orange) */}
