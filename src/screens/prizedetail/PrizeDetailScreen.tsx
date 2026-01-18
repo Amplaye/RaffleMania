@@ -14,9 +14,10 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import {AnimatedBackground, AdOrCreditsModal} from '../../components/common';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
-import {usePrizesStore, useTicketsStore, useLevelStore, XP_REWARDS, TICKET_PROBABILITY_BONUS} from '../../store';
+import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, useAuthStore, XP_REWARDS, TICKET_PROBABILITY_BONUS} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {Prize} from '../../types';
 import {
@@ -282,6 +283,8 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const {prizes, incrementAdsForPrize, currentDraw} = usePrizesStore();
   const {addTicket, incrementAdsWatched, getTicketsForPrize, getWinProbabilityForPrize, getPrimaryTicketForPrize, hasPrimaryTicketForPrize} = useTicketsStore();
   const addXP = useLevelStore(state => state.addXP);
+  const {useCreditsForTicket} = useCreditsStore();
+  const {user} = useAuthStore();
 
   // Get ticket stats for this prize
   const myTicketCount = getTicketsForPrize(prizeId);
@@ -293,6 +296,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [newTicketInfo, setNewTicketInfo] = useState<TicketModalInfo | null>(null);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
+  const [showAdOrCreditsModal, setShowAdOrCreditsModal] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -361,6 +365,39 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
     setIsWatchingAd(false);
   };
 
+  const handleShowAdOrCreditsModal = () => {
+    if (!prize) return;
+    setShowAdOrCreditsModal(true);
+  };
+
+  const handleUseCredits = async () => {
+    if (!prize || !currentDraw) return;
+    setShowAdOrCreditsModal(false);
+
+    const success = await useCreditsForTicket();
+    if (!success) {
+      return;
+    }
+
+    // Check if this will be the first ticket (before adding)
+    const existingPrimaryTicket = getPrimaryTicketForPrize(prize.id);
+    const isFirstTicket = !existingPrimaryTicket;
+
+    const newTicket = addTicket('credits', currentDraw.id, prize.id);
+
+    // Get updated ticket count after adding
+    const newTicketCount = getTicketsForPrize(prize.id);
+
+    setNewTicketInfo({
+      ticketCode: isFirstTicket ? newTicket.uniqueCode : (existingPrimaryTicket?.uniqueCode || ''),
+      prizeName: prize.name,
+      isPrimaryTicket: isFirstTicket,
+      totalTickets: newTicketCount,
+      probabilityBonus: 0.5,
+    });
+    setShowTicketModal(true);
+  };
+
   const handleCloseModal = () => {
     setShowTicketModal(false);
     setNewTicketInfo(null);
@@ -393,6 +430,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
       end={{x: 0.5, y: 1}}
       style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
+      <AnimatedBackground />
 
       {/* Header */}
       <View style={styles.header}>
@@ -651,7 +689,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
         <TouchableOpacity
           style={[styles.watchButton, neon.glowStrong]}
           activeOpacity={0.8}
-          onPress={handleWatchAd}
+          onPress={handleShowAdOrCreditsModal}
           disabled={isWatchingAd}>
           <LinearGradient
             colors={isWatchingAd ? ['#999', '#777'] : [COLORS.primary, '#FF8500']}
@@ -665,8 +703,8 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
               </>
             ) : (
               <>
-                <Ionicons name="play-circle" size={24} color={COLORS.white} />
-                <Text style={styles.watchButtonText}>Guarda Ad e Partecipa</Text>
+                <Ionicons name="ticket" size={24} color={COLORS.white} />
+                <Text style={styles.watchButtonText}>Ottieni Biglietto</Text>
               </>
             )}
           </LinearGradient>
@@ -678,6 +716,23 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
         visible={showTicketModal}
         ticketInfo={newTicketInfo}
         onClose={handleCloseModal}
+      />
+
+      {/* Ad or Credits Choice Modal */}
+      <AdOrCreditsModal
+        visible={showAdOrCreditsModal}
+        userCredits={user?.credits ?? 0}
+        prizeName={prize?.name ?? ''}
+        onWatchAd={() => {
+          setShowAdOrCreditsModal(false);
+          handleWatchAd();
+        }}
+        onUseCredits={handleUseCredits}
+        onGoToShop={() => {
+          setShowAdOrCreditsModal(false);
+          navigation.navigate('Credits');
+        }}
+        onClose={() => setShowAdOrCreditsModal(false)}
       />
     </LinearGradient>
   );
@@ -725,9 +780,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: SPACING.md,
     position: 'relative',
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.25,
     shadowRadius: 12,
     elevation: 5,
   },
@@ -769,9 +824,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 3,
   },
@@ -1014,9 +1069,9 @@ const styles = StyleSheet.create({
   howItWorksCard: {
     borderRadius: RADIUS.xl,
     padding: SPACING.lg,
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 3,
   },
@@ -1130,9 +1185,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     maxWidth: 340,
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 10},
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 20,
   },

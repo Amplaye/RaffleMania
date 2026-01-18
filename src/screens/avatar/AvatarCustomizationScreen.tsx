@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import {AnimatedBackground} from '../../components/common';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {useAvatarStore, useLevelStore, AVATARS, FRAMES, Avatar, Frame} from '../../store';
@@ -200,6 +201,7 @@ export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
       end={{x: 0.5, y: 1}}
       style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
+      <AnimatedBackground />
 
       {/* Header */}
       <View style={styles.header}>

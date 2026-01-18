@@ -1,5 +1,6 @@
 export {useAuthStore} from './useAuthStore';
 export {useTicketsStore, TICKET_PROBABILITY_BONUS} from './useTicketsStore';
+export type {ExtractionResult} from './useTicketsStore';
 export {useCreditsStore} from './useCreditsStore';
 export {usePrizesStore} from './usePrizesStore';
 export {useThemeStore} from './useThemeStore';

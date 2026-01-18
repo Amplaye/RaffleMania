@@ -10,8 +10,10 @@ import {
   Linking,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer, Card} from '../../components/common';
 import {useThemeColors} from '../../hooks/useThemeColors';
+import {useAuthStore} from '../../store';
 import {
   COLORS,
   SPACING,
@@ -42,7 +44,8 @@ interface SettingLink {
 }
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
-  const {colors, neon} = useThemeColors();
+  const {colors} = useThemeColors();
+  const {logout} = useAuthStore();
   const [notifications, setNotifications] = useState({
     pushEnabled: true,
     emailEnabled: true,
@@ -123,7 +126,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
 
   const renderToggleSetting = (setting: SettingToggle) => (
     <View key={setting.id} style={styles.settingItem}>
-      <View style={[styles.settingIconContainer, {backgroundColor: `${colors.primary}15`}, setting.value && neon.glowSubtle]}>
+      <View style={[styles.settingIconContainer, {backgroundColor: `${colors.primary}15`}]}>
         <Ionicons name={setting.icon} size={20} color={colors.primary} />
       </View>
       <View style={styles.settingContent}>
@@ -157,16 +160,31 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
     </TouchableOpacity>
   );
 
+  const handleLogout = () => {
+    Alert.alert(
+      'Esci dall\'account',
+      'Sei sicuro di voler uscire dal tuo account?',
+      [
+        {text: 'Annulla', style: 'cancel'},
+        {
+          text: 'Esci',
+          style: 'destructive',
+          onPress: () => logout(),
+        },
+      ],
+    );
+  };
+
   const handleDeleteAccount = () => {
     Alert.alert(
       'Elimina Account',
-      'Sei sicuro di voler eliminare il tuo account? Questa azione e irreversibile.',
+      'Sei sicuro di voler eliminare il tuo account? Questa azione è irreversibile e perderai tutti i tuoi dati, crediti e biglietti.',
       [
         {text: 'Annulla', style: 'cancel'},
         {
           text: 'Elimina',
           style: 'destructive',
-          onPress: () => Alert.alert('Account', 'Funzionalita in arrivo'),
+          onPress: () => Alert.alert('Account', 'Funzionalità in arrivo'),
         },
       ],
     );
@@ -209,25 +227,40 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
           ))}
         </Card>
 
-        {/* Danger Zone */}
+        {/* Account Actions */}
         <Text style={[styles.sectionTitle, {color: colors.textMuted}]}>Account</Text>
-        <Card style={styles.card} padding="none">
-          <TouchableOpacity
-            style={styles.settingItem}
-            onPress={handleDeleteAccount}>
-            <View style={[styles.settingIconContainer, styles.dangerIcon]}>
-              <Ionicons name="trash" size={20} color={colors.error} />
+
+        {/* Logout Button */}
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={handleLogout}
+          activeOpacity={0.8}>
+          <LinearGradient
+            colors={[colors.primary, '#E55A00']}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 0}}
+            style={styles.actionButtonGradient}>
+            <View style={styles.actionButtonIconContainer}>
+              <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
             </View>
-            <View style={styles.settingContent}>
-              <Text style={[styles.settingTitle, styles.dangerText, {color: colors.error}]}>
-                Elimina account
-              </Text>
-              <Text style={[styles.settingSubtitle, {color: colors.textMuted}]}>
-                Elimina permanentemente il tuo account
-              </Text>
+            <Text style={styles.actionButtonText}>Esci dall'account</Text>
+            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* Delete Account Button */}
+        <TouchableOpacity
+          style={[styles.actionButton, styles.deleteButton]}
+          onPress={handleDeleteAccount}
+          activeOpacity={0.8}>
+          <View style={[styles.deleteButtonInner, {backgroundColor: colors.card, borderColor: colors.error}]}>
+            <View style={[styles.actionButtonIconContainer, styles.deleteIconContainer]}>
+              <Ionicons name="trash-outline" size={22} color={colors.error} />
             </View>
-          </TouchableOpacity>
-        </Card>
+            <Text style={[styles.deleteButtonText, {color: colors.error}]}>Elimina account</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.error} />
+          </View>
+        </TouchableOpacity>
 
         {/* App Version */}
         <Text style={[styles.version, {color: colors.textMuted}]}>RaffleMania v1.0.0 (build 1)</Text>
@@ -293,9 +326,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: SPACING.md,
   },
-  dangerIcon: {
-    backgroundColor: `${COLORS.error}15`,
-  },
   settingContent: {
     flex: 1,
   },
@@ -311,8 +341,58 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginTop: 2,
   },
-  dangerText: {
-    color: COLORS.error,
+  actionButton: {
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    marginBottom: SPACING.sm,
+    shadowColor: '#FF6B00',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  actionButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+  },
+  actionButtonIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  actionButtonText: {
+    flex: 1,
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: '#FFFFFF',
+  },
+  deleteButton: {
+    shadowColor: COLORS.error,
+    shadowOpacity: 0.2,
+  },
+  deleteButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+  },
+  deleteIconContainer: {
+    backgroundColor: `${COLORS.error}15`,
+  },
+  deleteButtonText: {
+    flex: 1,
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
   },
   divider: {
     height: 1,

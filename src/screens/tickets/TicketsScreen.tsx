@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import {AnimatedBackground} from '../../components/common';
 import {useTicketsStore, usePrizesStore, TICKET_PROBABILITY_BONUS} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {Ticket} from '../../types';
@@ -424,6 +425,7 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
       end={{x: 0.5, y: 1}}
       style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
+      <AnimatedBackground />
       <FlatList
         data={tickets}
         renderItem={renderTicket}
@@ -474,9 +476,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: 4,
     position: 'relative',
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -531,9 +533,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 2,
   },
@@ -708,9 +710,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.lg,
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 2,
   },

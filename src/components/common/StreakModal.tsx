@@ -157,6 +157,7 @@ export const StreakModal: React.FC<StreakModalProps> = ({
             {dayRewards.slice(0, 4).map((dayReward, index) => {
               const isCompleted = dayReward.day < currentStreak;
               const isToday = dayReward.day === currentStreak;
+              const isDay7 = index === 6;
 
               return (
                 <Animated.View
@@ -191,19 +192,21 @@ export const StreakModal: React.FC<StreakModalProps> = ({
                     ]}>
                       Day {dayReward.day}
                     </Text>
-                    {isCompleted && (
-                      <View style={styles.iconContainer}>
-                        <Ionicons name="checkmark" size={20} color="#fff" />
+                    {isCompleted ? (
+                      <View style={styles.checkContainer}>
+                        <Ionicons name="checkmark" size={18} color="#fff" />
+                      </View>
+                    ) : (
+                      <View style={styles.rewardContainer}>
+                        <Text style={[
+                          styles.rewardXP,
+                          (isCompleted || isToday) && styles.rewardXPLight,
+                          !isCompleted && !isToday && {color: isDark ? '#808080' : '#666666'},
+                        ]}>
+                          +{dayReward.xp} XP
+                        </Text>
                       </View>
                     )}
-                    <Text style={[
-                      styles.rewardXP,
-                      (isCompleted || isToday) && styles.rewardXPLight,
-                      !isCompleted && !isToday && {color: isDark ? '#808080' : '#666666'},
-                      isCompleted && styles.rewardXPCompleted,
-                    ]}>
-                      +{dayReward.xp} XP
-                    </Text>
                   </LinearGradient>
                   {isToday && (
                     <Animated.View
@@ -215,84 +218,21 @@ export const StreakModal: React.FC<StreakModalProps> = ({
             })}
           </View>
 
-          {/* Days 5-6 and Day 7 Row */}
-          <View style={styles.daysRowBottom}>
-            {/* Days 5-6 */}
-            <View style={styles.days56Container}>
-              {dayRewards.slice(4, 6).map((dayReward, idx) => {
-                const index = idx + 4;
-                const isCompleted = dayReward.day < currentStreak;
-                const isToday = dayReward.day === currentStreak;
-
-                return (
-                  <Animated.View
-                    key={dayReward.day}
-                    style={[
-                      styles.dayBox,
-                      {
-                        transform: [{scale: dayAnims[index]}],
-                      },
-                    ]}>
-                    <LinearGradient
-                      colors={
-                        isCompleted
-                          ? ['#00B894', '#00a884']
-                          : isToday
-                            ? ['#FF6B00', '#E55A00']
-                            : isDark
-                              ? ['#2A2A2A', '#1E1E1E']
-                              : ['#FFFFFF', '#F8F8F8']
-                      }
-                      start={{x: 0, y: 0}}
-                      end={{x: 0, y: 1}}
-                      style={[
-                        styles.dayBoxGradient,
-                        isToday && styles.dayBoxTodayBorder,
-                      ]}
-                    >
-                      <Text style={[
-                        styles.dayLabel,
-                        (isCompleted || isToday) && styles.dayLabelLight,
-                        !isCompleted && !isToday && {color: isDark ? '#808080' : '#666666'},
-                      ]}>
-                        Day {dayReward.day}
-                      </Text>
-                      {isCompleted && (
-                        <View style={styles.iconContainer}>
-                          <Ionicons name="checkmark" size={20} color="#fff" />
-                        </View>
-                      )}
-                      <Text style={[
-                        styles.rewardXP,
-                        (isCompleted || isToday) && styles.rewardXPLight,
-                        !isCompleted && !isToday && {color: isDark ? '#808080' : '#666666'},
-                        isCompleted && styles.rewardXPCompleted,
-                      ]}>
-                        +{dayReward.xp} XP
-                      </Text>
-                    </LinearGradient>
-                    {isToday && (
-                      <Animated.View
-                        style={[styles.glowBorder, {opacity: glowOpacity, borderColor: '#FF6B00'}]}
-                      />
-                    )}
-                  </Animated.View>
-                );
-              })}
-            </View>
-
-            {/* Day 7 - Special Box */}
-            {(() => {
-              const dayReward = dayRewards[6];
+          {/* Days 5-7 Row */}
+          <View style={styles.daysRow}>
+            {dayRewards.slice(4, 7).map((dayReward, idx) => {
+              const index = idx + 4;
               const isCompleted = dayReward.day < currentStreak;
               const isToday = dayReward.day === currentStreak;
+              const isDay7 = idx === 2;
 
               return (
                 <Animated.View
+                  key={dayReward.day}
                   style={[
-                    styles.dayBoxSpecial,
+                    styles.dayBox,
                     {
-                      transform: [{scale: dayAnims[6]}],
+                      transform: [{scale: dayAnims[index]}],
                     },
                   ]}>
                   <LinearGradient
@@ -301,46 +241,56 @@ export const StreakModal: React.FC<StreakModalProps> = ({
                         ? ['#00B894', '#00a884']
                         : isToday
                           ? ['#FF6B00', '#E55A00']
-                          : ['#FFB366', '#FF8533']
+                          : isDay7
+                            ? ['#FFB366', '#FF8533']
+                            : isDark
+                              ? ['#2A2A2A', '#1E1E1E']
+                              : ['#FFFFFF', '#F8F8F8']
                     }
                     start={{x: 0, y: 0}}
                     end={{x: 0, y: 1}}
                     style={[
-                      styles.dayBoxGradientSpecial,
+                      styles.dayBoxGradient,
                       isToday && styles.dayBoxTodayBorder,
                     ]}
                   >
-                    <Text style={styles.dayLabelLight}>
+                    <Text style={[
+                      styles.dayLabel,
+                      (isCompleted || isToday || isDay7) && styles.dayLabelLight,
+                      !isCompleted && !isToday && !isDay7 && {color: isDark ? '#808080' : '#666666'},
+                    ]}>
                       Day {dayReward.day}
                     </Text>
-                    <View style={styles.iconContainerSpecial}>
-                      {isCompleted ? (
-                        <Ionicons name="checkmark" size={28} color="#fff" />
-                      ) : (
-                        <Ionicons name="gift" size={32} color="#fff" />
-                      )}
-                    </View>
-                    <Text style={[
-                      styles.rewardXPSpecial,
-                      isCompleted && styles.rewardXPCompleted,
-                    ]}>
-                      +{dayReward.xp} XP
-                    </Text>
-                    {!isCompleted && (
-                      <View style={styles.bonusTag}>
-                        <Ionicons name="logo-usd" size={12} color="#fff" />
-                        <Text style={styles.bonusText}>+1</Text>
+                    {isCompleted ? (
+                      <View style={styles.checkContainer}>
+                        <Ionicons name="checkmark" size={18} color="#fff" />
+                      </View>
+                    ) : (
+                      <View style={styles.rewardContainer}>
+                        <Text style={[
+                          styles.rewardXP,
+                          (isCompleted || isToday || isDay7) && styles.rewardXPLight,
+                          !isCompleted && !isToday && !isDay7 && {color: isDark ? '#808080' : '#666666'},
+                        ]}>
+                          +{dayReward.xp} XP
+                        </Text>
+                        {isDay7 && dayReward.credits > 0 && (
+                          <View style={styles.bonusTag}>
+                            <Ionicons name="logo-usd" size={10} color="#fff" />
+                            <Text style={styles.bonusText}>+{dayReward.credits}</Text>
+                          </View>
+                        )}
                       </View>
                     )}
                   </LinearGradient>
                   {isToday && (
                     <Animated.View
-                      style={[styles.glowBorderSpecial, {opacity: glowOpacity, borderColor: '#FF6B00'}]}
+                      style={[styles.glowBorder, {opacity: glowOpacity, borderColor: '#FF6B00'}]}
                     />
                   )}
                 </Animated.View>
               );
-            })()}
+            })}
           </View>
 
           {/* Claim Button */}
@@ -404,32 +354,13 @@ const styles = StyleSheet.create({
   daysRow: {
     flexDirection: 'row',
     paddingHorizontal: SPACING.md,
-    gap: 8,
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  daysRowBottom: {
-    flexDirection: 'row',
-    paddingHorizontal: SPACING.md,
     gap: 10,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  days56Container: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
+    marginBottom: 10,
   },
   dayBox: {
-    width: 60,
-    height: 55,
-    borderRadius: 10,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  dayBoxSpecial: {
-    width: 100,
-    height: 110,
+    width: 70,
+    height: 70,
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
@@ -437,17 +368,8 @@ const styles = StyleSheet.create({
   dayBoxGradient: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 0,
-    paddingHorizontal: 2,
-    borderRadius: 10,
-    gap: 4,
-  },
-  dayBoxGradientSpecial: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
+    justifyContent: 'flex-start',
+    paddingTop: 8,
     paddingHorizontal: 4,
     borderRadius: 12,
   },
@@ -456,7 +378,7 @@ const styles = StyleSheet.create({
     borderColor: '#FFD700',
   },
   dayLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
   },
@@ -466,61 +388,37 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHT.bold,
     color: '#fff',
   },
-  iconContainer: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  checkContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 8,
   },
-  iconContainerSpecial: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  rewardContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 8,
   },
   rewardXP: {
-    fontSize: 10,
+    fontSize: 13,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-  },
-  rewardXPSpecial: {
-    fontSize: 12,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: '#fff',
   },
   rewardXPLight: {
     color: '#fff',
   },
-  rewardXPCompleted: {
-    textDecorationLine: 'line-through',
-    opacity: 0.7,
-  },
   bonusTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 2,
+    marginTop: 2,
   },
   bonusText: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: '#fff',
   },
   glowBorder: {
-    position: 'absolute',
-    top: -2,
-    left: -2,
-    right: -2,
-    bottom: -2,
-    borderRadius: 12,
-    borderWidth: 2,
-  },
-  glowBorderSpecial: {
     position: 'absolute',
     top: -2,
     left: -2,

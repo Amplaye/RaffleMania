@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {usePrizesStore, useTicketsStore, useLevelStore, XP_REWARDS, TICKET_PROBABILITY_BONUS} from '../../store';
+import {AnimatedBackground, AdOrCreditsModal} from '../../components/common';
+import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, useAuthStore, XP_REWARDS, TICKET_PROBABILITY_BONUS} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {Prize} from '../../types';
 import {
@@ -424,10 +425,14 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
   const {addTicket, incrementAdsWatched, getTicketsForPrize, getPrimaryTicketForPrize} = useTicketsStore();
   const {currentDraw} = usePrizesStore();
   const addXP = useLevelStore(state => state.addXP);
+  const {useCreditsForTicket} = useCreditsStore();
+  const user = useAuthStore(state => state.user);
   const [refreshing, setRefreshing] = useState(false);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [newTicketInfo, setNewTicketInfo] = useState<TicketModalInfo | null>(null);
+  const [showAdOrCreditsModal, setShowAdOrCreditsModal] = useState(false);
+  const [selectedPrize, setSelectedPrize] = useState<Prize | null>(null);
 
   useEffect(() => {
     fetchPrizes();
@@ -439,14 +444,23 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     setRefreshing(false);
   };
 
-  const handleWatchAd = async (prize: Prize) => {
+  // Show the ad or credits choice modal
+  const handleShowAdOrCreditsModal = (prize: Prize) => {
+    setSelectedPrize(prize);
+    setShowAdOrCreditsModal(true);
+  };
+
+  const handleWatchAd = async () => {
+    if (!selectedPrize) return;
+
+    setShowAdOrCreditsModal(false);
     setIsWatchingAd(true);
 
     // Simulate watching ad
     await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
 
     // Increment ads for this prize
-    incrementAdsForPrize(prize.id);
+    incrementAdsForPrize(selectedPrize.id);
     incrementAdsWatched();
 
     // Add XP for watching ad
@@ -454,17 +468,17 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
 
     if (currentDraw) {
       // Check if this will be the first ticket (before adding)
-      const existingPrimaryTicket = getPrimaryTicketForPrize(prize.id);
+      const existingPrimaryTicket = getPrimaryTicketForPrize(selectedPrize.id);
       const isFirstTicket = !existingPrimaryTicket;
 
-      const newTicket = addTicket('ad', currentDraw.id, prize.id);
+      const newTicket = addTicket('ad', currentDraw.id, selectedPrize.id);
 
       // Get updated ticket count after adding
-      const newTicketCount = getTicketsForPrize(prize.id);
+      const newTicketCount = getTicketsForPrize(selectedPrize.id);
 
       setNewTicketInfo({
         ticketCode: isFirstTicket ? newTicket.uniqueCode : (existingPrimaryTicket?.uniqueCode || ''),
-        prizeName: prize.name,
+        prizeName: selectedPrize.name,
         isPrimaryTicket: isFirstTicket,
         totalTickets: newTicketCount,
         probabilityBonus: 0.5,
@@ -473,6 +487,39 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     }
 
     setIsWatchingAd(false);
+  };
+
+  const handleUseCredits = async () => {
+    if (!selectedPrize || !currentDraw) return;
+
+    setShowAdOrCreditsModal(false);
+
+    const success = await useCreditsForTicket();
+    if (!success) {
+      Alert.alert('Errore', 'Crediti insufficienti');
+      return;
+    }
+
+    // Increment ads for this prize (counts as participation)
+    incrementAdsForPrize(selectedPrize.id);
+
+    // Check if this will be the first ticket (before adding)
+    const existingPrimaryTicket = getPrimaryTicketForPrize(selectedPrize.id);
+    const isFirstTicket = !existingPrimaryTicket;
+
+    const newTicket = addTicket('credits', currentDraw.id, selectedPrize.id);
+
+    // Get updated ticket count after adding
+    const newTicketCount = getTicketsForPrize(selectedPrize.id);
+
+    setNewTicketInfo({
+      ticketCode: isFirstTicket ? newTicket.uniqueCode : (existingPrimaryTicket?.uniqueCode || ''),
+      prizeName: selectedPrize.name,
+      isPrimaryTicket: isFirstTicket,
+      totalTickets: newTicketCount,
+      probabilityBonus: 0.5,
+    });
+    setShowTicketModal(true);
   };
 
   const handleCloseModal = () => {
@@ -490,7 +537,7 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     <PrizeCard
       item={item}
       index={index}
-      onWatchAd={handleWatchAd}
+      onWatchAd={handleShowAdOrCreditsModal}
       onPress={handlePrizePress}
     />
   );
@@ -522,6 +569,7 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
       end={{x: 0.5, y: 1}}
       style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
+      <AnimatedBackground />
       <FlatList
         data={activePrizes}
         renderItem={renderPrize}
@@ -532,6 +580,20 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
         onRefresh={handleRefresh}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
+      />
+
+      {/* Ad or Credits Choice Modal */}
+      <AdOrCreditsModal
+        visible={showAdOrCreditsModal}
+        userCredits={user?.credits ?? 0}
+        prizeName={selectedPrize?.name ?? ''}
+        onWatchAd={handleWatchAd}
+        onUseCredits={handleUseCredits}
+        onGoToShop={() => {
+          setShowAdOrCreditsModal(false);
+          navigation.navigate('Credits');
+        }}
+        onClose={() => setShowAdOrCreditsModal(false)}
       />
 
       {/* Ticket Success Modal */}
@@ -777,9 +839,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     maxWidth: 340,
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 10},
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 20,
   },

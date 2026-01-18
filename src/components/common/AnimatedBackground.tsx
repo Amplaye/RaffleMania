@@ -3,7 +3,8 @@ import {View, StyleSheet, Animated, Dimensions} from 'react-native';
 
 const {width, height} = Dimensions.get('window');
 
-const PARTICLE_COLOR = '#FF6B00';
+// Neon orange color
+const NEON_ORANGE = '#FF6B00';
 
 interface FloatingParticleProps {
   delay: number;
@@ -17,63 +18,48 @@ const FloatingParticle: React.FC<FloatingParticleProps> = ({
   size,
 }) => {
   const translateY = useRef(new Animated.Value(height + 50)).current;
-  const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
-  const rotate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const animate = () => {
+      const duration = 8000 + Math.random() * 4000;
+
       translateY.setValue(height + 50);
-      translateX.setValue(0);
       opacity.setValue(0);
-      rotate.setValue(0);
 
       Animated.sequence([
         Animated.delay(delay),
         Animated.parallel([
+          // Simple vertical movement from bottom to top
           Animated.timing(translateY, {
             toValue: -100,
-            duration: 8000 + Math.random() * 4000,
+            duration,
             useNativeDriver: true,
           }),
-          Animated.timing(translateX, {
-            toValue: (Math.random() - 0.5) * 100,
-            duration: 8000 + Math.random() * 4000,
-            useNativeDriver: true,
-          }),
+          // Fade in and out
           Animated.sequence([
             Animated.timing(opacity, {
-              toValue: 0.6,
+              toValue: 0.7,
               duration: 1000,
               useNativeDriver: true,
             }),
             Animated.timing(opacity, {
-              toValue: 0.6,
-              duration: 5000,
+              toValue: 0.7,
+              duration: duration - 2500,
               useNativeDriver: true,
             }),
             Animated.timing(opacity, {
               toValue: 0,
-              duration: 2000,
+              duration: 1500,
               useNativeDriver: true,
             }),
           ]),
-          Animated.timing(rotate, {
-            toValue: 1,
-            duration: 8000,
-            useNativeDriver: true,
-          }),
         ]),
       ]).start(() => animate());
     };
 
     animate();
-  }, [delay]);
-
-  const rotateInterpolate = rotate.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+  }, [delay, translateY, opacity]);
 
   return (
     <Animated.View
@@ -85,7 +71,7 @@ const FloatingParticle: React.FC<FloatingParticleProps> = ({
           height: size,
           borderRadius: size / 2,
           opacity,
-          transform: [{translateY}, {translateX}, {rotate: rotateInterpolate}],
+          transform: [{translateY}],
         },
       ]}
     />
@@ -97,14 +83,14 @@ interface AnimatedBackgroundProps {
 }
 
 export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
-  particleCount = 12,
+  particleCount = 15,
 }) => {
   const particles = useRef(
     Array.from({length: particleCount}, (_, i) => ({
       id: i,
       delay: i * 600,
       startX: Math.random() * width,
-      size: 6 + Math.random() * 10,
+      size: 4 + Math.random() * 6,
     })),
   ).current;
 
@@ -132,7 +118,13 @@ const styles = StyleSheet.create({
   },
   particle: {
     position: 'absolute',
-    backgroundColor: PARTICLE_COLOR,
+    backgroundColor: NEON_ORANGE,
+    // Neon glow effect with gaussian blur simulation
+    shadowColor: NEON_ORANGE,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 4,
   },
 });
 

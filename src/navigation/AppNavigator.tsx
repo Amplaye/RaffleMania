@@ -2,12 +2,13 @@ import React from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator, NativeStackScreenProps} from '@react-navigation/native-stack';
 import {View, Text, StyleSheet, StatusBar, Platform} from 'react-native';
-import {useAuthStore} from '../store';
+import {useAuthStore, usePrizesStore} from '../store';
 import {useThemeColors} from '../hooks/useThemeColors';
+import {useCountdown} from '../hooks/useCountdown';
 import {AuthNavigator} from './AuthNavigator';
 import {TabNavigator} from './TabNavigator';
 import {COLORS, FONT_SIZE, FONT_WEIGHT} from '../utils/constants';
-import {ScreenContainer, Button} from '../components/common';
+import {ScreenContainer, Button, UrgencyBorderEffect} from '../components/common';
 
 // Import actual screens
 import {CreditsScreen} from '../screens/credits';
@@ -153,10 +154,35 @@ const MainStack: React.FC = () => {
 
 export const AppNavigator: React.FC = () => {
   const {isAuthenticated} = useAuthStore();
+  const {currentDraw} = usePrizesStore();
+  const {totalSeconds, isLastMinute} = useCountdown(currentDraw?.scheduledAt);
+
+  // Determine urgency intensity based on remaining time
+  const getUrgencyIntensity = (): 'low' | 'medium' | 'high' => {
+    if (totalSeconds <= 10) return 'high';
+    if (totalSeconds <= 30) return 'medium';
+    return 'low';
+  };
 
   return (
-    <NavigationContainer>
-      {isAuthenticated ? <MainStack /> : <AuthNavigator />}
-    </NavigationContainer>
+    <View style={styles.appContainer}>
+      <NavigationContainer>
+        {isAuthenticated ? <MainStack /> : <AuthNavigator />}
+      </NavigationContainer>
+
+      {/* Global Urgency Border Effect - visible across ALL screens */}
+      {isAuthenticated && (
+        <UrgencyBorderEffect
+          isActive={isLastMinute}
+          intensity={getUrgencyIntensity()}
+        />
+      )}
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  appContainer: {
+    flex: 1,
+  },
+});

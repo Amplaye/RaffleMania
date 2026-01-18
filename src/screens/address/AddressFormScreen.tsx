@@ -30,7 +30,7 @@ interface AddressFormScreenProps {
 }
 
 export const AddressFormScreen: React.FC<AddressFormScreenProps> = ({navigation}) => {
-  const {colors} = useThemeColors();
+  const {colors, neon} = useThemeColors();
   const {user, updateUser} = useAuthStore();
   const existingAddress = user?.shippingAddress;
 
@@ -85,25 +85,41 @@ export const AddressFormScreen: React.FC<AddressFormScreenProps> = ({navigation}
     field: keyof ShippingAddress,
     placeholder: string,
     keyboardType: 'default' | 'phone-pad' | 'numeric' = 'default',
-  ) => (
-    <View style={styles.inputContainer}>
-      <Text style={[styles.inputLabel, {color: colors.text}]}>{label}</Text>
-      <TextInput
-        style={[styles.input, {backgroundColor: colors.card, borderColor: colors.border, color: colors.text}, errors[field] && {borderColor: colors.error}]}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textMuted}
-        value={formData[field]}
-        onChangeText={text => {
-          setFormData({...formData, [field]: text});
-          if (errors[field]) {
-            setErrors({...errors, [field]: undefined});
-          }
-        }}
-        keyboardType={keyboardType}
-      />
-      {errors[field] && <Text style={[styles.errorText, {color: colors.error}]}>{errors[field]}</Text>}
-    </View>
-  );
+  ) => {
+    const hasValue = formData[field].trim().length > 0;
+    const hasError = !!errors[field];
+
+    return (
+      <View style={styles.inputContainer}>
+        <Text style={[styles.inputLabel, {color: hasValue ? colors.primary : colors.text}]}>{label}</Text>
+        <View style={[
+          styles.inputWrapper,
+          {borderColor: hasError ? colors.error : hasValue ? colors.primary : 'rgba(255, 107, 0, 0.3)'},
+          hasValue && !hasError && neon.glowSubtle,
+        ]}>
+          <TextInput
+            style={[styles.input, {backgroundColor: colors.card, color: colors.text}]}
+            placeholder={placeholder}
+            placeholderTextColor={colors.textMuted}
+            value={formData[field]}
+            onChangeText={text => {
+              setFormData({...formData, [field]: text});
+              if (errors[field]) {
+                setErrors({...errors, [field]: undefined});
+              }
+            }}
+            keyboardType={keyboardType}
+          />
+          {hasValue && !hasError && (
+            <View style={styles.inputCheckIcon}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+            </View>
+          )}
+        </View>
+        {errors[field] && <Text style={[styles.errorText, {color: colors.error}]}>{errors[field]}</Text>}
+      </View>
+    );
+  };
 
   return (
     <ScreenContainer>
@@ -156,7 +172,7 @@ export const AddressFormScreen: React.FC<AddressFormScreenProps> = ({navigation}
           </View>
 
           {/* Save Button */}
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+          <TouchableOpacity style={[styles.saveButton, neon.glow]} onPress={handleSave}>
             <LinearGradient
               colors={[COLORS.primary, '#FF8500']}
               start={{x: 0, y: 0}}
@@ -229,19 +245,24 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
-  input: {
-    backgroundColor: COLORS.card,
+  inputWrapper: {
     borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  input: {
+    flex: 1,
+    backgroundColor: COLORS.card,
     paddingHorizontal: SPACING.md,
     paddingVertical: 14,
     fontSize: FONT_SIZE.md,
     fontFamily: FONT_FAMILY.regular,
     color: COLORS.text,
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
-  inputError: {
-    borderColor: COLORS.error,
+  inputCheckIcon: {
+    paddingRight: SPACING.md,
   },
   errorText: {
     fontSize: FONT_SIZE.xs,

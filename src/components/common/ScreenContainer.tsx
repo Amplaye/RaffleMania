@@ -11,6 +11,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import {COLORS, SPACING} from '../../utils/constants';
 import {useThemeColors} from '../../hooks/useThemeColors';
+import {AnimatedBackground} from './AnimatedBackground';
 
 interface ScreenContainerProps {
   children: React.ReactNode;
@@ -21,6 +22,7 @@ interface ScreenContainerProps {
   contentStyle?: ViewStyle;
   padded?: boolean;
   edges?: ('top' | 'bottom' | 'left' | 'right')[];
+  showParticles?: boolean;
 }
 
 export const ScreenContainer: React.FC<ScreenContainerProps> = ({
@@ -32,6 +34,7 @@ export const ScreenContainer: React.FC<ScreenContainerProps> = ({
   contentStyle,
   padded = true,
   edges = ['top', 'bottom'],
+  showParticles = true,
 }) => {
   const {gradientColors, isDark} = useThemeColors();
 
@@ -47,6 +50,7 @@ export const ScreenContainer: React.FC<ScreenContainerProps> = ({
       end={{x: 0.5, y: 1}}
       style={styles.gradient}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
+      {showParticles && <AnimatedBackground />}
       <SafeAreaView style={[styles.container, style]} edges={edges}>
         {scrollable ? (
           <ScrollView

@@ -17,9 +17,9 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
-import {AnimatedBackground, StreakModal} from '../../components/common';
-import {useTicketsStore, usePrizesStore, useLevelStore, XP_REWARDS, useStreakStore, TICKET_PROBABILITY_BONUS} from '../../store';
-import {useCountdown} from '../../hooks/useCountdown';
+import {AnimatedBackground, StreakModal, AdOrCreditsModal, ExtractionStartEffect, ExtractionResultModal} from '../../components/common';
+import {useTicketsStore, usePrizesStore, useLevelStore, XP_REWARDS, useStreakStore, useCreditsStore, useAuthStore, TICKET_PROBABILITY_BONUS, ExtractionResult} from '../../store';
+import {useCountdown, setDebugCountdown} from '../../hooks/useCountdown';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -392,10 +392,10 @@ const TicketSuccessModal: React.FC<{
             </>
           ) : (
             <>
-              {/* Title for Duplicate Ticket - Inline */}
+              {/* Title for Duplicate Ticket */}
               <Text style={styles.modalTitle}>Chance Aumentata!</Text>
 
-              {/* Boost Card - Compact Design */}
+              {/* Boost Card - Same as PrizesScreen */}
               <Animated.View
                 style={[
                   styles.modalBoostCard,
@@ -406,7 +406,6 @@ const TicketSuccessModal: React.FC<{
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
                   style={styles.modalBoostGradient}>
-                  {/* Stats Row - Only Biglietti and Chance */}
                   <View style={styles.modalBoostStatsRow}>
                     <View style={styles.modalBoostStatItem}>
                       <Text style={styles.modalBoostStatNumber}>{ticketInfo.totalTickets}</Text>
@@ -419,7 +418,6 @@ const TicketSuccessModal: React.FC<{
                     </View>
                   </View>
 
-                  {/* Prize Name */}
                   <View style={styles.modalBoostPrizeRow}>
                     <Ionicons name="gift" size={14} color="rgba(255,255,255,0.7)" />
                     <Text style={styles.modalBoostPrizeName}>{ticketInfo.prizeName}</Text>
@@ -487,25 +485,63 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     incrementAdsWatched,
     getTicketsForPrize,
     getPrimaryTicketForPrize,
+    simulateExtraction,
   } = useTicketsStore();
   const {prizes, currentDraw, fetchPrizes, fetchDraws, incrementAdsForPrize} = usePrizesStore();
   const addXP = useLevelStore(state => state.addXP);
   const {currentStreak, checkAndUpdateStreak, getNextMilestone, hasClaimedToday} = useStreakStore();
+  const {useCreditsForTicket} = useCreditsStore();
+  const user = useAuthStore(state => state.user);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [currentPrizeIndex, setCurrentPrizeIndex] = useState(0);
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [newTicketInfo, setNewTicketInfo] = useState<TicketModalInfo | null>(null);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [streakReward, setStreakReward] = useState<{xp: number; credits: number; isWeeklyBonus: boolean; isMilestone: boolean; milestoneDay?: number} | null>(null);
+  const [showAdOrCreditsModal, setShowAdOrCreditsModal] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const isManualScroll = useRef(false);
   const autoScrollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showExtractionEffect, setShowExtractionEffect] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
+  const wasWatchingLastMinute = useRef(false);
+  const hasTriggeredExtraction = useRef(false);
 
-  const {countdown, isExpired} = useCountdown(currentDraw?.scheduledAt);
+  const {countdown, isExpired, isLastMinute} = useCountdown(currentDraw?.scheduledAt);
+
+  // Track if user was watching during last minute
+  useEffect(() => {
+    if (isLastMinute) {
+      wasWatchingLastMinute.current = true;
+    }
+  }, [isLastMinute]);
 
   // Get active prizes
   const activePrizes = prizes.filter(p => p.isActive);
   const currentPrize = activePrizes[currentPrizeIndex];
+
+  // Handle timer reaching zero - only show extraction if user was watching
+  useEffect(() => {
+    if (isExpired && wasWatchingLastMinute.current && !hasTriggeredExtraction.current) {
+      // Timer just expired while user was watching - show extraction effect
+      hasTriggeredExtraction.current = true;
+      setShowExtractionEffect(true);
+    }
+  }, [isExpired]);
+
+  // Handle extraction animation complete - simulate win/lose
+  const handleExtractionComplete = () => {
+    setShowExtractionEffect(false);
+
+    // Get current prize and simulate extraction
+    const prize = activePrizes[currentPrizeIndex];
+    if (prize) {
+      const result = simulateExtraction(prize.id, prize.name, prize.imageUrl);
+      setExtractionResult(result);
+      setShowResultModal(true);
+    }
+  };
 
   // Create infinite carousel data with clones at start and end
   // Pattern: [lastClone, item0, item1, ..., itemN, firstClone]
@@ -614,9 +650,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     isManualScroll.current = false;
   };
 
+  // Show the ad or credits choice modal
+  const handleShowAdOrCreditsModal = () => {
+    if (!currentPrize) return;
+    setShowAdOrCreditsModal(true);
+  };
+
+  // Handle watching ad (called from modal)
   const handleWatchAd = async () => {
     if (!currentPrize) return;
 
+    setShowAdOrCreditsModal(false);
     setIsWatchingAd(true);
     await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
 
@@ -651,6 +695,40 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     setIsWatchingAd(false);
   };
 
+  // Handle using credits (called from modal)
+  const handleUseCredits = async () => {
+    if (!currentPrize || !currentDraw) return;
+
+    setShowAdOrCreditsModal(false);
+
+    const success = await useCreditsForTicket();
+    if (!success) {
+      Alert.alert('Errore', 'Crediti insufficienti');
+      return;
+    }
+
+    // Increment ads for current prize (counts as participation)
+    incrementAdsForPrize(currentPrize.id);
+
+    // Check if this will be the first ticket (before adding)
+    const existingPrimaryTicket = getPrimaryTicketForPrize(currentPrize.id);
+    const isFirstTicket = !existingPrimaryTicket;
+
+    const newTicket = addTicket('credits', currentDraw.id, currentPrize.id);
+
+    // Get updated ticket count after adding
+    const newTicketCount = getTicketsForPrize(currentPrize.id);
+
+    setNewTicketInfo({
+      ticketCode: isFirstTicket ? newTicket.uniqueCode : (existingPrimaryTicket?.uniqueCode || ''),
+      prizeName: currentPrize.name,
+      isPrimaryTicket: isFirstTicket,
+      totalTickets: newTicketCount,
+      probabilityBonus: 0.5,
+    });
+    setShowTicketModal(true);
+  };
+
   const handleCloseModal = () => {
     setShowTicketModal(false);
     setNewTicketInfo(null);
@@ -680,7 +758,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       end={{x: 0.5, y: 1}}
       style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
-      <AnimatedBackground particleCount={6} />
+      <AnimatedBackground />
 
       {/* Header - Removed logo and profile icon */}
 
@@ -760,7 +838,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               neon.glowStrong,
               isWatchingAd && styles.watchButtonDisabled,
             ]}
-            onPress={handleWatchAd}
+            onPress={handleShowAdOrCreditsModal}
             disabled={isWatchingAd}
             activeOpacity={0.8}>
             <Ionicons
@@ -774,6 +852,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Ad or Credits Choice Modal */}
+      <AdOrCreditsModal
+        visible={showAdOrCreditsModal}
+        userCredits={user?.credits ?? 0}
+        prizeName={currentPrize?.name ?? ''}
+        onWatchAd={handleWatchAd}
+        onUseCredits={handleUseCredits}
+        onGoToShop={() => {
+          setShowAdOrCreditsModal(false);
+          navigation.navigate('Credits');
+        }}
+        onClose={() => setShowAdOrCreditsModal(false)}
+      />
 
       {/* Ticket Success Modal */}
       <TicketSuccessModal
@@ -791,6 +883,71 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         daysUntilWeeklyBonus={7 - (currentStreak % 7)}
         onClose={() => setShowStreakModal(false)}
       />
+
+      {/* Extraction Start Effect */}
+      <ExtractionStartEffect
+        visible={showExtractionEffect}
+        onAnimationComplete={handleExtractionComplete}
+      />
+
+      {/* Extraction Result Modal - Win/Lose */}
+      <ExtractionResultModal
+        visible={showResultModal}
+        isWinner={extractionResult?.isWinner || false}
+        prizeName={extractionResult?.prizeName}
+        prizeImage={extractionResult?.prizeImage}
+        ticketCode={extractionResult?.ticketCode}
+        onClose={() => {
+          setShowResultModal(false);
+          setExtractionResult(null);
+          // Reset extraction state for next time
+          wasWatchingLastMinute.current = false;
+          hasTriggeredExtraction.current = false;
+        }}
+      />
+
+      {/* Debug Controls - Only in DEV mode */}
+      {__DEV__ && (
+        <View style={styles.debugContainer}>
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => setDebugCountdown(65)}>
+            <Text style={styles.debugButtonText}>1:05</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => setDebugCountdown(3)}>
+            <Text style={styles.debugButtonText}>0:03</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.debugButton, {backgroundColor: 'rgba(0, 200, 0, 0.8)'}]}
+            onPress={() => {
+              const prize = currentPrize;
+              if (prize) {
+                setExtractionResult({
+                  isWinner: true,
+                  prizeId: prize.id,
+                  prizeName: prize.name,
+                  prizeImage: prize.imageUrl,
+                  ticketCode: 'TEST-WIN-123',
+                });
+                setShowResultModal(true);
+              }
+            }}>
+            <Text style={styles.debugButtonText}>Vinto</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.debugButton, {backgroundColor: 'rgba(100, 100, 100, 0.8)'}]}
+            onPress={() => {
+              setExtractionResult({
+                isWinner: false,
+              });
+              setShowResultModal(true);
+            }}>
+            <Text style={styles.debugButtonText}>Perso</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </LinearGradient>
   );
 };
@@ -938,9 +1095,9 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: RADIUS.md,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 6,
     elevation: 8,
   },
@@ -1087,9 +1244,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     maxWidth: 340,
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 10},
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 20,
   },
@@ -1198,7 +1355,7 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.white,
   },
-  // Boost Modal Styles - Compact Design
+  // Boost Modal Styles - Same as PrizesScreen
   modalBoostCard: {
     width: '100%',
     marginBottom: SPACING.lg,
@@ -1251,6 +1408,32 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.medium,
     color: 'rgba(255, 255, 255, 0.85)',
+  },
+  // Debug Controls
+  debugContainer: {
+    position: 'absolute',
+    bottom: 170,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    zIndex: 9998,
+  },
+  debugButton: {
+    backgroundColor: 'rgba(255, 0, 0, 0.8)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+  },
+  debugButtonReset: {
+    backgroundColor: 'rgba(0, 150, 0, 0.8)',
+  },
+  debugButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
   },
 });
 

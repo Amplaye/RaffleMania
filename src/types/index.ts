@@ -61,6 +61,10 @@ export interface Ticket {
   isWinner: boolean;
   createdAt: string;
   isPrimaryTicket: boolean; // true = first ticket with code, false = probability boost only
+  // Prize info stored for winning tickets display
+  prizeName?: string;
+  prizeImage?: string;
+  wonAt?: string;
 }
 
 // Draw Types

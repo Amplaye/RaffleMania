@@ -183,7 +183,7 @@ interface MenuItem {
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
   const {colors, neon} = useThemeColors();
-  const {user, logout} = useAuthStore();
+  const {user} = useAuthStore();
   const {pastTickets} = useTicketsStore();
   const {theme, toggleTheme} = useThemeStore();
   const {getSelectedAvatar, getSelectedFrame} = useAvatarStore();
@@ -194,17 +194,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
 
   // Count winning tickets
   const winsCount = pastTickets.filter(t => t.isWinner).length;
-
-  const handleLogout = () => {
-    Alert.alert('Esci', 'Sei sicuro di voler uscire?', [
-      {text: 'Annulla', style: 'cancel'},
-      {
-        text: 'Esci',
-        style: 'destructive',
-        onPress: logout,
-      },
-    ]);
-  };
 
   const menuItems: MenuItem[] = [
     {
@@ -360,11 +349,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
         </TouchableOpacity>
       </Card>
 
-      {/* Logout */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutText}>Esci dall'account</Text>
-      </TouchableOpacity>
-
       <Text style={[styles.version, {color: colors.textLight}]}>RaffleMania v1.0.0</Text>
     </ScreenContainer>
   );
@@ -451,9 +435,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.4,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -685,15 +669,6 @@ const styles = StyleSheet.create({
   supportText: {
     fontSize: FONT_SIZE.sm,
     color: COLORS.textSecondary,
-  },
-  logoutButton: {
-    alignItems: 'center',
-    paddingVertical: SPACING.md,
-  },
-  logoutText: {
-    fontSize: FONT_SIZE.md,
-    color: COLORS.error,
-    fontWeight: FONT_WEIGHT.medium,
   },
   version: {
     textAlign: 'center',

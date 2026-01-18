@@ -11,6 +11,7 @@ import {
   Platform,
   Animated,
   StatusBar,
+  ScrollView,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -42,70 +43,64 @@ const NEON_GLOW = {
   elevation: 8,
 };
 
-// Floating particle component
-const FloatingParticle: React.FC<{delay: number; startX: number; size: number}> = ({
+// Neon orange color
+const NEON_ORANGE = '#FF6B00';
+
+// Simple floating particle - bottom to top with slight blur
+interface ParticleProps {
+  delay: number;
+  startX: number;
+  size: number;
+}
+
+const FloatingParticle: React.FC<ParticleProps> = ({
   delay,
   startX,
   size,
 }) => {
   const translateY = useRef(new Animated.Value(height + 50)).current;
-  const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
-  const rotate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const animate = () => {
+      const duration = 8000 + Math.random() * 4000;
+
       translateY.setValue(height + 50);
-      translateX.setValue(0);
       opacity.setValue(0);
-      rotate.setValue(0);
 
       Animated.sequence([
         Animated.delay(delay),
         Animated.parallel([
+          // Simple vertical movement from bottom to top
           Animated.timing(translateY, {
             toValue: -100,
-            duration: 8000 + Math.random() * 4000,
+            duration,
             useNativeDriver: true,
           }),
-          Animated.timing(translateX, {
-            toValue: (Math.random() - 0.5) * 100,
-            duration: 8000 + Math.random() * 4000,
-            useNativeDriver: true,
-          }),
+          // Fade in and out
           Animated.sequence([
             Animated.timing(opacity, {
-              toValue: 0.5,
+              toValue: 0.7,
               duration: 1000,
               useNativeDriver: true,
             }),
             Animated.timing(opacity, {
-              toValue: 0.5,
-              duration: 5000,
+              toValue: 0.7,
+              duration: duration - 2500,
               useNativeDriver: true,
             }),
             Animated.timing(opacity, {
               toValue: 0,
-              duration: 2000,
+              duration: 1500,
               useNativeDriver: true,
             }),
           ]),
-          Animated.timing(rotate, {
-            toValue: 1,
-            duration: 8000,
-            useNativeDriver: true,
-          }),
         ]),
       ]).start(() => animate());
     };
 
     animate();
-  }, []);
-
-  const rotateInterpolate = rotate.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+  }, [delay]);
 
   return (
     <Animated.View
@@ -117,11 +112,7 @@ const FloatingParticle: React.FC<{delay: number; startX: number; size: number}> 
           height: size,
           borderRadius: size / 2,
           opacity,
-          transform: [
-            {translateY},
-            {translateX},
-            {rotate: rotateInterpolate},
-          ],
+          transform: [{translateY}],
         },
       ]}
     />
@@ -136,7 +127,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const [errors, setErrors] = useState<{email?: string; password?: string}>({});
 
   // Animations
@@ -144,15 +134,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const slideAnim = useRef(new Animated.Value(40)).current;
   const logoScale = useRef(new Animated.Value(0.8)).current;
 
-  const {login, isLoading} = useAuthStore();
+  const {login, loginWithGoogle, loginWithApple, isLoading} = useAuthStore();
+  const [socialLoading, setSocialLoading] = useState<'google' | 'apple' | null>(null);
 
-  // Generate particles
+  // Generate simple neon orange particles
   const particles = useRef(
-    Array.from({length: 10}, (_, i) => ({
+    Array.from({length: 15}, (_, i) => ({
       id: i,
-      delay: i * 700,
+      delay: i * 600,
       startX: Math.random() * width,
-      size: 6 + Math.random() * 8,
+      size: 4 + Math.random() * 6,
     })),
   ).current;
 
@@ -204,10 +195,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   };
 
   const handleGoogleLogin = async () => {
+    setSocialLoading('google');
     try {
-      await login('google@example.com', 'google123');
+      await loginWithGoogle();
     } catch (error: any) {
-      Alert.alert('Errore', 'Errore durante il login con Google');
+      Alert.alert('Errore', error.message || 'Errore durante il login con Google');
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    setSocialLoading('apple');
+    try {
+      await loginWithApple();
+    } catch (error: any) {
+      Alert.alert('Errore', error.message || 'Errore durante il login con Apple');
+    } finally {
+      setSocialLoading(null);
     }
   };
 
@@ -228,7 +233,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
       style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Animated Background Particles */}
+      {/* Animated Background - Neon Orange Particles */}
       <View style={styles.particlesContainer} pointerEvents="none">
         {particles.map(p => (
           <FloatingParticle
@@ -241,178 +246,199 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.content}>
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardView}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+          overScrollMode="never">
+          <View style={styles.content}>
+              {/* Logo Section */}
+              <Animated.View
+                style={[
+                  styles.logoSection,
+                  {
+                    opacity: fadeAnim,
+                    transform: [{translateY: slideAnim}, {scale: logoScale}],
+                  },
+                ]}>
+                <View style={styles.logoIconContainer}>
+                  <LinearGradient
+                    colors={[COLORS.orange, COLORS.orangeLight]}
+                    style={styles.logoIconGradient}>
+                    <Ionicons name="gift" size={32} color="#FFFFFF" />
+                  </LinearGradient>
+                </View>
+                <Text style={styles.logoText}>
+                  <Text style={styles.logoRaffle}>Raffle</Text>
+                  <Text style={styles.logoMania}>Mania</Text>
+                </Text>
+                <Text style={styles.tagline}>Guarda, gioca, vinci.</Text>
+              </Animated.View>
 
-        {/* Logo Section */}
-        <Animated.View
-          style={[
-            styles.logoSection,
-            {
-              opacity: fadeAnim,
-              transform: [{translateY: slideAnim}, {scale: logoScale}],
-            },
-          ]}>
-          <View style={styles.logoIconContainer}>
-            <LinearGradient
-              colors={[COLORS.orange, COLORS.orangeLight]}
-              style={styles.logoIconGradient}>
-              <Ionicons name="gift" size={32} color="#FFFFFF" />
-            </LinearGradient>
+              {/* Form Section */}
+              <Animated.View
+                style={[
+                  styles.formSection,
+                  {
+                    opacity: fadeAnim,
+                    transform: [{translateY: slideAnim}],
+                  },
+                ]}>
+
+                {/* Email Input */}
+                <View style={styles.inputWrapper}>
+                  <View
+                    style={[
+                      styles.inputContainer,
+                      errors.email && styles.inputContainerError,
+                    ]}>
+                    <Ionicons
+                      name="mail-outline"
+                      size={20}
+                      color={COLORS.textMuted}
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Email"
+                      placeholderTextColor={COLORS.textMuted}
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                  {errors.email && (
+                    <Text style={styles.errorText}>{errors.email}</Text>
+                  )}
+                </View>
+
+                {/* Password Input */}
+                <View style={styles.inputWrapper}>
+                  <View
+                    style={[
+                      styles.inputContainer,
+                      errors.password && styles.inputContainerError,
+                    ]}>
+                    <Ionicons
+                      name="lock-closed-outline"
+                      size={20}
+                      color={COLORS.textMuted}
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Password"
+                      placeholderTextColor={COLORS.textMuted}
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      style={styles.eyeButton}
+                      hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+                      activeOpacity={0.7}>
+                      <Ionicons
+                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={20}
+                        color={COLORS.textMuted}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  {errors.password && (
+                    <Text style={styles.errorText}>{errors.password}</Text>
+                  )}
+                </View>
+
+                {/* Forgot Password */}
+                <TouchableOpacity style={styles.forgotPassword}>
+                  <Text style={styles.forgotPasswordText}>Password dimenticata?</Text>
+                </TouchableOpacity>
+
+                {/* Login Button */}
+                <TouchableOpacity
+                  style={[styles.loginButton, NEON_GLOW]}
+                  onPress={handleLogin}
+                  disabled={isLoading}
+                  activeOpacity={0.85}>
+                  <LinearGradient
+                    colors={[COLORS.orange, COLORS.orangeDark]}
+                    start={{x: 0, y: 0}}
+                    end={{x: 1, y: 0}}
+                    style={styles.loginButtonGradient}>
+                    {isLoading ? (
+                      <Text style={styles.loginButtonText}>Accesso...</Text>
+                    ) : (
+                      <>
+                        <Ionicons name="log-in-outline" size={20} color="#FFFFFF" />
+                        <Text style={styles.loginButtonText}>Accedi</Text>
+                      </>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                {/* Divider */}
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>oppure</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                {/* Social Buttons - Inline */}
+                <View style={styles.socialButtonsRow}>
+                  {/* Google Button */}
+                  <TouchableOpacity
+                    style={styles.socialButtonSquare}
+                    onPress={handleGoogleLogin}
+                    disabled={socialLoading !== null}
+                    activeOpacity={0.8}>
+                    <View style={styles.googleIconContainer}>
+                      <Text style={styles.googleIconG}>G</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Apple Button */}
+                  <TouchableOpacity
+                    style={[styles.socialButtonSquare, styles.appleButton]}
+                    onPress={handleAppleLogin}
+                    disabled={socialLoading !== null}
+                    activeOpacity={0.8}>
+                    <Ionicons name="logo-apple" size={24} color="#FFFFFF" />
+                  </TouchableOpacity>
+
+                  {/* Guest Button */}
+                  <TouchableOpacity
+                    style={styles.guestButton}
+                    onPress={handleGuestLogin}
+                    disabled={socialLoading !== null}
+                    activeOpacity={0.8}>
+                    <LinearGradient
+                      colors={[COLORS.orange, COLORS.orangeDark]}
+                      start={{x: 0, y: 0}}
+                      end={{x: 1, y: 1}}
+                      style={styles.guestButtonGradient}>
+                      <Ionicons name="person" size={22} color="#FFFFFF" />
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+
+              {/* Register Link */}
+              <Animated.View style={[styles.registerSection, {opacity: fadeAnim}]}>
+                <Text style={styles.registerText}>Non hai un account? </Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                  <Text style={styles.registerLink}>Registrati</Text>
+                </TouchableOpacity>
+              </Animated.View>
           </View>
-          <Text style={styles.logoText}>
-            <Text style={styles.logoRaffle}>Raffle</Text>
-            <Text style={styles.logoMania}>Mania</Text>
-          </Text>
-          <Text style={styles.tagline}>Guarda, gioca, vinci.</Text>
-        </Animated.View>
-
-        {/* Form Section */}
-        <Animated.View
-          style={[
-            styles.formSection,
-            {
-              opacity: fadeAnim,
-              transform: [{translateY: slideAnim}],
-            },
-          ]}>
-
-          {/* Email Input */}
-          <View style={styles.inputWrapper}>
-            <View
-              style={[
-                styles.inputContainer,
-                focusedInput === 'email' && styles.inputContainerFocused,
-                errors.email && styles.inputContainerError,
-              ]}>
-              <Ionicons
-                name="mail-outline"
-                size={20}
-                color={focusedInput === 'email' ? COLORS.orange : COLORS.textMuted}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor={COLORS.textMuted}
-                value={email}
-                onChangeText={setEmail}
-                onFocus={() => setFocusedInput('email')}
-                onBlur={() => setFocusedInput(null)}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
-            {errors.email && (
-              <Text style={styles.errorText}>{errors.email}</Text>
-            )}
-          </View>
-
-          {/* Password Input */}
-          <View style={styles.inputWrapper}>
-            <View
-              style={[
-                styles.inputContainer,
-                focusedInput === 'password' && styles.inputContainerFocused,
-                errors.password && styles.inputContainerError,
-              ]}>
-              <Ionicons
-                name="lock-closed-outline"
-                size={20}
-                color={focusedInput === 'password' ? COLORS.orange : COLORS.textMuted}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor={COLORS.textMuted}
-                value={password}
-                onChangeText={setPassword}
-                onFocus={() => setFocusedInput('password')}
-                onBlur={() => setFocusedInput(null)}
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeButton}>
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color={COLORS.textMuted}
-                />
-              </TouchableOpacity>
-            </View>
-            {errors.password && (
-              <Text style={styles.errorText}>{errors.password}</Text>
-            )}
-          </View>
-
-          {/* Forgot Password */}
-          <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={styles.forgotPasswordText}>Password dimenticata?</Text>
-          </TouchableOpacity>
-
-          {/* Login Button */}
-          <TouchableOpacity
-            style={[styles.loginButton, NEON_GLOW]}
-            onPress={handleLogin}
-            disabled={isLoading}
-            activeOpacity={0.85}>
-            <LinearGradient
-              colors={[COLORS.orange, COLORS.orangeDark]}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 0}}
-              style={styles.loginButtonGradient}>
-              {isLoading ? (
-                <Text style={styles.loginButtonText}>Accesso...</Text>
-              ) : (
-                <>
-                  <Ionicons name="log-in-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.loginButtonText}>Accedi</Text>
-                </>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-
-          {/* Divider */}
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>oppure</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Social Buttons */}
-          <View style={styles.socialButtons}>
-            {/* Google Button */}
-            <TouchableOpacity
-              style={styles.socialButton}
-              onPress={handleGoogleLogin}
-              activeOpacity={0.8}>
-              <View style={styles.googleIcon}>
-                <Text style={styles.googleG}>G</Text>
-              </View>
-              <Text style={styles.socialButtonText}>Google</Text>
-            </TouchableOpacity>
-
-            {/* Guest Button */}
-            <TouchableOpacity
-              style={[styles.socialButton, styles.guestSocialButton]}
-              onPress={handleGuestLogin}
-              activeOpacity={0.8}>
-              <Ionicons name="person-outline" size={18} color={COLORS.orange} />
-              <Text style={[styles.socialButtonText, {color: COLORS.orange}]}>Ospite</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-
-        {/* Register Link */}
-        <Animated.View style={[styles.registerSection, {opacity: fadeAnim}]}>
-          <Text style={styles.registerText}>Non hai un account? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-            <Text style={styles.registerLink}>Registrati</Text>
-          </TouchableOpacity>
-        </Animated.View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
   );
@@ -431,12 +457,26 @@ const styles = StyleSheet.create({
   },
   particle: {
     position: 'absolute',
-    backgroundColor: COLORS.orange,
+    backgroundColor: '#FF6B00',
+    // Neon glow effect with gaussian blur simulation
+    shadowColor: '#FF6B00',
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
     paddingHorizontal: 28,
     justifyContent: 'center',
+    paddingVertical: 40,
   },
   logoSection: {
     alignItems: 'center',
@@ -510,7 +550,8 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   eyeButton: {
-    padding: 4,
+    padding: 8,
+    marginLeft: 4,
   },
   errorText: {
     color: COLORS.error,
@@ -558,43 +599,61 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginHorizontal: 16,
   },
-  socialButtons: {
+  socialButtonsRow: {
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'center',
+    gap: 16,
   },
-  socialButton: {
-    flex: 1,
-    flexDirection: 'row',
+  socialButtonSquare: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 14,
     borderWidth: 1.5,
     borderColor: COLORS.border,
-    gap: 8,
+    shadowColor: '#FF6B00',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  guestSocialButton: {
-    borderColor: COLORS.orange + '40',
-    backgroundColor: COLORS.orange + '08',
+  guestButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: COLORS.orange,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  googleIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#4285F4',
+  guestButtonGradient: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+  },
+  appleButton: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
+  },
+  googleIconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  googleG: {
-    color: '#FFFFFF',
-    fontSize: 11,
+  googleIconG: {
+    fontSize: 18,
     fontWeight: '700',
-  },
-  socialButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.text,
+    color: '#4285F4',
   },
   registerSection: {
     flexDirection: 'row',

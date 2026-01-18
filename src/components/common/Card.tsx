@@ -18,13 +18,13 @@ export const Card: React.FC<CardProps> = ({
   padding = 'medium',
   elevated = true,
 }) => {
-  const {colors} = useThemeColors();
+  const {colors, neon} = useThemeColors();
 
   const cardStyle: ViewStyle[] = [
     styles.card,
     {backgroundColor: colors.card},
     styles[`${padding}Padding`],
-    elevated && styles.elevated,
+    elevated && neon.glowSubtle,
     style,
   ].filter(Boolean) as ViewStyle[];
 
@@ -47,16 +47,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
     overflow: 'hidden',
-  },
-  elevated: {
-    shadowColor: COLORS.black,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
   },
   nonePadding: {
     padding: 0,
