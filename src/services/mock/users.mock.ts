@@ -9,6 +9,9 @@ export const mockCurrentUser: User = {
   watchedAdsCount: 42,
   referralCode: 'RAFUSER01',
   createdAt: '2024-01-15T10:30:00Z',
+  level: 3,
+  currentXP: 350,
+  totalXP: 850,
   shippingAddress: {
     fullName: 'Mario Rossi',
     street: 'Via Roma 123',
@@ -30,6 +33,9 @@ export const mockUsers: User[] = [
     watchedAdsCount: 20,
     referralCode: 'RAFUSER02',
     createdAt: '2024-02-20T14:15:00Z',
+    level: 2,
+    currentXP: 150,
+    totalXP: 350,
   },
   {
     id: 'user_003',
@@ -41,5 +47,8 @@ export const mockUsers: User[] = [
     referralCode: 'RAFUSER03',
     referredBy: 'user_001',
     createdAt: '2024-03-05T09:00:00Z',
+    level: 5,
+    currentXP: 800,
+    totalXP: 2600,
   },
 ];

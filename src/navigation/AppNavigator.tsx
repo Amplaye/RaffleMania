@@ -17,6 +17,8 @@ import {AddressFormScreen} from '../screens/address';
 import {SettingsScreen} from '../screens/settings';
 import {TicketDetailScreen} from '../screens/ticketdetail';
 import {LevelDetailScreen} from '../screens/leveldetail';
+import {PrizeDetailScreen} from '../screens/prizedetail';
+import {AvatarCustomizationScreen} from '../screens/avatar';
 
 // Stack param list
 export type RootStackParamList = {
@@ -30,6 +32,7 @@ export type RootStackParamList = {
   AddressForm: undefined;
   MyWins: undefined;
   LevelDetail: undefined;
+  AvatarCustomization: undefined;
 };
 
 type PlaceholderProps = NativeStackScreenProps<RootStackParamList, keyof RootStackParamList>;
@@ -53,9 +56,6 @@ const PlaceholderScreen: React.FC<{title: string} & PlaceholderProps> = ({
 );
 
 // Placeholder for screens not yet implemented
-const PrizeDetailScreen = (props: NativeStackScreenProps<RootStackParamList, 'PrizeDetail'>) => (
-  <PlaceholderScreen title="Dettaglio Premio" {...props} />
-);
 const WinnersScreen = (props: NativeStackScreenProps<RootStackParamList, 'Winners'>) => (
   <PlaceholderScreen title="Tutti i Vincitori" {...props} />
 );
@@ -141,6 +141,11 @@ const MainStack: React.FC = () => {
         name="LevelDetail"
         component={LevelDetailScreen}
         options={{title: 'Sistema Livelli'}}
+      />
+      <Stack.Screen
+        name="AvatarCustomization"
+        component={AvatarCustomizationScreen}
+        options={{title: 'Personalizza Avatar'}}
       />
     </Stack.Navigator>
   );

@@ -82,9 +82,13 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({state, descriptors, navigati
     Profile: {outline: 'person-outline', filled: 'person'},
   };
 
+  // Only show banner on Home tab
+  const currentRouteName = state.routes[state.index].name;
+  const showBanner = currentRouteName === 'Home';
+
   return (
     <View style={styles.customTabBarWrapper}>
-      <AdBanner />
+      {showBanner && <AdBanner />}
       <View style={styles.tabBarContainer}>
         <LinearGradient
           colors={isDark ? ['#2A2520', '#252015'] : ['#FFE0BD', '#FFDAB3']}

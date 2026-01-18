@@ -1,6 +1,9 @@
 export {useAuthStore} from './useAuthStore';
-export {useTicketsStore} from './useTicketsStore';
+export {useTicketsStore, TICKET_PROBABILITY_BONUS} from './useTicketsStore';
 export {useCreditsStore} from './useCreditsStore';
 export {usePrizesStore} from './usePrizesStore';
 export {useThemeStore} from './useThemeStore';
 export {useLevelStore, XP_REWARDS, LEVELS} from './useLevelStore';
+export {useStreakStore, STREAK_REWARDS} from './useStreakStore';
+export {useAvatarStore, AVATARS, FRAMES} from './useAvatarStore';
+export type {Avatar, Frame} from './useAvatarStore';

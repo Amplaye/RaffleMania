@@ -3,7 +3,7 @@ import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Animated, Easin
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer, Card} from '../../components/common';
-import {useAuthStore, useTicketsStore, useThemeStore, useLevelStore, LEVELS} from '../../store';
+import {useAuthStore, useTicketsStore, useThemeStore, useLevelStore, LEVELS, useAvatarStore} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -182,10 +182,15 @@ interface MenuItem {
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
-  const {colors} = useThemeColors();
+  const {colors, neon} = useThemeColors();
   const {user, logout} = useAuthStore();
   const {pastTickets} = useTicketsStore();
   const {theme, toggleTheme} = useThemeStore();
+  const {getSelectedAvatar, getSelectedFrame} = useAvatarStore();
+
+  // Get current avatar and frame
+  const currentAvatar = getSelectedAvatar();
+  const currentFrame = getSelectedFrame();
 
   // Count winning tickets
   const winsCount = pastTickets.filter(t => t.isWinner).length;
@@ -259,41 +264,52 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
 
   return (
     <ScreenContainer>
-      {/* Profile Header - Avatar Inline with Name/Email */}
-      <Card style={styles.profileCard}>
-        <View style={styles.profileHeaderRow}>
-          <View style={styles.avatar}>
-            <LinearGradient
-              colors={[COLORS.primary, '#FF8500']}
-              style={styles.avatarGradient}>
-              <Text style={styles.avatarText}>
-                {user?.displayName?.[0]?.toUpperCase() || '?'}
-              </Text>
-            </LinearGradient>
+      {/* Profile Header - Avatar Inline with Name/Email - Clickable for Avatar Customization */}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate('AvatarCustomization')}>
+        <Card style={[styles.profileCard, neon.glowSubtle]}>
+          {/* Edit Icon in top right */}
+          <View style={styles.editIconContainer}>
+            <Ionicons name="pencil" size={18} color={colors.primary} />
           </View>
-          <View style={styles.profileInfoContainer}>
-            <Text style={[styles.userName, {color: colors.text}]}>{user?.displayName || 'Utente'}</Text>
-            <Text style={[styles.userEmail, {color: colors.textSecondary}]}>{user?.email || ''}</Text>
+          <View style={styles.profileHeaderRow}>
+            {/* Avatar with Frame */}
+            <View style={styles.avatarContainer}>
+              <LinearGradient
+                colors={currentFrame.colors}
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 1}}
+                style={[styles.avatarFrame, {padding: currentFrame.borderWidth}]}>
+                <View style={[styles.avatarInner, {backgroundColor: currentAvatar.color + '20'}]}>
+                  <Ionicons name={currentAvatar.icon as any} size={32} color={currentAvatar.color} />
+                </View>
+              </LinearGradient>
+            </View>
+            <View style={styles.profileInfoContainer}>
+              <Text style={[styles.userName, {color: colors.text}]}>{user?.displayName || 'Utente'}</Text>
+              <Text style={[styles.userEmail, {color: colors.textSecondary}]}>{user?.email || ''}</Text>
+            </View>
           </View>
-        </View>
 
-        <View style={[styles.statsRow, {borderTopColor: colors.border}]}>
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, {color: colors.primary}]}>{winsCount}</Text>
-            <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Vincite</Text>
+          <View style={[styles.statsRow, {borderTopColor: colors.border}]}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, {color: colors.primary}]}>{winsCount}</Text>
+              <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Vincite</Text>
+            </View>
+            <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, {color: colors.primary}]}>{user?.watchedAdsCount || 0}</Text>
+              <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Ads Viste</Text>
+            </View>
+            <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, {color: colors.primary}]}>{user?.credits || 0}</Text>
+              <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Crediti</Text>
+            </View>
           </View>
-          <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, {color: colors.primary}]}>{user?.watchedAdsCount || 0}</Text>
-            <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Ads Viste</Text>
-          </View>
-          <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, {color: colors.primary}]}>{user?.credits || 0}</Text>
-            <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Crediti</Text>
-          </View>
-        </View>
-      </Card>
+        </Card>
+      </TouchableOpacity>
 
       {/* Level Card - Clickable */}
       <LevelCard colors={colors} onPress={() => navigation.navigate('LevelDetail')} />
@@ -359,28 +375,36 @@ const styles = StyleSheet.create({
   profileCard: {
     marginTop: SPACING.md,
     marginBottom: SPACING.md,
+    position: 'relative',
+  },
+  editIconContainer: {
+    position: 'absolute',
+    top: SPACING.md,
+    right: SPACING.md,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 107, 0, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
   },
   profileHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  avatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    overflow: 'hidden',
+  avatarContainer: {
     marginRight: SPACING.md,
   },
-  avatarGradient: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+  avatarFrame: {
+    borderRadius: 38,
   },
-  avatarText: {
-    fontSize: 28,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
+  avatarInner: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   profileInfoContainer: {
     flex: 1,

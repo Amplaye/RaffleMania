@@ -13,11 +13,12 @@ import {
   StatusBar,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useAuthStore} from '../../store';
 
 const {width, height} = Dimensions.get('window');
 
-// Minimal Light Theme with Orange accent
+// Theme Colors
 const COLORS = {
   background: '#FFFFFF',
   orange: '#FF6B00',
@@ -27,17 +28,18 @@ const COLORS = {
   textSecondary: '#666666',
   textMuted: '#999999',
   border: '#E5E5E5',
-  inputBg: '#F8F8F8',
+  inputBg: '#FAFAFA',
   error: '#E53935',
+  success: '#00B894',
 };
 
-// Neon glow effect for login button
+// Neon glow effect
 const NEON_GLOW = {
   shadowColor: '#FF6B00',
-  shadowOffset: {width: 0, height: 0},
-  shadowOpacity: 0.5,
+  shadowOffset: {width: 0, height: 4},
+  shadowOpacity: 0.4,
   shadowRadius: 12,
-  elevation: 12,
+  elevation: 8,
 };
 
 // Floating particle component
@@ -73,12 +75,12 @@ const FloatingParticle: React.FC<{delay: number; startX: number; size: number}> 
           }),
           Animated.sequence([
             Animated.timing(opacity, {
-              toValue: 0.6,
+              toValue: 0.5,
               duration: 1000,
               useNativeDriver: true,
             }),
             Animated.timing(opacity, {
-              toValue: 0.6,
+              toValue: 0.5,
               duration: 5000,
               useNativeDriver: true,
             }),
@@ -133,22 +135,24 @@ interface LoginScreenProps {
 export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const [errors, setErrors] = useState<{email?: string; password?: string}>({});
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
+  const logoScale = useRef(new Animated.Value(0.8)).current;
 
   const {login, isLoading} = useAuthStore();
 
   // Generate particles
   const particles = useRef(
-    Array.from({length: 12}, (_, i) => ({
+    Array.from({length: 10}, (_, i) => ({
       id: i,
-      delay: i * 600,
+      delay: i * 700,
       startX: Math.random() * width,
-      size: 6 + Math.random() * 10,
+      size: 6 + Math.random() * 8,
     })),
   ).current;
 
@@ -163,6 +167,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
         toValue: 0,
         tension: 50,
         friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.spring(logoScale, {
+        toValue: 1,
+        tension: 60,
+        friction: 6,
         useNativeDriver: true,
       }),
     ]).start();
@@ -211,7 +221,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
   return (
     <LinearGradient
-      colors={['#FFFFFF', '#FFFCF5', '#FFF5E6', '#FFECD2', '#FFE0BD']}
+      colors={['#FFFFFF', '#FFFCF5', '#FFF8EE', '#FFF0E0', '#FFE8D0']}
       locations={[0, 0.25, 0.5, 0.75, 1]}
       start={{x: 0.5, y: 0}}
       end={{x: 0.5, y: 1}}
@@ -240,9 +250,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
             styles.logoSection,
             {
               opacity: fadeAnim,
-              transform: [{translateY: slideAnim}],
+              transform: [{translateY: slideAnim}, {scale: logoScale}],
             },
           ]}>
+          <View style={styles.logoIconContainer}>
+            <LinearGradient
+              colors={[COLORS.orange, COLORS.orangeLight]}
+              style={styles.logoIconGradient}>
+              <Ionicons name="gift" size={32} color="#FFFFFF" />
+            </LinearGradient>
+          </View>
           <Text style={styles.logoText}>
             <Text style={styles.logoRaffle}>Raffle</Text>
             <Text style={styles.logoMania}>Mania</Text>
@@ -262,22 +279,31 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
           {/* Email Input */}
           <View style={styles.inputWrapper}>
-            <TextInput
+            <View
               style={[
-                styles.input,
-                focusedInput === 'email' && styles.inputFocused,
-                errors.email && styles.inputError,
-              ]}
-              placeholder="Email"
-              placeholderTextColor={COLORS.textMuted}
-              value={email}
-              onChangeText={setEmail}
-              onFocus={() => setFocusedInput('email')}
-              onBlur={() => setFocusedInput(null)}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+                styles.inputContainer,
+                focusedInput === 'email' && styles.inputContainerFocused,
+                errors.email && styles.inputContainerError,
+              ]}>
+              <Ionicons
+                name="mail-outline"
+                size={20}
+                color={focusedInput === 'email' ? COLORS.orange : COLORS.textMuted}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor={COLORS.textMuted}
+                value={email}
+                onChangeText={setEmail}
+                onFocus={() => setFocusedInput('email')}
+                onBlur={() => setFocusedInput(null)}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
             {errors.email && (
               <Text style={styles.errorText}>{errors.email}</Text>
             )}
@@ -285,24 +311,47 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
           {/* Password Input */}
           <View style={styles.inputWrapper}>
-            <TextInput
+            <View
               style={[
-                styles.input,
-                focusedInput === 'password' && styles.inputFocused,
-                errors.password && styles.inputError,
-              ]}
-              placeholder="Password"
-              placeholderTextColor={COLORS.textMuted}
-              value={password}
-              onChangeText={setPassword}
-              onFocus={() => setFocusedInput('password')}
-              onBlur={() => setFocusedInput(null)}
-              secureTextEntry
-            />
+                styles.inputContainer,
+                focusedInput === 'password' && styles.inputContainerFocused,
+                errors.password && styles.inputContainerError,
+              ]}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color={focusedInput === 'password' ? COLORS.orange : COLORS.textMuted}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor={COLORS.textMuted}
+                value={password}
+                onChangeText={setPassword}
+                onFocus={() => setFocusedInput('password')}
+                onBlur={() => setFocusedInput(null)}
+                secureTextEntry={!showPassword}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeButton}>
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color={COLORS.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
             {errors.password && (
               <Text style={styles.errorText}>{errors.password}</Text>
             )}
           </View>
+
+          {/* Forgot Password */}
+          <TouchableOpacity style={styles.forgotPassword}>
+            <Text style={styles.forgotPasswordText}>Password dimenticata?</Text>
+          </TouchableOpacity>
 
           {/* Login Button */}
           <TouchableOpacity
@@ -310,9 +359,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
             onPress={handleLogin}
             disabled={isLoading}
             activeOpacity={0.85}>
-            <Text style={styles.loginButtonText}>
-              {isLoading ? 'Accesso...' : 'Accedi'}
-            </Text>
+            <LinearGradient
+              colors={[COLORS.orange, COLORS.orangeDark]}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 0}}
+              style={styles.loginButtonGradient}>
+              {isLoading ? (
+                <Text style={styles.loginButtonText}>Accesso...</Text>
+              ) : (
+                <>
+                  <Ionicons name="log-in-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.loginButtonText}>Accedi</Text>
+                </>
+              )}
+            </LinearGradient>
           </TouchableOpacity>
 
           {/* Divider */}
@@ -322,24 +382,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Google Button */}
-          <TouchableOpacity
-            style={styles.googleButton}
-            onPress={handleGoogleLogin}
-            activeOpacity={0.8}>
-            <View style={styles.googleIconContainer}>
-              <Text style={styles.googleG}>G</Text>
-            </View>
-            <Text style={styles.googleButtonText}>Continua con Google</Text>
-          </TouchableOpacity>
+          {/* Social Buttons */}
+          <View style={styles.socialButtons}>
+            {/* Google Button */}
+            <TouchableOpacity
+              style={styles.socialButton}
+              onPress={handleGoogleLogin}
+              activeOpacity={0.8}>
+              <View style={styles.googleIcon}>
+                <Text style={styles.googleG}>G</Text>
+              </View>
+              <Text style={styles.socialButtonText}>Google</Text>
+            </TouchableOpacity>
 
-          {/* Guest Button */}
-          <TouchableOpacity
-            style={styles.guestButton}
-            onPress={handleGuestLogin}
-            activeOpacity={0.8}>
-            <Text style={styles.guestText}>Entra come ospite</Text>
-          </TouchableOpacity>
+            {/* Guest Button */}
+            <TouchableOpacity
+              style={[styles.socialButton, styles.guestSocialButton]}
+              onPress={handleGuestLogin}
+              activeOpacity={0.8}>
+              <Ionicons name="person-outline" size={18} color={COLORS.orange} />
+              <Text style={[styles.socialButtonText, {color: COLORS.orange}]}>Ospite</Text>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
 
         {/* Register Link */}
@@ -371,15 +435,30 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 32,
+    paddingHorizontal: 28,
     justifyContent: 'center',
   },
   logoSection: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 40,
+  },
+  logoIconContainer: {
+    marginBottom: 16,
+  },
+  logoIconGradient: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: COLORS.orange,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   logoText: {
-    fontSize: 36,
+    fontSize: 38,
     fontWeight: '700',
   },
   logoRaffle: {
@@ -392,30 +471,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textSecondary,
     marginTop: 8,
+    fontWeight: '400',
   },
   formSection: {
-    marginBottom: 32,
-    overflow: 'visible',
+    marginBottom: 24,
   },
   inputWrapper: {
     marginBottom: 16,
   },
-  input: {
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: COLORS.inputBg,
-    borderRadius: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: COLORS.orange + '40',
+    paddingHorizontal: 16,
+  },
+  inputContainerFocused: {
+    borderColor: COLORS.orange,
+    backgroundColor: '#FFFFFF',
+    shadowColor: COLORS.orange,
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  inputContainerError: {
+    borderColor: COLORS.error,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
     paddingVertical: 16,
-    paddingHorizontal: 20,
     fontSize: 16,
     color: COLORS.text,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
   },
-  inputFocused: {
-    borderColor: COLORS.orange,
-    backgroundColor: COLORS.background,
-  },
-  inputError: {
-    borderColor: COLORS.error,
+  eyeButton: {
+    padding: 4,
   },
   errorText: {
     color: COLORS.error,
@@ -423,18 +518,29 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginLeft: 4,
   },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginBottom: 20,
+  },
+  forgotPasswordText: {
+    color: COLORS.orange,
+    fontSize: 14,
+    fontWeight: '500',
+  },
   loginButton: {
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  loginButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.orange,
-    borderRadius: 12,
-    paddingVertical: 14,
-    marginTop: 8,
+    paddingVertical: 16,
+    gap: 8,
   },
   loginButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
   divider: {
@@ -452,49 +558,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginHorizontal: 16,
   },
-  googleButton: {
+  socialButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  socialButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     paddingVertical: 14,
     borderWidth: 1.5,
     borderColor: COLORS.border,
-    gap: 12,
+    gap: 8,
   },
-  googleIconContainer: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  guestSocialButton: {
+    borderColor: COLORS.orange + '40',
+    backgroundColor: COLORS.orange + '08',
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#4285F4',
     justifyContent: 'center',
     alignItems: 'center',
   },
   googleG: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
-  googleButtonText: {
-    fontSize: 15,
+  socialButtonText: {
+    fontSize: 14,
     fontWeight: '500',
     color: COLORS.text,
-  },
-  guestButton: {
-    alignItems: 'center',
-    paddingVertical: 16,
-    marginTop: 12,
-  },
-  guestText: {
-    color: COLORS.orange,
-    fontSize: 15,
-    fontWeight: '600',
   },
   registerSection: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 8,
   },
   registerText: {
     color: COLORS.textSecondary,

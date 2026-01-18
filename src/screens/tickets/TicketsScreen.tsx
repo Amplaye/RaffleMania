@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {useTicketsStore, usePrizesStore} from '../../store';
+import {useTicketsStore, usePrizesStore, TICKET_PROBABILITY_BONUS} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {Ticket} from '../../types';
 import {
@@ -137,15 +137,19 @@ const AnimatedTab: React.FC<{
   );
 };
 
-// Active Ticket Card - Simple design
+// Active Ticket Card - Simple design with ticket count and probability
 const ActiveTicketCard: React.FC<{
   ticket: Ticket;
   prizeName: string;
   index: number;
+  ticketCount: number;
   onPress: () => void;
-}> = ({ticket, prizeName, index, onPress}) => {
+}> = ({ticket, prizeName, index, ticketCount, onPress}) => {
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  // Calculate win probability
+  const winProbability = (ticketCount * TICKET_PROBABILITY_BONUS * 100).toFixed(1);
 
   useEffect(() => {
     Animated.parallel([
@@ -187,7 +191,23 @@ const ActiveTicketCard: React.FC<{
             <Text style={styles.activeCardPrize} numberOfLines={1}>{prizeName}</Text>
           </View>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+        {/* Ticket count and probability */}
+        <View style={styles.ticketStatsContainer}>
+          <View style={styles.ticketCountBadge}>
+            <Ionicons name="ticket" size={12} color={COLORS.white} />
+            <Text style={styles.ticketCountText}>{ticketCount}</Text>
+          </View>
+          <View style={styles.probabilityBadge}>
+            <LinearGradient
+              colors={['#00B894', '#00A085']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 0}}
+              style={styles.probabilityGradient}>
+              <Ionicons name="trending-up" size={12} color={COLORS.white} />
+              <Text style={styles.probabilityText}>{winProbability}%</Text>
+            </LinearGradient>
+          </View>
+        </View>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -300,7 +320,7 @@ const WinningTicketCard: React.FC<{
 export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
   const [activeTab, setActiveTab] = useState<TabType>('active');
-  const {activeTickets, pastTickets, fetchTickets} = useTicketsStore();
+  const {activeTickets, pastTickets, fetchTickets, getTicketsForPrize} = useTicketsStore();
   const {prizes} = usePrizesStore();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -317,12 +337,16 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
   // Filter: only winning tickets in history
   const winningTickets = pastTickets.filter(t => t.isWinner);
 
+  // Filter: only primary tickets (ones with unique codes)
+  const primaryTickets = activeTickets.filter(t => t.isPrimaryTicket);
+
   // Get tickets based on active tab
-  const tickets = activeTab === 'active' ? activeTickets : winningTickets;
+  const tickets = activeTab === 'active' ? primaryTickets : winningTickets;
 
   const renderTicket = ({item, index}: {item: Ticket; index: number}) => {
     const prize = prizes.find(p => p.id === item.prizeId);
     const prizeName = prize?.name || 'Premio';
+    const ticketCount = getTicketsForPrize(item.prizeId);
 
     if (activeTab === 'wins') {
       return (
@@ -340,6 +364,7 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
         ticket={item}
         prizeName={prizeName}
         index={index}
+        ticketCount={ticketCount}
         onPress={() => navigation.navigate('TicketDetail', {ticketId: item.id})}
       />
     );
@@ -357,7 +382,7 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
       <AnimatedTab
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        activeCount={activeTickets.length}
+        activeCount={primaryTickets.length}
         winsCount={winningTickets.length}
       />
     </View>
@@ -541,6 +566,43 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.regular,
     color: COLORS.textMuted,
     marginTop: 2,
+  },
+  // Ticket stats (count and probability)
+  ticketStatsContainer: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  ticketCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    gap: 4,
+  },
+  ticketCountText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.white,
+  },
+  probabilityBadge: {
+    borderRadius: RADIUS.sm,
+    overflow: 'hidden',
+  },
+  probabilityGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 4,
+  },
+  probabilityText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.white,
   },
   // Winning Ticket Card - Special Golden Design
   winCardContainer: {

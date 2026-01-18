@@ -53,13 +53,14 @@ export type TicketSource = 'ad' | 'credits' | 'referral' | 'bonus';
 
 export interface Ticket {
   id: string;
-  uniqueCode: string;
+  uniqueCode: string; // Only first ticket per prize has a real code
   userId: string;
   drawId: string;
   prizeId: string;
   source: TicketSource;
   isWinner: boolean;
   createdAt: string;
+  isPrimaryTicket: boolean; // true = first ticket with code, false = probability boost only
 }
 
 // Draw Types
