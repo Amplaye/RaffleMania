@@ -1,3 +1,5 @@
+import {Platform} from 'react-native';
+
 // API Configuration
 export const API_CONFIG = {
   BASE_URL: 'https://your-wordpress-site.com/wp-json',
@@ -83,31 +85,43 @@ export const GRADIENT_COLORS = {
   dark: ['#121212', '#181818', '#1E1E1E', '#252525', '#2A2A2A'] as const,
 };
 
-// Neon Effect Styles
+// Neon Effect Styles - Platform-aware for iOS/Android consistency
 export const NEON_STYLES = {
   light: {
     // Subtle neon for light theme
-    glow: {
-      shadowColor: '#FF6B00',
-      shadowOffset: {width: 0, height: 0},
-      shadowOpacity: 0.4,
-      shadowRadius: 8,
-      elevation: 8,
-    },
-    glowStrong: {
-      shadowColor: '#FF6B00',
-      shadowOffset: {width: 0, height: 0},
-      shadowOpacity: 0.5,
-      shadowRadius: 12,
-      elevation: 12,
-    },
-    glowSubtle: {
-      shadowColor: '#FF6B00',
-      shadowOffset: {width: 0, height: 2},
-      shadowOpacity: 0.3,
-      shadowRadius: 6,
-      elevation: 6,
-    },
+    glow: Platform.select({
+      ios: {
+        shadowColor: '#FF6B00',
+        shadowOffset: {width: 0, height: 0},
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+    glowStrong: Platform.select({
+      ios: {
+        shadowColor: '#FF6B00',
+        shadowOffset: {width: 0, height: 0},
+        shadowOpacity: 0.5,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 12,
+      },
+    }),
+    glowSubtle: Platform.select({
+      ios: {
+        shadowColor: '#FF6B00',
+        shadowOffset: {width: 0, height: 2},
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
     textShadow: {
       textShadowColor: 'rgba(255, 107, 0, 0.4)',
       textShadowOffset: {width: 0, height: 0},
@@ -116,27 +130,39 @@ export const NEON_STYLES = {
   },
   dark: {
     // Strong neon for dark theme - more visible glow
-    glow: {
-      shadowColor: '#FF6B00',
-      shadowOffset: {width: 0, height: 0},
-      shadowOpacity: 0.8,
-      shadowRadius: 15,
-      elevation: 15,
-    },
-    glowStrong: {
-      shadowColor: '#FF6B00',
-      shadowOffset: {width: 0, height: 0},
-      shadowOpacity: 1,
-      shadowRadius: 25,
-      elevation: 25,
-    },
-    glowSubtle: {
-      shadowColor: '#FF6B00',
-      shadowOffset: {width: 0, height: 2},
-      shadowOpacity: 0.6,
-      shadowRadius: 10,
-      elevation: 10,
-    },
+    glow: Platform.select({
+      ios: {
+        shadowColor: '#FF6B00',
+        shadowOffset: {width: 0, height: 0},
+        shadowOpacity: 0.8,
+        shadowRadius: 15,
+      },
+      android: {
+        elevation: 12,
+      },
+    }),
+    glowStrong: Platform.select({
+      ios: {
+        shadowColor: '#FF6B00',
+        shadowOffset: {width: 0, height: 0},
+        shadowOpacity: 1,
+        shadowRadius: 25,
+      },
+      android: {
+        elevation: 16,
+      },
+    }),
+    glowSubtle: Platform.select({
+      ios: {
+        shadowColor: '#FF6B00',
+        shadowOffset: {width: 0, height: 2},
+        shadowOpacity: 0.6,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
     textShadow: {
       textShadowColor: 'rgba(255, 107, 0, 0.8)',
       textShadowOffset: {width: 0, height: 0},
@@ -145,12 +171,20 @@ export const NEON_STYLES = {
   },
 };
 
-// Font Family - Comic Sans
-export const FONT_FAMILY = {
-  regular: 'Comic Sans MS',
-  medium: 'Comic Sans MS',
-  bold: 'Comic Sans MS',
-};
+// Font Family - Platform-specific for consistent rendering
+// Comic Sans MS is not available on Android, use system fonts
+export const FONT_FAMILY = Platform.select({
+  ios: {
+    regular: 'System',
+    medium: 'System',
+    bold: 'System',
+  },
+  android: {
+    regular: 'Roboto',
+    medium: 'Roboto',
+    bold: 'Roboto',
+  },
+}) as {regular: string; medium: string; bold: string};
 
 // Spacing
 export const SPACING = {

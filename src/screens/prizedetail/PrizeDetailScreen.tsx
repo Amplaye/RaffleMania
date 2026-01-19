@@ -130,15 +130,17 @@ const TicketSuccessModal: React.FC<{
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
                   style={styles.modalTicketGradient}>
-                  <View style={styles.modalTicketHeader}>
-                    <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.modalTicketLabel}>CODICE BIGLIETTO</Text>
-                  </View>
-                  <Text style={styles.modalTicketCode}>{ticketInfo.ticketCode}</Text>
-                  <View style={styles.modalTicketDivider} />
-                  <View style={styles.modalTicketPrizeRow}>
-                    <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
+                  <View style={styles.modalTicketContent}>
+                    <View style={styles.modalTicketHeader}>
+                      <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
+                      <Text style={styles.modalTicketLabel}>CODICE BIGLIETTO</Text>
+                    </View>
+                    <Text style={styles.modalTicketCode}>{ticketInfo.ticketCode}</Text>
+                    <View style={styles.modalTicketDivider} />
+                    <View style={styles.modalTicketPrizeRow}>
+                      <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
+                      <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
+                    </View>
                   </View>
                 </LinearGradient>
               </Animated.View>
@@ -159,23 +161,25 @@ const TicketSuccessModal: React.FC<{
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
                   style={styles.modalBoostGradient}>
-                  {/* Stats Row - Only Biglietti and Chance */}
-                  <View style={styles.modalBoostStatsRow}>
-                    <View style={styles.modalBoostStatItem}>
-                      <Text style={styles.modalBoostStatNumber}>{ticketInfo.totalTickets}</Text>
-                      <Text style={styles.modalBoostStatText}>Biglietti</Text>
+                  <View style={styles.modalBoostContent}>
+                    {/* Stats Row - Only Biglietti and Chance */}
+                    <View style={styles.modalBoostStatsRow}>
+                      <View style={styles.modalBoostStatItem}>
+                        <Text style={styles.modalBoostStatNumber}>{ticketInfo.totalTickets}</Text>
+                        <Text style={styles.modalBoostStatText}>Biglietti</Text>
+                      </View>
+                      <View style={styles.modalBoostStatDivider} />
+                      <View style={styles.modalBoostStatItem}>
+                        <Text style={styles.modalBoostStatNumber}>{(ticketInfo.totalTickets * 0.5).toFixed(1)}%</Text>
+                        <Text style={styles.modalBoostStatText}>Chance</Text>
+                      </View>
                     </View>
-                    <View style={styles.modalBoostStatDivider} />
-                    <View style={styles.modalBoostStatItem}>
-                      <Text style={styles.modalBoostStatNumber}>{(ticketInfo.totalTickets * 0.5).toFixed(1)}%</Text>
-                      <Text style={styles.modalBoostStatText}>Chance</Text>
-                    </View>
-                  </View>
 
-                  {/* Prize Name */}
-                  <View style={styles.modalBoostPrizeRow}>
-                    <Ionicons name="gift" size={14} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.modalBoostPrizeName}>{ticketInfo.prizeName}</Text>
+                    {/* Prize Name */}
+                    <View style={styles.modalBoostPrizeRow}>
+                      <Ionicons name="gift" size={14} color="rgba(255,255,255,0.7)" />
+                      <Text style={styles.modalBoostPrizeName}>{ticketInfo.prizeName}</Text>
+                    </View>
                   </View>
                 </LinearGradient>
               </Animated.View>
@@ -475,7 +479,9 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
               start={{x: 0, y: 0}}
               end={{x: 1, y: 0}}
               style={styles.valueBadgeGradient}>
-              <Text style={styles.valueBadgeText}>€{prize.value}</Text>
+              <View style={styles.valueBadgeContent}>
+                <Text style={styles.valueBadgeText}>€{prize.value}</Text>
+              </View>
             </LinearGradient>
           </View>
         </Animated.View>
@@ -553,8 +559,10 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
                     start={{x: 0, y: 0}}
                     end={{x: 1, y: 0}}
                     style={styles.duplicateCounterGradient}>
-                    <Ionicons name="copy" size={12} color={COLORS.white} />
-                    <Text style={styles.duplicateCounterText}>+{myTicketCount - 1}</Text>
+                    <View style={styles.duplicateCounterContent}>
+                      <Ionicons name="copy" size={12} color={COLORS.white} />
+                      <Text style={styles.duplicateCounterText}>+{myTicketCount - 1}</Text>
+                    </View>
                   </LinearGradient>
                 </View>
               )}
@@ -587,18 +595,20 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
               start={{x: 0, y: 0}}
               end={{x: 1, y: 0}}
               style={styles.probabilityGradient}>
-              <View style={styles.probabilityContent}>
-                <View style={styles.probabilityLeft}>
-                  <Ionicons name="trending-up" size={24} color={COLORS.white} />
-                  <View style={styles.probabilityTextContainer}>
-                    <Text style={styles.probabilityTitle}>Le tue probabilita</Text>
-                    <Text style={styles.probabilitySubtitle}>
-                      {myTicketCount} {myTicketCount === 1 ? 'biglietto' : 'biglietti'} = +{(myTicketCount * 0.5).toFixed(1)}% chance
-                    </Text>
+              <View style={styles.probabilityContentWrapper}>
+                <View style={styles.probabilityContent}>
+                  <View style={styles.probabilityLeft}>
+                    <Ionicons name="trending-up" size={24} color={COLORS.white} />
+                    <View style={styles.probabilityTextContainer}>
+                      <Text style={styles.probabilityTitle}>Le tue probabilita</Text>
+                      <Text style={styles.probabilitySubtitle}>
+                        {myTicketCount} {myTicketCount === 1 ? 'biglietto' : 'biglietti'} = +{(myTicketCount * 0.5).toFixed(1)}% chance
+                      </Text>
+                    </View>
                   </View>
-                </View>
-                <View style={styles.probabilityBadge}>
-                  <Text style={styles.probabilityValue}>{winProbabilityPercent}%</Text>
+                  <View style={styles.probabilityBadge}>
+                    <Text style={styles.probabilityValue}>{winProbabilityPercent}%</Text>
+                  </View>
                 </View>
               </View>
             </LinearGradient>
@@ -696,17 +706,19 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
             start={{x: 0, y: 0}}
             end={{x: 1, y: 0}}
             style={styles.watchButtonGradient}>
-            {isWatchingAd ? (
-              <>
-                <Ionicons name="hourglass" size={24} color={COLORS.white} />
-                <Text style={styles.watchButtonText}>Caricamento...</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="ticket" size={24} color={COLORS.white} />
-                <Text style={styles.watchButtonText}>Ottieni Biglietto</Text>
-              </>
-            )}
+            <View style={styles.watchButtonContent}>
+              {isWatchingAd ? (
+                <>
+                  <Ionicons name="hourglass" size={24} color={COLORS.white} />
+                  <Text style={styles.watchButtonText}>Caricamento...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="play-circle" size={24} color={COLORS.white} />
+                  <Text style={styles.watchButtonText}>Guarda Ads</Text>
+                </>
+              )}
+            </View>
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -810,6 +822,9 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   valueBadgeGradient: {
+    borderRadius: RADIUS.lg,
+  },
+  valueBadgeContent: {
     paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.md,
   },
@@ -891,12 +906,14 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
   },
   duplicateCounterGradient: {
+    borderRadius: RADIUS.md,
+  },
+  duplicateCounterContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
-    borderRadius: RADIUS.md,
   },
   duplicateCounterText: {
     fontSize: FONT_SIZE.sm,
@@ -952,6 +969,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   probabilityGradient: {
+    borderRadius: RADIUS.xl,
+  },
+  probabilityContentWrapper: {
     padding: SPACING.md,
   },
   probabilityContent: {
@@ -1133,6 +1153,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   watchButtonGradient: {
+    borderRadius: RADIUS.lg,
+  },
+  watchButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1226,6 +1249,8 @@ const styles = StyleSheet.create({
   },
   modalTicketGradient: {
     borderRadius: RADIUS.lg,
+  },
+  modalTicketContent: {
     padding: SPACING.lg,
   },
   modalTicketHeader: {
@@ -1278,6 +1303,9 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   modalBoostGradient: {
+    borderRadius: RADIUS.xl,
+  },
+  modalBoostContent: {
     padding: SPACING.lg,
   },
   modalBoostStatsRow: {

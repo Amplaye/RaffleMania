@@ -8,6 +8,7 @@ import {
   Animated,
   StatusBar,
   Dimensions,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -229,7 +230,9 @@ export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
               start={{x: 0, y: 0}}
               end={{x: 1, y: 0}}
               style={styles.levelBadgeGradient}>
-              <Text style={styles.levelBadgeText}>Livello {level}</Text>
+              <View style={styles.levelBadgeContent}>
+                <Text style={styles.levelBadgeText}>Livello {level}</Text>
+              </View>
             </LinearGradient>
           </View>
         </View>
@@ -378,9 +381,11 @@ const styles = StyleSheet.create({
     top: SPACING.md,
     right: SPACING.md,
     borderRadius: RADIUS.md,
-    overflow: 'hidden',
   },
   levelBadgeGradient: {
+    borderRadius: RADIUS.md,
+  },
+  levelBadgeContent: {
     paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
   },

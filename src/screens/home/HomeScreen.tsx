@@ -14,6 +14,7 @@ import {
   NativeScrollEvent,
   Easing,
   Modal,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -377,15 +378,17 @@ const TicketSuccessModal: React.FC<{
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
                   style={styles.modalTicketGradient}>
-                  <View style={styles.modalTicketHeader}>
-                    <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.modalTicketLabel}>CODICE BIGLIETTO</Text>
-                  </View>
-                  <Text style={styles.modalTicketCode}>{ticketInfo.ticketCode}</Text>
-                  <View style={styles.modalTicketDivider} />
-                  <View style={styles.modalTicketPrizeRow}>
-                    <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
+                  <View style={styles.modalTicketContent}>
+                    <View style={styles.modalTicketHeader}>
+                      <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
+                      <Text style={styles.modalTicketLabel}>CODICE BIGLIETTO</Text>
+                    </View>
+                    <Text style={styles.modalTicketCode}>{ticketInfo.ticketCode}</Text>
+                    <View style={styles.modalTicketDivider} />
+                    <View style={styles.modalTicketPrizeRow}>
+                      <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
+                      <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
+                    </View>
                   </View>
                 </LinearGradient>
               </Animated.View>
@@ -406,21 +409,23 @@ const TicketSuccessModal: React.FC<{
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
                   style={styles.modalBoostGradient}>
-                  <View style={styles.modalBoostStatsRow}>
-                    <View style={styles.modalBoostStatItem}>
-                      <Text style={styles.modalBoostStatNumber}>{ticketInfo.totalTickets}</Text>
-                      <Text style={styles.modalBoostStatText}>Biglietti</Text>
+                  <View style={styles.modalBoostContent}>
+                    <View style={styles.modalBoostStatsRow}>
+                      <View style={styles.modalBoostStatItem}>
+                        <Text style={styles.modalBoostStatNumber}>{ticketInfo.totalTickets}</Text>
+                        <Text style={styles.modalBoostStatText}>Biglietti</Text>
+                      </View>
+                      <View style={styles.modalBoostStatDivider} />
+                      <View style={styles.modalBoostStatItem}>
+                        <Text style={styles.modalBoostStatNumber}>{(ticketInfo.totalTickets * 0.5).toFixed(1)}%</Text>
+                        <Text style={styles.modalBoostStatText}>Chance</Text>
+                      </View>
                     </View>
-                    <View style={styles.modalBoostStatDivider} />
-                    <View style={styles.modalBoostStatItem}>
-                      <Text style={styles.modalBoostStatNumber}>{(ticketInfo.totalTickets * 0.5).toFixed(1)}%</Text>
-                      <Text style={styles.modalBoostStatText}>Chance</Text>
-                    </View>
-                  </View>
 
-                  <View style={styles.modalBoostPrizeRow}>
-                    <Ionicons name="gift" size={14} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.modalBoostPrizeName}>{ticketInfo.prizeName}</Text>
+                    <View style={styles.modalBoostPrizeRow}>
+                      <Ionicons name="gift" size={14} color="rgba(255,255,255,0.7)" />
+                      <Text style={styles.modalBoostPrizeName}>{ticketInfo.prizeName}</Text>
+                    </View>
                   </View>
                 </LinearGradient>
               </Animated.View>
@@ -997,6 +1002,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-start',
     paddingBottom: 110,
+    zIndex: 1,
   },
   // Carousel
   carouselContainer: {
@@ -1057,6 +1063,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: 50,
     marginBottom: SPACING.sm,
+    zIndex: 1,
   },
   liveIndicator: {
     flexDirection: 'row',
@@ -1091,15 +1098,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   timerCard: {
-    width: 44,
-    height: 56,
+    width: 42,
+    height: 54,
     borderRadius: RADIUS.md,
     overflow: 'hidden',
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 8,
   },
   timerCardGradient: {
     flex: 1,
@@ -1108,10 +1110,12 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   timerCardText: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '800',
     color: COLORS.white,
     fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   timerCardLine: {
     position: 'absolute',
@@ -1210,29 +1214,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.primary,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: RADIUS.xl,
     gap: 10,
-    shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    minHeight: 52,
   },
   watchButtonDisabled: {
     backgroundColor: COLORS.border,
-    shadowOpacity: 0,
   },
   watchButtonText: {
     color: COLORS.white,
     fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: SPACING.lg,
@@ -1244,26 +1245,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     maxWidth: 340,
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 10},
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 20,
   },
   modalIconContainer: {
     marginBottom: SPACING.lg,
   },
   modalIconGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
   },
   modalTitle: {
     fontSize: FONT_SIZE.xxl,
@@ -1271,6 +1262,8 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.text,
     marginBottom: SPACING.xs,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   modalSubtitle: {
     fontSize: FONT_SIZE.md,
@@ -1285,6 +1278,8 @@ const styles = StyleSheet.create({
   },
   modalTicketGradient: {
     borderRadius: RADIUS.lg,
+  },
+  modalTicketContent: {
     padding: SPACING.lg,
   },
   modalTicketHeader: {
@@ -1338,22 +1333,21 @@ const styles = StyleSheet.create({
   },
   modalCloseButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: SPACING.xl,
     borderRadius: RADIUS.lg,
     width: '100%',
     alignItems: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    justifyContent: 'center',
+    minHeight: 48,
   },
   modalCloseButtonText: {
     fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.white,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   // Boost Modal Styles - Same as PrizesScreen
   modalBoostCard: {
@@ -1361,13 +1355,11 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     borderRadius: RADIUS.xl,
     overflow: 'hidden',
-    shadowColor: '#00B894',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
   },
   modalBoostGradient: {
+    borderRadius: RADIUS.xl,
+  },
+  modalBoostContent: {
     padding: SPACING.lg,
   },
   modalBoostStatsRow: {

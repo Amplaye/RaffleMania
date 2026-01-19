@@ -399,11 +399,13 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHT.bold,
     fontFamily: FONT_FAMILY.bold,
     color: COLORS.text,
+    includeFontPadding: false,
   },
   userEmail: {
     fontSize: FONT_SIZE.sm,
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: 0,
+    includeFontPadding: false,
   },
   // Level Card styles
   levelCard: {
@@ -435,17 +437,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 3,
   },
   levelNumberText: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.text,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   levelMainInfo: {
     flex: 1,
@@ -582,11 +581,15 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.xl,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.primary,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   statLabel: {
     fontSize: FONT_SIZE.sm,
     color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
+    marginTop: 2,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   statDivider: {
     width: 1,

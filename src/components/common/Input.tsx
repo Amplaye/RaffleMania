@@ -34,7 +34,7 @@ export const Input: React.FC<InputProps> = ({
   const getBorderColor = () => {
     if (error) return COLORS.error;
     if (isFocused) return COLORS.primary;
-    return COLORS.border;
+    return COLORS.primary + '40';
   };
 
   return (
@@ -77,6 +77,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: COLORS.text,
     marginBottom: SPACING.xs,
+    includeFontPadding: false,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -84,13 +85,15 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.surface,
+    minHeight: 48,
   },
   input: {
     flex: 1,
     fontSize: FONT_SIZE.md,
     color: COLORS.text,
-    paddingVertical: SPACING.md,
+    paddingVertical: 12,
     paddingHorizontal: SPACING.md,
+    includeFontPadding: false,
   },
   inputWithLeftIcon: {
     paddingLeft: SPACING.xs,
@@ -100,11 +103,16 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     paddingHorizontal: SPACING.md,
+    // Center icons vertically
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100%',
   },
   error: {
     fontSize: FONT_SIZE.sm,
     color: COLORS.error,
     marginTop: SPACING.xs,
+    includeFontPadding: false,
   },
 });
 

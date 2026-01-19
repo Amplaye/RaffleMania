@@ -6,6 +6,7 @@ import {
   Modal,
   TouchableOpacity,
   Animated,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -118,13 +119,15 @@ export const AdOrCreditsModal: React.FC<AdOrCreditsModalProps> = ({
                 end={{x: 1, y: 0}}
                 style={styles.optionGradient}>
                 <View style={styles.optionIconContainer}>
-                  <Ionicons name="play-circle" size={28} color="#FFFFFF" />
+                  <Ionicons name="play-circle" size={24} color="#FFFFFF" />
                 </View>
                 <View style={styles.optionTextContainer}>
                   <Text style={styles.optionTitle}>Guarda Ads</Text>
                   <Text style={styles.optionSubtitle}>Gratis</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
+                <View style={styles.chevronContainer}>
+                  <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
+                </View>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -147,7 +150,7 @@ export const AdOrCreditsModal: React.FC<AdOrCreditsModalProps> = ({
                   end={{x: 1, y: 0}}
                   style={styles.optionGradient}>
                   <View style={styles.optionIconContainer}>
-                    <Ionicons name="flash" size={28} color="#FFFFFF" />
+                    <Ionicons name="flash" size={24} color="#FFFFFF" />
                   </View>
                   <View style={styles.optionTextContainer}>
                     <Text style={styles.optionTitle}>Usa Crediti</Text>
@@ -172,7 +175,7 @@ export const AdOrCreditsModal: React.FC<AdOrCreditsModalProps> = ({
                   end={{x: 1, y: 0}}
                   style={styles.optionGradient}>
                   <View style={styles.optionIconContainer}>
-                    <Ionicons name="cart" size={28} color="#FFFFFF" />
+                    <Ionicons name="cart" size={24} color="#FFFFFF" />
                   </View>
                   <View style={styles.optionTextContainer}>
                     <Text style={styles.optionTitle}>Acquista Crediti</Text>
@@ -180,7 +183,9 @@ export const AdOrCreditsModal: React.FC<AdOrCreditsModalProps> = ({
                       Hai solo {userCredits} crediti
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
+                  <View style={styles.chevronContainer}>
+                    <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
+                  </View>
                 </LinearGradient>
               </TouchableOpacity>
             )}
@@ -204,10 +209,10 @@ export const AdOrCreditsModal: React.FC<AdOrCreditsModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
   },
   overlayTouchable: {
     position: 'absolute',
@@ -218,43 +223,34 @@ const styles = StyleSheet.create({
   },
   container: {
     width: '100%',
-    maxWidth: 340,
-    borderRadius: RADIUS.xl,
-    overflow: 'hidden',
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 8},
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 10,
+    borderRadius: RADIUS.lg,
   },
   header: {
     alignItems: 'center',
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xs,
   },
   title: {
-    fontSize: FONT_SIZE.xl,
+    fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   subtitle: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.regular,
-    marginTop: 4,
+    marginTop: 2,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   optionsContainer: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
+    padding: 0,
   },
   optionButton: {
     borderRadius: RADIUS.lg,
-    overflow: 'hidden',
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
+    marginHorizontal: 16,
+    marginVertical: 4,
   },
   optionButtonDisabled: {
     opacity: 0.6,
@@ -262,52 +258,62 @@ const styles = StyleSheet.create({
   optionGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.md,
+    minHeight: 64,
+    borderRadius: RADIUS.lg,
   },
   optionIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 16,
   },
   optionTextContainer: {
     flex: 1,
-    marginLeft: SPACING.md,
+    marginLeft: 12,
+    justifyContent: 'center',
   },
   optionTitle: {
     fontSize: FONT_SIZE.md,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: '#FFFFFF',
+    includeFontPadding: false,
   },
   optionSubtitle: {
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.regular,
     color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
+    marginTop: 0,
+    includeFontPadding: false,
   },
   creditsBalance: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginRight: 16,
+  },
+  chevronContainer: {
+    marginRight: 16,
   },
   creditsBalanceText: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: '#FFFFFF',
+    includeFontPadding: false,
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: SPACING.md,
+    marginVertical: 6,
+    paddingHorizontal: 16,
   },
   dividerLine: {
     flex: 1,
@@ -316,23 +322,29 @@ const styles = StyleSheet.create({
   dividerText: {
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.regular,
-    marginHorizontal: SPACING.sm,
+    marginHorizontal: 8,
+    includeFontPadding: false,
   },
   insufficientText: {
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.regular,
     textAlign: 'center',
     marginTop: SPACING.sm,
+    includeFontPadding: false,
   },
   closeButton: {
     alignItems: 'center',
-    paddingVertical: SPACING.md,
+    justifyContent: 'center',
+    paddingVertical: 10,
     borderTopWidth: 1,
+    minHeight: 42,
   },
   closeButtonText: {
-    fontSize: FONT_SIZE.md,
+    fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.medium,
     fontWeight: FONT_WEIGHT.medium,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
 });
 

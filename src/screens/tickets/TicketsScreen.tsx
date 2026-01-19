@@ -8,6 +8,7 @@ import {
   Animated,
   StatusBar,
   Dimensions,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -204,8 +205,10 @@ const ActiveTicketCard: React.FC<{
               start={{x: 0, y: 0}}
               end={{x: 1, y: 0}}
               style={styles.probabilityGradient}>
-              <Ionicons name="trending-up" size={12} color={COLORS.white} />
-              <Text style={styles.probabilityText}>{winProbability}%</Text>
+              <View style={styles.probabilityContent}>
+                <Ionicons name="trending-up" size={12} color={COLORS.white} />
+                <Text style={styles.probabilityText}>{winProbability}%</Text>
+              </View>
             </LinearGradient>
           </View>
         </View>
@@ -489,7 +492,6 @@ const styles = StyleSheet.create({
     width: (width - SPACING.lg * 2 - 8) / 2,
     height: '100%',
     borderRadius: RADIUS.lg,
-    overflow: 'hidden',
   },
   tabIndicatorGradient: {
     flex: 1,
@@ -591,9 +593,11 @@ const styles = StyleSheet.create({
   },
   probabilityBadge: {
     borderRadius: RADIUS.sm,
-    overflow: 'hidden',
   },
   probabilityGradient: {
+    borderRadius: RADIUS.sm,
+  },
+  probabilityContent: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
@@ -613,7 +617,6 @@ const styles = StyleSheet.create({
   },
   winCard: {
     borderRadius: RADIUS.xl,
-    overflow: 'hidden',
   },
   winCardGlow: {
     position: 'absolute',

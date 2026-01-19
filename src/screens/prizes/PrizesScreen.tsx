@@ -12,6 +12,7 @@ import {
   Modal,
   Alert,
   Easing,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -127,15 +128,17 @@ const TicketSuccessModal: React.FC<{
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
                   style={styles.modalTicketGradient}>
-                  <View style={styles.modalTicketHeader}>
-                    <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.modalTicketLabel}>CODICE BIGLIETTO</Text>
-                  </View>
-                  <Text style={styles.modalTicketCode}>{ticketInfo.ticketCode}</Text>
-                  <View style={styles.modalTicketDivider} />
-                  <View style={styles.modalTicketPrizeRow}>
-                    <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
+                  <View style={styles.modalTicketContent}>
+                    <View style={styles.modalTicketHeader}>
+                      <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
+                      <Text style={styles.modalTicketLabel}>CODICE BIGLIETTO</Text>
+                    </View>
+                    <Text style={styles.modalTicketCode}>{ticketInfo.ticketCode}</Text>
+                    <View style={styles.modalTicketDivider} />
+                    <View style={styles.modalTicketPrizeRow}>
+                      <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
+                      <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
+                    </View>
                   </View>
                 </LinearGradient>
               </Animated.View>
@@ -154,21 +157,23 @@ const TicketSuccessModal: React.FC<{
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
                   style={styles.modalBoostGradient}>
-                  <View style={styles.modalBoostStatsRow}>
-                    <View style={styles.modalBoostStatItem}>
-                      <Text style={styles.modalBoostStatNumber}>{ticketInfo.totalTickets}</Text>
-                      <Text style={styles.modalBoostStatText}>Biglietti</Text>
+                  <View style={styles.modalBoostContent}>
+                    <View style={styles.modalBoostStatsRow}>
+                      <View style={styles.modalBoostStatItem}>
+                        <Text style={styles.modalBoostStatNumber}>{ticketInfo.totalTickets}</Text>
+                        <Text style={styles.modalBoostStatText}>Biglietti</Text>
+                      </View>
+                      <View style={styles.modalBoostStatDivider} />
+                      <View style={styles.modalBoostStatItem}>
+                        <Text style={styles.modalBoostStatNumber}>{(ticketInfo.totalTickets * 0.5).toFixed(1)}%</Text>
+                        <Text style={styles.modalBoostStatText}>Chance</Text>
+                      </View>
                     </View>
-                    <View style={styles.modalBoostStatDivider} />
-                    <View style={styles.modalBoostStatItem}>
-                      <Text style={styles.modalBoostStatNumber}>{(ticketInfo.totalTickets * 0.5).toFixed(1)}%</Text>
-                      <Text style={styles.modalBoostStatText}>Chance</Text>
-                    </View>
-                  </View>
 
-                  <View style={styles.modalBoostPrizeRow}>
-                    <Ionicons name="gift" size={14} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.modalBoostPrizeName}>{ticketInfo.prizeName}</Text>
+                    <View style={styles.modalBoostPrizeRow}>
+                      <Ionicons name="gift" size={14} color="rgba(255,255,255,0.7)" />
+                      <Text style={styles.modalBoostPrizeName}>{ticketInfo.prizeName}</Text>
+                    </View>
                   </View>
                 </LinearGradient>
               </Animated.View>
@@ -368,7 +373,9 @@ const PrizeCard: React.FC<{
               start={{x: 0, y: 0}}
               end={{x: 1, y: 0}}
               style={styles.valueBadgeGradient}>
-              <Text style={styles.valueBadgeText}>€{item.value}</Text>
+              <View style={styles.valueBadgeContent}>
+                <Text style={styles.valueBadgeText}>€{item.value}</Text>
+              </View>
             </LinearGradient>
           </View>
           {/* Info Badge */}
@@ -409,8 +416,10 @@ const PrizeCard: React.FC<{
               start={{x: 0, y: 0}}
               end={{x: 1, y: 0}}
               style={styles.watchButtonGradient}>
-              <Ionicons name="play-circle" size={20} color={COLORS.white} />
-              <Text style={[styles.watchButtonText, neon.textShadow]}>Guarda Ads</Text>
+              <View style={styles.watchButtonContent}>
+                <Ionicons name="play-circle" size={20} color={COLORS.white} />
+                <Text style={[styles.watchButtonText, neon.textShadow]}>Guarda Ads</Text>
+              </View>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -637,7 +646,6 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: RADIUS.xl,
-    overflow: 'hidden',
     shadowColor: COLORS.primary,
     shadowOffset: {width: 0, height: 6},
     shadowOpacity: 0.15,
@@ -660,7 +668,6 @@ const styles = StyleSheet.create({
   imageContainer: {
     height: 220,
     position: 'relative',
-    overflow: 'hidden',
   },
   imageGradient: {
     flex: 1,
@@ -677,7 +684,6 @@ const styles = StyleSheet.create({
     top: SPACING.md,
     left: SPACING.md,
     borderRadius: RADIUS.lg,
-    overflow: 'hidden',
     shadowColor: COLORS.primary,
     shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.4,
@@ -685,6 +691,9 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   valueBadgeGradient: {
+    borderRadius: RADIUS.lg,
+  },
+  valueBadgeContent: {
     paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.md,
   },
@@ -701,7 +710,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    overflow: 'hidden',
     shadowColor: COLORS.primary,
     shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.4,
@@ -712,6 +720,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 18,
   },
   infoContainer: {
     padding: SPACING.lg,
@@ -750,13 +759,11 @@ const styles = StyleSheet.create({
   progressBar: {
     height: 8,
     borderRadius: 4,
-    overflow: 'hidden',
     marginBottom: SPACING.xs,
   },
   progressFill: {
     height: '100%',
     borderRadius: 4,
-    overflow: 'hidden',
     position: 'relative',
   },
   progressGradient: {
@@ -787,9 +794,11 @@ const styles = StyleSheet.create({
   // Watch Button Styles
   watchButton: {
     borderRadius: RADIUS.lg,
-    overflow: 'hidden',
   },
   watchButtonGradient: {
+    borderRadius: RADIUS.lg,
+  },
+  watchButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -877,9 +886,12 @@ const styles = StyleSheet.create({
   modalTicketCard: {
     width: '100%',
     marginBottom: SPACING.lg,
+    borderRadius: RADIUS.lg,
   },
   modalTicketGradient: {
     borderRadius: RADIUS.lg,
+  },
+  modalTicketContent: {
     padding: SPACING.lg,
   },
   modalTicketHeader: {
@@ -924,7 +936,6 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: SPACING.lg,
     borderRadius: RADIUS.xl,
-    overflow: 'hidden',
     shadowColor: '#00B894',
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.3,
@@ -932,6 +943,9 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   modalBoostGradient: {
+    borderRadius: RADIUS.xl,
+  },
+  modalBoostContent: {
     padding: SPACING.lg,
   },
   modalBoostStatsRow: {

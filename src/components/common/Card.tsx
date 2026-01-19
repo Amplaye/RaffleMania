@@ -46,7 +46,6 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
-    overflow: 'hidden',
   },
   nonePadding: {
     padding: 0,

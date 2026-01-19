@@ -178,30 +178,32 @@ export const ExtractionResultModal: React.FC<ExtractionResultModalProps> = ({
             <LinearGradient
               colors={['#FFD700', '#FFA500', '#FF8C00']}
               style={styles.winnerGradient}>
-              {/* Congratulations Text */}
-              <Text style={styles.winnerTitle}>CONGRATULAZIONI</Text>
-              <Text style={styles.winnerSubtitle}>Hai vinto!</Text>
+              <View style={styles.winnerContent}>
+                {/* Congratulations Text */}
+                <Text style={styles.winnerTitle}>CONGRATULAZIONI</Text>
+                <Text style={styles.winnerSubtitle}>Hai vinto!</Text>
 
-              {/* Prize Image - Much Larger */}
-              {prizeImage && (
-                <View style={styles.prizeImageContainer}>
-                  <Image source={{uri: prizeImage}} style={styles.prizeImage} resizeMode="contain" />
-                </View>
-              )}
+                {/* Prize Image - Much Larger */}
+                {prizeImage && (
+                  <View style={styles.prizeImageContainer}>
+                    <Image source={{uri: prizeImage}} style={styles.prizeImage} resizeMode="contain" />
+                  </View>
+                )}
 
-              <Text style={styles.prizeName}>{prizeName}</Text>
+                <Text style={styles.prizeName}>{prizeName}</Text>
 
-              {ticketCode && (
-                <View style={styles.ticketCodeContainer}>
-                  <Text style={styles.ticketCodeLabel}>Biglietto Vincente</Text>
-                  <Text style={styles.ticketCode}>{ticketCode}</Text>
-                </View>
-              )}
+                {ticketCode && (
+                  <View style={styles.ticketCodeContainer}>
+                    <Text style={styles.ticketCodeLabel}>Biglietto Vincente</Text>
+                    <Text style={styles.ticketCode}>{ticketCode}</Text>
+                  </View>
+                )}
 
-              {/* Close Button */}
-              <TouchableOpacity style={styles.winnerButton} onPress={onClose}>
-                <Text style={styles.winnerButtonText}>Fantastico!</Text>
-              </TouchableOpacity>
+                {/* Close Button */}
+                <TouchableOpacity style={styles.winnerButton} onPress={onClose}>
+                  <Text style={styles.winnerButtonText}>Fantastico!</Text>
+                </TouchableOpacity>
+              </View>
             </LinearGradient>
           ) : (
             // Loser Modal
@@ -240,7 +242,9 @@ export const ExtractionResultModal: React.FC<ExtractionResultModalProps> = ({
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 0}}
                   style={styles.loserButtonGradient}>
-                  <Text style={styles.loserButtonText}>Riprova</Text>
+                  <View style={styles.loserButtonContent}>
+                    <Text style={styles.loserButtonText}>Riprova</Text>
+                  </View>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -280,6 +284,9 @@ const styles = StyleSheet.create({
   },
   // Winner Styles
   winnerGradient: {
+    borderRadius: RADIUS.xl,
+  },
+  winnerContent: {
     padding: SPACING.xl,
     alignItems: 'center',
   },
@@ -305,6 +312,8 @@ const styles = StyleSheet.create({
     width: 240,
     height: 240,
     marginBottom: SPACING.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   prizeImage: {
     width: '100%',
@@ -425,6 +434,9 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   loserButtonGradient: {
+    borderRadius: RADIUS.lg,
+  },
+  loserButtonContent: {
     paddingVertical: 14,
     alignItems: 'center',
   },

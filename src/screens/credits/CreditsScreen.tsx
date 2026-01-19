@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   Modal,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -64,7 +65,9 @@ const PackageCard: React.FC<{
       start={{x: 0, y: 0}}
       end={{x: 1, y: 0}}
       style={styles.priceButton}>
-      <Text style={styles.priceText}>€{pkg.price.toFixed(2)}</Text>
+      <View style={styles.priceButtonContent}>
+        <Text style={styles.priceText}>€{pkg.price.toFixed(2)}</Text>
+      </View>
     </LinearGradient>
   </TouchableOpacity>
 );
@@ -128,15 +131,17 @@ export const CreditsScreen: React.FC<CreditsScreenProps> = ({navigation}) => {
               start={{x: 0, y: 0}}
               end={{x: 1, y: 1}}
               style={styles.balanceGradient}>
-              <View style={styles.balanceContent}>
-                <Text style={styles.balanceLabel}>Saldo attuale</Text>
-                <View style={styles.balanceRow}>
-                  <Ionicons name="diamond" size={32} color={COLORS.white} />
-                  <Text style={styles.balanceAmount}>
-                    {(user?.credits || 0).toLocaleString()}
-                  </Text>
+              <View style={styles.balanceContentWrapper}>
+                <View style={styles.balanceContent}>
+                  <Text style={styles.balanceLabel}>Saldo attuale</Text>
+                  <View style={styles.balanceRow}>
+                    <Ionicons name="diamond" size={32} color={COLORS.white} />
+                    <Text style={styles.balanceAmount}>
+                      {(user?.credits || 0).toLocaleString()}
+                    </Text>
+                  </View>
+                  <Text style={styles.balanceSubtext}>crediti disponibili</Text>
                 </View>
-                <Text style={styles.balanceSubtext}>crediti disponibili</Text>
               </View>
             </LinearGradient>
           </View>
@@ -212,9 +217,11 @@ export const CreditsScreen: React.FC<CreditsScreenProps> = ({navigation}) => {
                 start={{x: 0, y: 0}}
                 end={{x: 1, y: 0}}
                 style={styles.paymentButtonGradient}>
-                <Ionicons name="card" size={24} color={COLORS.white} />
-                <Text style={styles.paymentButtonText}>Paga con Carta</Text>
-                <Text style={styles.paymentBrand}>Stripe</Text>
+                <View style={styles.paymentButtonContent}>
+                  <Ionicons name="card" size={24} color={COLORS.white} />
+                  <Text style={styles.paymentButtonText}>Paga con Carta</Text>
+                  <Text style={styles.paymentBrand}>Stripe</Text>
+                </View>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -228,8 +235,10 @@ export const CreditsScreen: React.FC<CreditsScreenProps> = ({navigation}) => {
                 start={{x: 0, y: 0}}
                 end={{x: 1, y: 0}}
                 style={styles.paymentButtonGradient}>
-                <Ionicons name="logo-paypal" size={24} color={COLORS.white} />
-                <Text style={styles.paymentButtonText}>Paga con PayPal</Text>
+                <View style={styles.paymentButtonContent}>
+                  <Ionicons name="logo-paypal" size={24} color={COLORS.white} />
+                  <Text style={styles.paymentButtonText}>Paga con PayPal</Text>
+                </View>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -277,7 +286,6 @@ const styles = StyleSheet.create({
   },
   balanceCard: {
     borderRadius: RADIUS.xl,
-    overflow: 'hidden',
     shadowColor: COLORS.primary,
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.3,
@@ -285,6 +293,9 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   balanceGradient: {
+    borderRadius: RADIUS.xl,
+  },
+  balanceContentWrapper: {
     padding: SPACING.xl,
   },
   balanceContent: {
@@ -412,6 +423,8 @@ const styles = StyleSheet.create({
   },
   priceButton: {
     borderRadius: RADIUS.md,
+  },
+  priceButtonContent: {
     paddingVertical: SPACING.sm,
     alignItems: 'center',
   },
@@ -462,10 +475,12 @@ const styles = StyleSheet.create({
   },
   paymentButton: {
     borderRadius: RADIUS.lg,
-    overflow: 'hidden',
     marginBottom: SPACING.md,
   },
   paymentButtonGradient: {
+    borderRadius: RADIUS.lg,
+  },
+  paymentButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

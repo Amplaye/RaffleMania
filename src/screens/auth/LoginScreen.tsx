@@ -35,13 +35,17 @@ const COLORS = {
 };
 
 // Neon glow effect
-const NEON_GLOW = {
-  shadowColor: '#FF6B00',
-  shadowOffset: {width: 0, height: 4},
-  shadowOpacity: 0.4,
-  shadowRadius: 12,
-  elevation: 8,
-};
+const NEON_GLOW = Platform.select({
+  ios: {
+    shadowColor: '#FF6B00',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+  },
+  android: {
+    elevation: 8,
+  },
+}) as object;
 
 // Neon orange color
 const NEON_ORANGE = '#FF6B00';
@@ -570,13 +574,13 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     borderRadius: 14,
-    overflow: 'hidden',
   },
   loginButtonGradient: {
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    height: 52,
     gap: 8,
   },
   loginButtonText: {

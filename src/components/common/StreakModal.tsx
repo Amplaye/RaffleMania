@@ -1,12 +1,13 @@
-import React, {useEffect, useRef} from 'react';
+import React, {useEffect, useRef, useCallback} from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   Animated,
   Dimensions,
+  TouchableWithoutFeedback,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -65,15 +66,54 @@ export const StreakModal: React.FC<StreakModalProps> = ({
   // Current week number (1-indexed for display)
   const currentWeek = Math.floor((currentStreak - 1) / 7) + 1;
 
+  const glowAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const dayAnimsRef = useRef<Animated.CompositeAnimation[]>([]);
+  const mainAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  const isClosingRef = useRef(false);
+
+  // Close handler with fade out animation
+  const handleClose = useCallback(() => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+
+    // Stop looping animations
+    if (glowAnimationRef.current) {
+      glowAnimationRef.current.stop();
+      glowAnimationRef.current = null;
+    }
+    dayAnimsRef.current.forEach(anim => {
+      try { anim.stop(); } catch (e) {}
+    });
+    dayAnimsRef.current = [];
+
+    // Animate out
+    Animated.parallel([
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 0.8,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onClose();
+      isClosingRef.current = false;
+    });
+  }, [onClose, opacityAnim, scaleAnim]);
+
   useEffect(() => {
     if (visible) {
+      isClosingRef.current = false;
       scaleAnim.setValue(0.8);
       opacityAnim.setValue(0);
       glowAnim.setValue(0);
       dayAnims.forEach(anim => anim.setValue(0));
 
       // Main modal animation
-      Animated.parallel([
+      mainAnimRef.current = Animated.parallel([
         Animated.spring(scaleAnim, {
           toValue: 1,
           friction: 6,
@@ -85,10 +125,11 @@ export const StreakModal: React.FC<StreakModalProps> = ({
           duration: 250,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]);
+      mainAnimRef.current.start();
 
       // Glow pulse animation
-      Animated.loop(
+      glowAnimationRef.current = Animated.loop(
         Animated.sequence([
           Animated.timing(glowAnim, {
             toValue: 1,
@@ -101,17 +142,23 @@ export const StreakModal: React.FC<StreakModalProps> = ({
             useNativeDriver: true,
           }),
         ])
-      ).start();
+      );
+      glowAnimationRef.current.start();
 
       // Staggered day cards animation
+      dayAnimsRef.current = [];
       dayAnims.forEach((anim, index) => {
-        Animated.spring(anim, {
-          toValue: 1,
-          friction: 6,
-          tension: 50,
-          delay: index * 80,
-          useNativeDriver: true,
-        }).start();
+        const dayAnim = Animated.sequence([
+          Animated.delay(index * 80),
+          Animated.spring(anim, {
+            toValue: 1,
+            friction: 6,
+            tension: 50,
+            useNativeDriver: true,
+          }),
+        ]);
+        dayAnimsRef.current.push(dayAnim);
+        dayAnim.start();
       });
     }
   }, [visible]);
@@ -121,201 +168,223 @@ export const StreakModal: React.FC<StreakModalProps> = ({
     outputRange: [0.3, 0.8],
   });
 
+  // Keep component in tree but hide when not visible (fixes Fabric crash on iOS)
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}>
-      <Animated.View style={[styles.overlay, {opacity: opacityAnim}]}>
-        <Animated.View
-          style={[
-            styles.container,
-            {
-              transform: [{scale: scaleAnim}],
-            }
-          ]}>
+    <Animated.View
+      style={[
+        styles.absoluteContainer,
+        {
+          opacity: opacityAnim,
+          // When not visible AND opacity is 0, move off-screen
+          transform: [{translateX: visible ? 0 : -10000}],
+        },
+      ]}
+      pointerEvents={visible ? 'auto' : 'none'}
+    >
+      <TouchableWithoutFeedback onPress={handleClose}>
+        <View style={styles.overlay}>
+          <TouchableWithoutFeedback>
+            <Animated.View
+              style={[
+                styles.container,
+                {
+                  transform: [{scale: scaleAnim}],
+                }
+              ]}>
 
-          {/* App gradient background */}
-          <LinearGradient
-            colors={isDark
-              ? ['#1a1a1a', '#2d1810', '#1a1a1a']
-              : ['#FFF5E6', '#FFECD2', '#FFE0BD']
-            }
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 1}}
-            style={styles.gradientBg}
-          />
+              {/* App gradient background */}
+              <LinearGradient
+                colors={isDark
+                  ? ['#1a1a1a', '#2d1810', '#1a1a1a']
+                  : ['#FFF5E6', '#FFECD2', '#FFE0BD']
+                }
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 1}}
+                style={styles.gradientBg}
+              />
 
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={[styles.headerTitle, {color: isDark ? '#FFD700' : '#FF6B00'}]}>Daily Login</Text>
-          </View>
+              {/* Header */}
+              <View style={styles.header}>
+                <Text style={[styles.headerTitle, {color: isDark ? '#FFD700' : '#FF6B00'}]}>Daily Login</Text>
+              </View>
 
-          {/* Days 1-4 Row */}
-          <View style={styles.daysRow}>
-            {dayRewards.slice(0, 4).map((dayReward, index) => {
-              const isCompleted = dayReward.day < currentStreak;
-              const isToday = dayReward.day === currentStreak;
-              const isDay7 = index === 6;
+              {/* Days 1-4 Row */}
+              <View style={styles.daysRow}>
+                {dayRewards.slice(0, 4).map((dayReward, index) => {
+                  const isCompleted = dayReward.day < currentStreak;
+                  const isToday = dayReward.day === currentStreak;
 
-              return (
-                <Animated.View
-                  key={dayReward.day}
-                  style={[
-                    styles.dayBox,
-                    {
-                      transform: [{scale: dayAnims[index]}],
-                    },
-                  ]}>
-                  <LinearGradient
-                    colors={
-                      isCompleted
-                        ? ['#00B894', '#00a884']
-                        : isToday
-                          ? ['#FF6B00', '#E55A00']
-                          : isDark
-                            ? ['#2A2A2A', '#1E1E1E']
-                            : ['#FFFFFF', '#F8F8F8']
-                    }
-                    start={{x: 0, y: 0}}
-                    end={{x: 0, y: 1}}
-                    style={[
-                      styles.dayBoxGradient,
-                      isToday && styles.dayBoxTodayBorder,
-                    ]}
-                  >
-                    <Text style={[
-                      styles.dayLabel,
-                      (isCompleted || isToday) && styles.dayLabelLight,
-                      !isCompleted && !isToday && {color: isDark ? '#808080' : '#666666'},
-                    ]}>
-                      Day {dayReward.day}
-                    </Text>
-                    {isCompleted ? (
-                      <View style={styles.checkContainer}>
-                        <Ionicons name="checkmark" size={18} color="#fff" />
-                      </View>
-                    ) : (
-                      <View style={styles.rewardContainer}>
-                        <Text style={[
-                          styles.rewardXP,
-                          (isCompleted || isToday) && styles.rewardXPLight,
-                          !isCompleted && !isToday && {color: isDark ? '#808080' : '#666666'},
-                        ]}>
-                          +{dayReward.xp} XP
-                        </Text>
-                      </View>
-                    )}
-                  </LinearGradient>
-                  {isToday && (
+                  return (
                     <Animated.View
-                      style={[styles.glowBorder, {opacity: glowOpacity, borderColor: '#FF6B00'}]}
-                    />
-                  )}
-                </Animated.View>
-              );
-            })}
-          </View>
+                      key={dayReward.day}
+                      style={[
+                        styles.dayBox,
+                        {
+                          transform: [{scale: dayAnims[index]}],
+                        },
+                      ]}>
+                      <LinearGradient
+                        colors={
+                          isCompleted
+                            ? ['#00B894', '#00a884']
+                            : isToday
+                              ? ['#FF6B00', '#E55A00']
+                              : isDark
+                                ? ['#2A2A2A', '#1E1E1E']
+                                : ['#FFFFFF', '#F8F8F8']
+                        }
+                        start={{x: 0, y: 0}}
+                        end={{x: 0, y: 1}}
+                        style={[
+                          styles.dayBoxGradient,
+                          isToday && styles.dayBoxTodayBorder,
+                        ]}
+                      >
+                        <View style={styles.dayContentWrapper}>
+                          <Text style={[
+                            styles.dayLabel,
+                            (isCompleted || isToday) && styles.dayLabelLight,
+                            !isCompleted && !isToday && {color: isDark ? '#808080' : '#666666'},
+                          ]}>
+                            Day {dayReward.day}
+                          </Text>
+                          {isCompleted ? (
+                            <View style={styles.checkContainer}>
+                              <Ionicons name="checkmark" size={22} color="#fff" />
+                            </View>
+                          ) : (
+                            <View style={styles.rewardContainer}>
+                              <Text style={[
+                                styles.rewardXP,
+                                (isCompleted || isToday) && styles.rewardXPLight,
+                                !isCompleted && !isToday && {color: isDark ? '#808080' : '#666666'},
+                              ]}>
+                                +{dayReward.xp} XP
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </LinearGradient>
+                      {isToday && (
+                        <Animated.View
+                          style={[styles.glowBorder, {opacity: glowOpacity, borderColor: '#FF6B00'}]}
+                        />
+                      )}
+                    </Animated.View>
+                  );
+                })}
+              </View>
 
-          {/* Days 5-7 Row */}
-          <View style={styles.daysRow}>
-            {dayRewards.slice(4, 7).map((dayReward, idx) => {
-              const index = idx + 4;
-              const isCompleted = dayReward.day < currentStreak;
-              const isToday = dayReward.day === currentStreak;
-              const isDay7 = idx === 2;
+              {/* Days 5-7 Row */}
+              <View style={styles.daysRow}>
+                {dayRewards.slice(4, 7).map((dayReward, idx) => {
+                  const index = idx + 4;
+                  const isCompleted = dayReward.day < currentStreak;
+                  const isToday = dayReward.day === currentStreak;
+                  const isDay7 = idx === 2;
 
-              return (
-                <Animated.View
-                  key={dayReward.day}
-                  style={[
-                    styles.dayBox,
-                    {
-                      transform: [{scale: dayAnims[index]}],
-                    },
-                  ]}>
-                  <LinearGradient
-                    colors={
-                      isCompleted
-                        ? ['#00B894', '#00a884']
-                        : isToday
-                          ? ['#FF6B00', '#E55A00']
-                          : isDay7
-                            ? ['#FFB366', '#FF8533']
-                            : isDark
-                              ? ['#2A2A2A', '#1E1E1E']
-                              : ['#FFFFFF', '#F8F8F8']
-                    }
-                    start={{x: 0, y: 0}}
-                    end={{x: 0, y: 1}}
-                    style={[
-                      styles.dayBoxGradient,
-                      isToday && styles.dayBoxTodayBorder,
-                    ]}
-                  >
-                    <Text style={[
-                      styles.dayLabel,
-                      (isCompleted || isToday || isDay7) && styles.dayLabelLight,
-                      !isCompleted && !isToday && !isDay7 && {color: isDark ? '#808080' : '#666666'},
-                    ]}>
-                      Day {dayReward.day}
-                    </Text>
-                    {isCompleted ? (
-                      <View style={styles.checkContainer}>
-                        <Ionicons name="checkmark" size={18} color="#fff" />
-                      </View>
-                    ) : (
-                      <View style={styles.rewardContainer}>
-                        <Text style={[
-                          styles.rewardXP,
-                          (isCompleted || isToday || isDay7) && styles.rewardXPLight,
-                          !isCompleted && !isToday && !isDay7 && {color: isDark ? '#808080' : '#666666'},
-                        ]}>
-                          +{dayReward.xp} XP
-                        </Text>
-                        {isDay7 && dayReward.credits > 0 && (
-                          <View style={styles.bonusTag}>
-                            <Ionicons name="logo-usd" size={10} color="#fff" />
-                            <Text style={styles.bonusText}>+{dayReward.credits}</Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
-                  </LinearGradient>
-                  {isToday && (
+                  return (
                     <Animated.View
-                      style={[styles.glowBorder, {opacity: glowOpacity, borderColor: '#FF6B00'}]}
-                    />
-                  )}
-                </Animated.View>
-              );
-            })}
-          </View>
+                      key={dayReward.day}
+                      style={[
+                        styles.dayBox,
+                        {
+                          transform: [{scale: dayAnims[index]}],
+                        },
+                      ]}>
+                      <LinearGradient
+                        colors={
+                          isCompleted
+                            ? ['#00B894', '#00a884']
+                            : isToday
+                              ? ['#FF6B00', '#E55A00']
+                              : isDay7
+                                ? ['#FFB366', '#FF8533']
+                                : isDark
+                                  ? ['#2A2A2A', '#1E1E1E']
+                                  : ['#FFFFFF', '#F8F8F8']
+                        }
+                        start={{x: 0, y: 0}}
+                        end={{x: 0, y: 1}}
+                        style={[
+                          styles.dayBoxGradient,
+                          isToday && styles.dayBoxTodayBorder,
+                        ]}
+                      >
+                        <View style={styles.dayContentWrapper}>
+                          <Text style={[
+                            styles.dayLabel,
+                            (isCompleted || isToday || isDay7) && styles.dayLabelLight,
+                            !isCompleted && !isToday && !isDay7 && {color: isDark ? '#808080' : '#666666'},
+                          ]}>
+                            Day {dayReward.day}
+                          </Text>
+                          {isCompleted ? (
+                            <View style={styles.checkContainer}>
+                              <Ionicons name="checkmark" size={22} color="#fff" />
+                            </View>
+                          ) : (
+                            <View style={styles.rewardContainer}>
+                              <Text style={[
+                                styles.rewardXP,
+                                (isCompleted || isToday || isDay7) && styles.rewardXPLight,
+                                !isCompleted && !isToday && !isDay7 && {color: isDark ? '#808080' : '#666666'},
+                              ]}>
+                                +{dayReward.xp} XP
+                              </Text>
+                              {isDay7 && dayReward.credits > 0 && (
+                                <View style={styles.bonusTag}>
+                                  <Ionicons name="logo-usd" size={10} color="#fff" />
+                                  <Text style={styles.bonusText}>+{dayReward.credits}</Text>
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      </LinearGradient>
+                      {isToday && (
+                        <Animated.View
+                          style={[styles.glowBorder, {opacity: glowOpacity, borderColor: '#FF6B00'}]}
+                        />
+                      )}
+                    </Animated.View>
+                  );
+                })}
+              </View>
 
-          {/* Claim Button */}
-          <TouchableOpacity
-            style={styles.claimButton}
-            onPress={onClose}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={['#FF6B00', '#FF8C00', '#FFB366']}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 0}}
-              style={styles.claimButtonGradient}
-            >
-              <Text style={styles.claimButtonText}>RISCUOTI</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              {/* Claim Button */}
+              <TouchableOpacity
+                style={styles.claimButton}
+                onPress={handleClose}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={['#FF6B00', '#FF8C00', '#FFB366']}
+                  start={{x: 0, y: 0}}
+                  end={{x: 1, y: 0}}
+                  style={styles.claimButtonGradient}
+                >
+                  <Text style={styles.claimButtonText}>RISCUOTI</Text>
+                </LinearGradient>
+              </TouchableOpacity>
 
-        </Animated.View>
-      </Animated.View>
-    </Modal>
+            </Animated.View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
+  absoluteContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+  },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
@@ -327,7 +396,6 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 360,
     borderRadius: 20,
-    overflow: 'hidden',
     borderWidth: 2,
     borderColor: '#FF6B00',
   },
@@ -350,58 +418,67 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(255, 107, 0, 0.3)',
     textShadowOffset: {width: 0, height: 2},
     textShadowRadius: 8,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   daysRow: {
     flexDirection: 'row',
-    paddingHorizontal: SPACING.md,
-    gap: 10,
+    paddingHorizontal: SPACING.sm,
+    gap: 6,
     justifyContent: 'center',
-    marginBottom: 10,
+    alignItems: 'center',
+    marginBottom: 8,
   },
   dayBox: {
-    width: 70,
-    height: 70,
+    width: 72,
+    height: 72,
     borderRadius: 12,
-    overflow: 'hidden',
     position: 'relative',
   },
   dayBoxGradient: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: 8,
-    paddingHorizontal: 4,
+    justifyContent: 'center',
     borderRadius: 12,
   },
   dayBoxTodayBorder: {
     borderWidth: 2,
     borderColor: '#FFD700',
   },
+  dayContentWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Ensure content is centered on both platforms
+    width: '100%',
+    height: '100%',
+  },
   dayLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+    marginBottom: 2,
+    includeFontPadding: false,
   },
   dayLabelLight: {
-    fontSize: 10,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
     color: '#fff',
   },
   checkContainer: {
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
   },
   rewardContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
   },
   rewardXP: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   rewardXPLight: {
     color: '#fff',
@@ -409,14 +486,16 @@ const styles = StyleSheet.create({
   bonusTag: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 2,
     marginTop: 2,
   },
   bonusText: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: '#fff',
+    includeFontPadding: false,
   },
   glowBorder: {
     position: 'absolute',
@@ -430,24 +509,21 @@ const styles = StyleSheet.create({
   claimButton: {
     margin: SPACING.lg,
     borderRadius: 14,
-    overflow: 'hidden',
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
   },
   claimButtonGradient: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
+    height: 50,
+    borderRadius: 14,
   },
   claimButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: '#fff',
     letterSpacing: 2,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
 });
 

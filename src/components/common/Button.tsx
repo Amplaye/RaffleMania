@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   ViewStyle,
   TextStyle,
+  Platform,
 } from 'react-native';
 import {COLORS, RADIUS, SPACING, FONT_SIZE, FONT_WEIGHT} from '../../utils/constants';
 import {useThemeColors} from '../../hooks/useThemeColors';
@@ -120,18 +121,21 @@ const styles = StyleSheet.create({
   fullWidth: {
     width: '100%',
   },
-  // Sizes
+  // Sizes - Same values for both platforms
   smallButton: {
-    paddingVertical: SPACING.sm,
+    paddingVertical: 8,
     paddingHorizontal: SPACING.md,
+    minHeight: 34,
   },
   mediumButton: {
-    paddingVertical: SPACING.md,
+    paddingVertical: 12,
     paddingHorizontal: SPACING.lg,
+    minHeight: 46,
   },
   largeButton: {
-    paddingVertical: SPACING.lg,
+    paddingVertical: 16,
     paddingHorizontal: SPACING.xl,
+    minHeight: 54,
   },
   // Variants
   primaryButton: {
@@ -151,9 +155,11 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.5,
   },
-  // Text
+  // Text - consistent across platforms
   text: {
     fontWeight: FONT_WEIGHT.semibold,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   smallText: {
     fontSize: FONT_SIZE.sm,
