@@ -8,14 +8,13 @@ import {
   Animated,
   StatusBar,
   Dimensions,
-  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {AnimatedBackground} from '../../components/common';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
-import {useAvatarStore, useLevelStore, AVATARS, FRAMES, Avatar, Frame} from '../../store';
+import {useAvatarStore, AVATARS, FRAMES, Avatar, Frame} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -27,14 +26,16 @@ import {
 } from '../../utils/constants';
 
 const {width} = Dimensions.get('window');
+const ITEM_SIZE = (width - SPACING.lg * 2 - SPACING.md * 2) / 3;
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AvatarCustomization'>;
 
-// Avatar Preview Component
+// Avatar Preview Component - mostra avatar con cornice come bordo
 const AvatarPreview: React.FC<{
   avatar: Avatar;
   frame: Frame;
-}> = ({avatar, frame}) => {
+  colors: any;
+}> = ({avatar, frame, colors}) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -54,17 +55,22 @@ const AvatarPreview: React.FC<{
 
   return (
     <Animated.View style={[styles.previewContainer, {transform: [{scale: scaleAnim}]}]}>
+      {/* Cornice = solo bordo */}
       <LinearGradient
         colors={frame.colors}
         start={{x: 0, y: 0}}
         end={{x: 1, y: 1}}
-        style={[styles.previewFrame, {padding: frame.borderWidth}]}>
-        <View style={[styles.previewInner, {backgroundColor: avatar.color + '20'}]}>
-          <Ionicons name={avatar.icon as any} size={60} color={avatar.color} />
+        style={[styles.previewFrame, {borderRadius: 70}]}>
+        {/* Interno con sfondo card - la cornice è visibile come bordo */}
+        <View style={[styles.previewInner, {backgroundColor: colors.card, margin: frame.borderWidth}]}>
+          {/* Avatar icon centrato */}
+          <View style={[styles.previewAvatar, {backgroundColor: avatar.color + '20'}]}>
+            <Ionicons name={avatar.icon as any} size={60} color={avatar.color} />
+          </View>
         </View>
       </LinearGradient>
-      <Text style={styles.previewName}>{avatar.name}</Text>
-      <Text style={styles.previewFrameName}>Cornice: {frame.name}</Text>
+      <Text style={[styles.previewName, {color: colors.text}]}>{avatar.name}</Text>
+      <Text style={[styles.previewFrameName, {color: colors.textMuted}]}>Cornice: {frame.name}</Text>
     </Animated.View>
   );
 };
@@ -81,42 +87,47 @@ const AvatarItem: React.FC<{
   return (
     <TouchableOpacity
       style={[
-        styles.itemContainer,
+        styles.itemBox,
         {backgroundColor: colors.card},
-        isSelected && styles.itemSelected,
-        !isUnlocked && styles.itemLocked,
+        isSelected && styles.itemBoxSelected,
+        !isUnlocked && styles.itemBoxLocked,
       ]}
       onPress={onSelect}
       disabled={!isUnlocked}
       activeOpacity={0.7}>
-      <View style={[styles.itemIconContainer, {backgroundColor: avatar.color + '20'}]}>
+      {/* Cerchio avatar */}
+      <View style={[styles.avatarCircle, {backgroundColor: avatar.color + '20'}]}>
         <Ionicons
           name={avatar.icon as any}
-          size={28}
+          size={26}
           color={isUnlocked ? avatar.color : COLORS.textMuted}
         />
-        {!isUnlocked && (
-          <View style={styles.lockOverlay}>
-            <Ionicons name="lock-closed" size={16} color={COLORS.white} />
-          </View>
-        )}
       </View>
-      <Text style={[styles.itemName, {color: isUnlocked ? colors.text : colors.textMuted}]}>
+      {/* Lock overlay */}
+      {!isUnlocked && (
+        <View style={styles.itemLockOverlay}>
+          <Ionicons name="lock-closed" size={14} color={COLORS.white} />
+        </View>
+      )}
+      {/* Nome */}
+      <Text style={[styles.itemLabel, {color: isUnlocked ? colors.text : colors.textMuted}]}>
         {avatar.name}
       </Text>
+      {/* Unlock level */}
       {!isUnlocked && (
-        <Text style={styles.itemUnlockText}>Lv. {avatar.unlockLevel}</Text>
+        <Text style={[styles.itemUnlock, {color: colors.textMuted}]}>Lv. {avatar.unlockLevel}</Text>
       )}
+      {/* Checkmark se selezionato */}
       {isSelected && isUnlocked && (
-        <View style={styles.selectedBadge}>
-          <Ionicons name="checkmark" size={14} color={COLORS.white} />
+        <View style={styles.itemCheck}>
+          <Ionicons name="checkmark" size={12} color={COLORS.white} />
         </View>
       )}
     </TouchableOpacity>
   );
 };
 
-// Frame Item Component
+// Frame Item Component - mostra solo il bordo colorato
 const FrameItem: React.FC<{
   frame: Frame;
   isSelected: boolean;
@@ -128,37 +139,41 @@ const FrameItem: React.FC<{
   return (
     <TouchableOpacity
       style={[
-        styles.itemContainer,
+        styles.itemBox,
         {backgroundColor: colors.card},
-        isSelected && styles.itemSelected,
-        !isUnlocked && styles.itemLocked,
+        isSelected && styles.itemBoxSelected,
+        !isUnlocked && styles.itemBoxLocked,
       ]}
       onPress={onSelect}
       disabled={!isUnlocked}
       activeOpacity={0.7}>
-      <View style={styles.framePreviewContainer}>
-        <LinearGradient
-          colors={isUnlocked ? frame.colors : ['#666666', '#444444']}
-          start={{x: 0, y: 0}}
-          end={{x: 1, y: 1}}
-          style={[styles.framePreview, {padding: frame.borderWidth}]}>
-          <View style={[styles.framePreviewInner, {backgroundColor: colors.card}]} />
-        </LinearGradient>
-        {!isUnlocked && (
-          <View style={styles.lockOverlay}>
-            <Ionicons name="lock-closed" size={16} color={COLORS.white} />
-          </View>
-        )}
-      </View>
-      <Text style={[styles.itemName, {color: isUnlocked ? colors.text : colors.textMuted}]}>
+      {/* Cornice preview - solo bordo visibile */}
+      <LinearGradient
+        colors={isUnlocked ? frame.colors : ['#666666', '#444444']}
+        start={{x: 0, y: 0}}
+        end={{x: 1, y: 1}}
+        style={styles.frameCircle}>
+        {/* Centro con colore card = bordo visibile */}
+        <View style={[styles.frameCenter, {backgroundColor: colors.card, margin: frame.borderWidth}]} />
+      </LinearGradient>
+      {/* Lock overlay */}
+      {!isUnlocked && (
+        <View style={styles.itemLockOverlay}>
+          <Ionicons name="lock-closed" size={14} color={COLORS.white} />
+        </View>
+      )}
+      {/* Nome */}
+      <Text style={[styles.itemLabel, {color: isUnlocked ? colors.text : colors.textMuted}]}>
         {frame.name}
       </Text>
+      {/* Unlock level */}
       {!isUnlocked && (
-        <Text style={styles.itemUnlockText}>Lv. {frame.unlockLevel}</Text>
+        <Text style={[styles.itemUnlock, {color: colors.textMuted}]}>Lv. {frame.unlockLevel}</Text>
       )}
+      {/* Checkmark se selezionato */}
       {isSelected && isUnlocked && (
-        <View style={styles.selectedBadge}>
-          <Ionicons name="checkmark" size={14} color={COLORS.white} />
+        <View style={styles.itemCheck}>
+          <Ionicons name="checkmark" size={12} color={COLORS.white} />
         </View>
       )}
     </TouchableOpacity>
@@ -167,7 +182,6 @@ const FrameItem: React.FC<{
 
 export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
   const {colors, gradientColors, isDark, neon} = useThemeColors();
-  const {level} = useLevelStore();
   const {
     selectedAvatarId,
     selectedFrameId,
@@ -175,24 +189,12 @@ export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
     setFrame,
     getSelectedAvatar,
     getSelectedFrame,
-    isAvatarUnlocked,
-    isFrameUnlocked,
   } = useAvatarStore();
 
   const [activeTab, setActiveTab] = useState<'avatars' | 'frames'>('avatars');
 
   const currentAvatar = getSelectedAvatar();
   const currentFrame = getSelectedFrame();
-
-  const handleSelectAvatar = (avatarId: string) => {
-    // All unlocked for testing
-    setAvatar(avatarId);
-  };
-
-  const handleSelectFrame = (frameId: string) => {
-    // All unlocked for testing
-    setFrame(frameId);
-  };
 
   return (
     <LinearGradient
@@ -223,18 +225,7 @@ export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
 
         {/* Avatar Preview */}
         <View style={[styles.previewSection, {backgroundColor: colors.card}, neon.glowSubtle]}>
-          <AvatarPreview avatar={currentAvatar} frame={currentFrame} />
-          <View style={styles.levelBadge}>
-            <LinearGradient
-              colors={[COLORS.primary, '#FF8500']}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 0}}
-              style={styles.levelBadgeGradient}>
-              <View style={styles.levelBadgeContent}>
-                <Text style={styles.levelBadgeText}>Livello {level}</Text>
-              </View>
-            </LinearGradient>
-          </View>
+          <AvatarPreview avatar={currentAvatar} frame={currentFrame} colors={colors} />
         </View>
 
         {/* Tab Selector */}
@@ -266,39 +257,33 @@ export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
         </View>
 
         {/* Items Grid */}
-        <View style={styles.gridContainer}>
-          {activeTab === 'avatars' ? (
-            <View style={styles.grid}>
-              {AVATARS.map(avatar => (
+        <View style={styles.grid}>
+          {activeTab === 'avatars'
+            ? AVATARS.map(avatar => (
                 <AvatarItem
                   key={avatar.id}
                   avatar={avatar}
                   isSelected={selectedAvatarId === avatar.id}
-                  isUnlocked={true} // All unlocked for testing
-                  onSelect={() => handleSelectAvatar(avatar.id)}
+                  isUnlocked={true}
+                  onSelect={() => setAvatar(avatar.id)}
                 />
-              ))}
-            </View>
-          ) : (
-            <View style={styles.grid}>
-              {FRAMES.map(frame => (
+              ))
+            : FRAMES.map(frame => (
                 <FrameItem
                   key={frame.id}
                   frame={frame}
                   isSelected={selectedFrameId === frame.id}
-                  isUnlocked={true} // All unlocked for testing
-                  onSelect={() => handleSelectFrame(frame.id)}
+                  isUnlocked={true}
+                  onSelect={() => setFrame(frame.id)}
                 />
               ))}
-            </View>
-          )}
         </View>
 
         {/* Info Card */}
         <View style={[styles.infoCard, {backgroundColor: colors.card}, neon.glowSubtle]}>
           <Ionicons name="information-circle" size={24} color={COLORS.primary} />
           <Text style={[styles.infoText, {color: colors.textMuted}]}>
-            Sali di livello per sbloccare nuovi avatar e cornici! Ogni livello sblocca nuove opzioni di personalizzazione.
+            Sali di livello per sbloccare nuovi avatar e cornici!
           </Text>
         </View>
       </ScrollView>
@@ -342,6 +327,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.xl,
   },
+
   // Preview Section
   previewSection: {
     borderRadius: RADIUS.xl,
@@ -354,7 +340,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   previewFrame: {
-    borderRadius: 70,
     marginBottom: SPACING.md,
   },
   previewInner: {
@@ -363,37 +348,24 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  previewAvatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   previewName: {
     fontSize: FONT_SIZE.xl,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
     marginBottom: 4,
   },
   previewFrameName: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textMuted,
-  },
-  levelBadge: {
-    position: 'absolute',
-    top: SPACING.md,
-    right: SPACING.md,
-    borderRadius: RADIUS.md,
-  },
-  levelBadgeGradient: {
-    borderRadius: RADIUS.md,
-  },
-  levelBadgeContent: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-  },
-  levelBadgeText: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
   },
   // Tab Selector
   tabContainer: {
@@ -424,95 +396,86 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: FONT_WEIGHT.bold,
   },
+
   // Grid
-  gridContainer: {
-    marginBottom: SPACING.lg,
-  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: SPACING.md,
-    justifyContent: 'space-between',
+    marginBottom: SPACING.lg,
   },
-  // Item
-  itemContainer: {
-    width: (width - SPACING.lg * 2 - SPACING.md * 2) / 3,
+
+  // Item Box
+  itemBox: {
+    width: ITEM_SIZE,
     alignItems: 'center',
-    padding: SPACING.sm,
     paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xs,
     borderRadius: RADIUS.lg,
-    position: 'relative',
-    marginBottom: SPACING.xs,
   },
-  itemSelected: {
+  itemBoxSelected: {
     borderWidth: 2,
     borderColor: COLORS.primary,
   },
-  itemLocked: {
+  itemBoxLocked: {
     opacity: 0.6,
   },
-  itemIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+
+  // Avatar Circle
+  avatarCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.xs,
-    position: 'relative',
   },
-  lockOverlay: {
+
+  // Frame Circle - solo bordo
+  frameCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    marginBottom: SPACING.xs,
+  },
+  frameCenter: {
+    flex: 1,
+    borderRadius: 26,
+  },
+
+  // Item elements
+  itemLockOverlay: {
     position: 'absolute',
-    top: 0,
+    top: SPACING.md,
     left: 0,
     right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    height: 52,
   },
-  itemName: {
+  itemLabel: {
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.medium,
     fontWeight: FONT_WEIGHT.medium,
     textAlign: 'center',
   },
-  itemUnlockText: {
-    fontSize: FONT_SIZE.xs,
+  itemUnlock: {
+    fontSize: 10,
     fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textMuted,
     marginTop: 2,
   },
-  selectedBadge: {
+  itemCheck: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    top: 6,
+    right: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Frame Preview
-  framePreviewContainer: {
-    width: 56,
-    height: 56,
-    marginBottom: SPACING.xs,
-    position: 'relative',
-  },
-  framePreview: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  framePreviewInner: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 20,
-  },
+
   // Info Card
   infoCard: {
     flexDirection: 'row',

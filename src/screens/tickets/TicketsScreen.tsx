@@ -9,13 +9,21 @@ import {
   StatusBar,
   Dimensions,
   Platform,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {AnimatedBackground} from '../../components/common';
-import {useTicketsStore, usePrizesStore, TICKET_PROBABILITY_BONUS} from '../../store';
+import {useTicketsStore, usePrizesStore} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
-import {Ticket} from '../../types';
+import {Ticket, Prize} from '../../types';
+import {getTotalPoolTickets} from '../../services/mock';
 import {
   COLORS,
   SPACING,
@@ -24,7 +32,7 @@ import {
   FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
-import {formatDate, formatTicketCode} from '../../utils/formatters';
+import {formatDate, formatTicketNumber} from '../../utils/formatters';
 
 const {width} = Dimensions.get('window');
 
@@ -32,6 +40,15 @@ type TabType = 'active' | 'wins';
 
 interface TicketsScreenProps {
   navigation: any;
+}
+
+// Interface for grouped tickets by prize
+interface GroupedPrize {
+  prizeId: string;
+  prizeName: string;
+  tickets: Ticket[];
+  numbers: number[];
+  totalPoolTickets: number;
 }
 
 // Animated Tab Component
@@ -57,58 +74,38 @@ const AnimatedTab: React.FC<{
       Animated.timing(colorAnim, {
         toValue,
         duration: 250,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
     ]).start();
-  }, [activeTab, slideAnim, colorAnim]);
+  }, [activeTab]);
 
-  // Calculate the exact width of each tab for proper animation
-  const tabWidth = (width - SPACING.lg * 2 - 8) / 2;
   const translateX = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, tabWidth],
-  });
-
-  // Opacity for color transition between two gradients
-  const winsOpacity = colorAnim;
-  const activeOpacity = colorAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 0],
+    outputRange: [0, (width - SPACING.lg * 2 - 8) / 2],
   });
 
   return (
-    <View style={styles.tabsContainer}>
+    <View style={[styles.tabsContainer, neon.glowSubtle]}>
       <Animated.View
         style={[
           styles.tabIndicator,
-          neon.glow,
           {transform: [{translateX}]},
         ]}>
-        {/* Active gradient (orange) */}
-        <Animated.View style={[styles.tabIndicatorGradient, {opacity: activeOpacity}]}>
-          <LinearGradient
-            colors={[COLORS.primary, '#FF8500']}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 0}}
-            style={styles.tabIndicatorGradient}
-          />
-        </Animated.View>
-        {/* Wins gradient (gold) */}
-        <Animated.View style={[styles.tabIndicatorGradient, styles.tabIndicatorOverlay, {opacity: winsOpacity}]}>
-          <LinearGradient
-            colors={['#FFD700', '#FFA000']}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 0}}
-            style={styles.tabIndicatorGradient}
-          />
-        </Animated.View>
+        <LinearGradient
+          colors={[COLORS.primary, '#FF8500']}
+          start={{x: 0, y: 0}}
+          end={{x: 1, y: 0}}
+          style={styles.tabIndicatorGradient}
+        />
       </Animated.View>
+
       <TouchableOpacity
         style={styles.tab}
-        onPress={() => onTabChange('active')}>
+        onPress={() => onTabChange('active')}
+        activeOpacity={0.7}>
         <Ionicons
-          name={activeTab === 'active' ? 'ticket' : 'ticket-outline'}
-          size={18}
+          name="ticket"
+          size={16}
           color={activeTab === 'active' ? COLORS.white : COLORS.textMuted}
         />
         <Text
@@ -119,12 +116,14 @@ const AnimatedTab: React.FC<{
           Attivi ({activeCount})
         </Text>
       </TouchableOpacity>
+
       <TouchableOpacity
         style={styles.tab}
-        onPress={() => onTabChange('wins')}>
+        onPress={() => onTabChange('wins')}
+        activeOpacity={0.7}>
         <Ionicons
-          name={activeTab === 'wins' ? 'trophy' : 'trophy-outline'}
-          size={18}
+          name="trophy"
+          size={16}
           color={activeTab === 'wins' ? COLORS.white : COLORS.textMuted}
         />
         <Text
@@ -139,19 +138,18 @@ const AnimatedTab: React.FC<{
   );
 };
 
-// Active Ticket Card - Simple design with ticket count and probability
-const ActiveTicketCard: React.FC<{
-  ticket: Ticket;
-  prizeName: string;
+// Prize Group Card - Shows prize with ticket count and expandable numbers
+const PrizeGroupCard: React.FC<{
+  group: GroupedPrize;
   index: number;
-  ticketCount: number;
-  onPress: () => void;
-}> = ({ticket, prizeName, index, ticketCount, onPress}) => {
+  onPressTicket: (ticketId: string) => void;
+}> = ({group, index, onPressTicket}) => {
+  const {colors, neon} = useThemeColors();
+  const [expanded, setExpanded] = useState(false);
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
-
-  // Calculate win probability
-  const winProbability = (ticketCount * TICKET_PROBABILITY_BONUS * 100).toFixed(1);
+  const expandAnim = useRef(new Animated.Value(0)).current;
+  const contentHeight = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -159,113 +157,117 @@ const ActiveTicketCard: React.FC<{
         toValue: 1,
         friction: 8,
         tension: 40,
-        delay: index * 60,
+        delay: index * 80,
         useNativeDriver: true,
       }),
       Animated.timing(opacityAnim, {
         toValue: 1,
-        duration: 250,
-        delay: index * 60,
+        duration: 300,
+        delay: index * 80,
         useNativeDriver: true,
       }),
     ]).start();
   }, []);
 
+  const toggleExpand = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpanded(!expanded);
+    Animated.timing(expandAnim, {
+      toValue: expanded ? 0 : 1,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const rotateIcon = expandAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
   return (
     <Animated.View
       style={[
-        styles.activeCardContainer,
+        styles.prizeGroupContainer,
         {
           opacity: opacityAnim,
           transform: [{scale: scaleAnim}],
         },
       ]}>
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={onPress}
-        style={styles.activeCard}>
-        <View style={styles.activeCardLeft}>
-          <View style={styles.ticketIconContainer}>
-            <Ionicons name="ticket" size={24} color={COLORS.primary} />
+      <View style={[styles.prizeGroupCard, neon.glowSubtle, {backgroundColor: colors.card}]}>
+        {/* Header - Prize info and count */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={toggleExpand}
+          style={styles.prizeGroupHeader}>
+          <View style={styles.prizeGroupLeft}>
+            <View style={styles.prizeIconContainer}>
+              <Ionicons name="gift" size={24} color={COLORS.primary} />
+            </View>
+            <View style={styles.prizeGroupInfo}>
+              <Text style={[styles.prizeGroupName, {color: colors.text}]} numberOfLines={1}>
+                {group.prizeName}
+              </Text>
+              <Text style={styles.prizeGroupSubtitle}>
+                {group.numbers.length} {group.numbers.length === 1 ? 'numero' : 'numeri'} • {((group.numbers.length / group.totalPoolTickets) * 100).toFixed(2)}% chance
+              </Text>
+            </View>
           </View>
-          <View style={styles.activeCardInfo}>
-            <Text style={styles.activeCardCode}>{formatTicketCode(ticket.uniqueCode)}</Text>
-            <Text style={styles.activeCardPrize} numberOfLines={1}>{prizeName}</Text>
+
+          <View style={styles.prizeGroupRight}>
+            {/* Expand Arrow */}
+            <Animated.View style={{transform: [{rotate: rotateIcon}]}}>
+              <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+            </Animated.View>
           </View>
-        </View>
-        {/* Ticket count and probability */}
-        <View style={styles.ticketStatsContainer}>
-          <View style={styles.ticketCountBadge}>
-            <Ionicons name="ticket" size={12} color={COLORS.white} />
-            <Text style={styles.ticketCountText}>{ticketCount}</Text>
+        </TouchableOpacity>
+
+        {/* Expandable Numbers List */}
+        {expanded && (
+          <View style={[styles.numbersContainer, {borderTopColor: colors.border}]}>
+            <Text style={[styles.numbersTitle, {color: colors.textMuted}]}>I tuoi numeri:</Text>
+            <Text style={styles.numbersListText}>
+              {group.numbers.map((num, idx) => (
+                <Text key={num}>
+                  <Text style={styles.numberHighlight}>#{num}</Text>
+                  {idx < group.numbers.length - 1 && <Text style={[styles.numberSeparator, {color: colors.textMuted}]}>  •  </Text>}
+                </Text>
+              ))}
+            </Text>
           </View>
-          <View style={styles.probabilityBadge}>
-            <LinearGradient
-              colors={['#00B894', '#00A085']}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 0}}
-              style={styles.probabilityGradient}>
-              <View style={styles.probabilityContent}>
-                <Ionicons name="trending-up" size={12} color={COLORS.white} />
-                <Text style={styles.probabilityText}>{winProbability}%</Text>
-              </View>
-            </LinearGradient>
-          </View>
-        </View>
-      </TouchableOpacity>
+        )}
+      </View>
     </Animated.View>
   );
 };
 
-// Winning Ticket Card - Special golden design with emphasis
+// Winning Ticket Card - Redesigned to match new system
 const WinningTicketCard: React.FC<{
   ticket: Ticket;
   prizeName: string;
   index: number;
   onPress: () => void;
 }> = ({ticket, prizeName, index, onPress}) => {
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const {colors} = useThemeColors();
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.spring(scaleAnim, {
         toValue: 1,
-        friction: 6,
+        friction: 8,
         tension: 40,
-        delay: index * 100,
+        delay: index * 80,
         useNativeDriver: true,
       }),
       Animated.timing(opacityAnim, {
         toValue: 1,
-        duration: 400,
-        delay: index * 100,
+        duration: 300,
+        delay: index * 80,
         useNativeDriver: true,
       }),
     ]).start();
-
-    // Pulsing glow effect
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 1,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowAnim, {
-          toValue: 0,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
   }, []);
-
-  const glowOpacity = glowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.3, 0.6],
-  });
 
   return (
     <Animated.View
@@ -276,43 +278,30 @@ const WinningTicketCard: React.FC<{
           transform: [{scale: scaleAnim}],
         },
       ]}>
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={onPress}
-        style={styles.winCard}>
-        {/* Golden Glow Background */}
-        <Animated.View style={[styles.winCardGlow, {opacity: glowOpacity}]} />
-
-        {/* Golden Border */}
+      <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
         <LinearGradient
-          colors={['#FFD700', '#FFA000', '#FF8C00']}
+          colors={['#FFD700', '#FFA500', '#FF8C00']}
           start={{x: 0, y: 0}}
-          end={{x: 1, y: 1}}
-          style={styles.winCardBorder}>
-          <View style={styles.winCardInner}>
-            {/* Trophy Badge */}
-            <View style={styles.trophyContainer}>
-              <LinearGradient
-                colors={['#FFD700', '#FFA000']}
-                style={styles.trophyBadge}>
-                <Ionicons name="trophy" size={28} color="#FFFFFF" />
-              </LinearGradient>
+          end={{x: 1, y: 0}}
+          style={styles.winCardGradient}>
+          <View style={styles.winCardContent}>
+            {/* Left: Trophy Icon */}
+            <View style={styles.winTrophyContainer}>
+              <Ionicons name="trophy" size={32} color="#FFFFFF" />
             </View>
 
-            {/* Win Info */}
-            <View style={styles.winInfo}>
-              <Text style={styles.winLabel}>HAI VINTO!</Text>
-              <Text style={styles.winPrizeName} numberOfLines={2}>{prizeName}</Text>
-              <View style={styles.winCodeContainer}>
-                <Text style={styles.winCodeLabel}>Codice:</Text>
-                <Text style={styles.winCode}>{formatTicketCode(ticket.uniqueCode)}</Text>
-              </View>
-              <Text style={styles.winDate}>{formatDate(ticket.createdAt)}</Text>
+            {/* Center: Info */}
+            <View style={styles.winInfoSection}>
+              <Text style={styles.winPrizeName} numberOfLines={1}>{prizeName}</Text>
+              <Text style={styles.winSubtitle}>
+                Numero vincente: <Text style={styles.winNumberHighlight}>#{ticket.ticketNumber}</Text>
+              </Text>
+              <Text style={styles.winDate}>{formatDate(ticket.wonAt || ticket.createdAt)}</Text>
             </View>
 
-            {/* Arrow */}
-            <View style={styles.winArrow}>
-              <Ionicons name="chevron-forward" size={24} color="#FFA000" />
+            {/* Right: Arrow */}
+            <View style={styles.winArrowContainer}>
+              <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.8)" />
             </View>
           </View>
         </LinearGradient>
@@ -324,13 +313,30 @@ const WinningTicketCard: React.FC<{
 export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
   const [activeTab, setActiveTab] = useState<TabType>('active');
-  const {activeTickets, pastTickets, fetchTickets, getTicketsForPrize} = useTicketsStore();
+  const {activeTickets, pastTickets, fetchTickets, getTicketNumbersForPrize} = useTicketsStore();
   const {prizes} = usePrizesStore();
   const [refreshing, setRefreshing] = useState(false);
+  const contentOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     fetchTickets();
   }, []);
+
+  const handleTabChange = (tab: TabType) => {
+    // Animate content fade out, switch tab, fade in
+    Animated.timing(contentOpacity, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(() => {
+      setActiveTab(tab);
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    });
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -338,37 +344,61 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
     setRefreshing(false);
   };
 
+  // Group active tickets by prize
+  const groupedPrizes: GroupedPrize[] = React.useMemo(() => {
+    const prizeMap = new Map<string, GroupedPrize>();
+
+    activeTickets.forEach(ticket => {
+      const existing = prizeMap.get(ticket.prizeId);
+      const prize = prizes.find(p => p.id === ticket.prizeId);
+
+      if (existing) {
+        existing.tickets.push(ticket);
+        if (!existing.numbers.includes(ticket.ticketNumber)) {
+          existing.numbers.push(ticket.ticketNumber);
+        }
+      } else {
+        prizeMap.set(ticket.prizeId, {
+          prizeId: ticket.prizeId,
+          prizeName: prize?.name || 'Premio',
+          tickets: [ticket],
+          numbers: [ticket.ticketNumber],
+          totalPoolTickets: getTotalPoolTickets(ticket.prizeId),
+        });
+      }
+    });
+
+    // Sort numbers in each group
+    prizeMap.forEach(group => {
+      group.numbers.sort((a, b) => a - b);
+    });
+
+    return Array.from(prizeMap.values());
+  }, [activeTickets, prizes]);
+
   // Filter: only winning tickets in history
   const winningTickets = pastTickets.filter(t => t.isWinner);
 
-  // Filter: only primary tickets (ones with unique codes)
-  const primaryTickets = activeTickets.filter(t => t.isPrimaryTicket);
+  // Count unique prizes for active tab
+  const uniquePrizesCount = groupedPrizes.length;
 
-  // Get tickets based on active tab
-  const tickets = activeTab === 'active' ? primaryTickets : winningTickets;
+  const renderGroupedPrize = ({item, index}: {item: GroupedPrize; index: number}) => (
+    <PrizeGroupCard
+      group={item}
+      index={index}
+      onPressTicket={(ticketId) => navigation.navigate('TicketDetail', {ticketId})}
+    />
+  );
 
-  const renderTicket = ({item, index}: {item: Ticket; index: number}) => {
+  const renderWinningTicket = ({item, index}: {item: Ticket; index: number}) => {
     const prize = prizes.find(p => p.id === item.prizeId);
     const prizeName = prize?.name || 'Premio';
-    const ticketCount = getTicketsForPrize(item.prizeId);
-
-    if (activeTab === 'wins') {
-      return (
-        <WinningTicketCard
-          ticket={item}
-          prizeName={prizeName}
-          index={index}
-          onPress={() => navigation.navigate('TicketDetail', {ticketId: item.id})}
-        />
-      );
-    }
 
     return (
-      <ActiveTicketCard
+      <WinningTicketCard
         ticket={item}
         prizeName={prizeName}
         index={index}
-        ticketCount={ticketCount}
         onPress={() => navigation.navigate('TicketDetail', {ticketId: item.id})}
       />
     );
@@ -379,14 +409,16 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
       <View style={styles.titleSection}>
         <Text style={[styles.title, {color: colors.text}]}>I Miei Biglietti</Text>
         <Text style={[styles.subtitle, {color: colors.textMuted}]}>
-          I biglietti scaduti vengono rimossi automaticamente
+          {activeTab === 'active'
+            ? `${uniquePrizesCount} ${uniquePrizesCount === 1 ? 'premio' : 'premi'} attivi con ${activeTickets.length} numeri totali`
+            : 'Le tue vincite passate'}
         </Text>
       </View>
 
       <AnimatedTab
         activeTab={activeTab}
-        onTabChange={setActiveTab}
-        activeCount={primaryTickets.length}
+        onTabChange={handleTabChange}
+        activeCount={uniquePrizesCount}
         winsCount={winningTickets.length}
       />
     </View>
@@ -429,17 +461,52 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
       style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
       <AnimatedBackground />
-      <FlatList
-        data={tickets}
-        renderItem={renderTicket}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        refreshing={refreshing}
-        onRefresh={handleRefresh}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmpty}
-      />
+
+      {/* Fixed Header with Tabs */}
+      <View style={styles.fixedHeader}>
+        <View style={styles.titleSection}>
+          <Text style={[styles.title, {color: colors.text}]}>I Miei Biglietti</Text>
+          <Text style={[styles.subtitle, {color: colors.textMuted}]}>
+            {activeTab === 'active'
+              ? `${uniquePrizesCount} ${uniquePrizesCount === 1 ? 'premio' : 'premi'} attivi con ${activeTickets.length} numeri totali`
+              : 'Le tue vincite passate'}
+          </Text>
+        </View>
+
+        <AnimatedTab
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          activeCount={uniquePrizesCount}
+          winsCount={winningTickets.length}
+        />
+      </View>
+
+      {/* Animated Content */}
+      <Animated.View style={[styles.contentContainer, {opacity: contentOpacity}]}>
+        {activeTab === 'active' ? (
+          <FlatList
+            data={groupedPrizes}
+            renderItem={renderGroupedPrize}
+            keyExtractor={item => item.prizeId}
+            contentContainerStyle={styles.listContentNoHeader}
+            showsVerticalScrollIndicator={false}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            ListEmptyComponent={renderEmpty}
+          />
+        ) : (
+          <FlatList
+            data={winningTickets}
+            renderItem={renderWinningTicket}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.listContentNoHeader}
+            showsVerticalScrollIndicator={false}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            ListEmptyComponent={renderEmpty}
+          />
+        )}
+      </Animated.View>
     </LinearGradient>
   );
 };
@@ -448,14 +515,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  listContent: {
+  fixedHeader: {
     paddingTop: SPACING.xl + 30,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
+  },
+  contentContainer: {
+    flex: 1,
+  },
+  listContentNoHeader: {
+    paddingTop: SPACING.sm,
     paddingBottom: 140,
     flexGrow: 1,
-  },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.lg,
   },
   titleSection: {
     marginBottom: SPACING.lg,
@@ -497,13 +568,6 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: RADIUS.lg,
   },
-  tabIndicatorOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
   tab: {
     flex: 1,
     flexDirection: 'row',
@@ -523,30 +587,33 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: FONT_WEIGHT.semibold,
   },
-  // Active Ticket Card - Simple
-  activeCardContainer: {
+  // Prize Group Card
+  prizeGroupContainer: {
     paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
   },
-  activeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  prizeGroupCard: {
     backgroundColor: COLORS.card,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
+    borderRadius: RADIUS.xl,
+    overflow: 'hidden',
     shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  activeCardLeft: {
+  prizeGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.md,
+  },
+  prizeGroupLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  ticketIconContainer: {
+  prizeIconContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -555,146 +622,109 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: SPACING.md,
   },
-  activeCardInfo: {
+  prizeGroupInfo: {
     flex: 1,
   },
-  activeCardCode: {
+  prizeGroupName: {
     fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.text,
-    letterSpacing: 1,
   },
-  activeCardPrize: {
+  prizeGroupSubtitle: {
     fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textMuted,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: '#000000',
     marginTop: 2,
   },
-  // Ticket stats (count and probability)
-  ticketStatsContainer: {
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  ticketCountBadge: {
+  prizeGroupRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: RADIUS.sm,
-    gap: 4,
+    gap: SPACING.sm,
   },
-  ticketCountText: {
-    fontSize: FONT_SIZE.xs,
+  // Numbers Container
+  numbersContainer: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+  },
+  numbersTitle: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.medium,
+    fontWeight: FONT_WEIGHT.medium,
+    color: COLORS.textMuted,
+    marginBottom: SPACING.sm,
+  },
+  numbersListText: {
+    fontSize: FONT_SIZE.lg,
+    lineHeight: 28,
+    flexWrap: 'wrap',
+  },
+  numberHighlight: {
+    fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
+    color: COLORS.primary,
   },
-  probabilityBadge: {
-    borderRadius: RADIUS.sm,
+  numberSeparator: {
+    fontSize: FONT_SIZE.md,
   },
-  probabilityGradient: {
-    borderRadius: RADIUS.sm,
-  },
-  probabilityContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 4,
-  },
-  probabilityText: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
-  },
-  // Winning Ticket Card - Special Golden Design
+  // Winning Ticket Card - Redesigned
   winCardContainer: {
     paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.md,
   },
-  winCard: {
+  winCardGradient: {
     borderRadius: RADIUS.xl,
+    shadowColor: '#FFD700',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  winCardGlow: {
-    position: 'absolute',
-    top: -10,
-    left: -10,
-    right: -10,
-    bottom: -10,
-    backgroundColor: '#FFD700',
-    borderRadius: RADIUS.xl + 10,
-  },
-  winCardBorder: {
-    padding: 3,
-    borderRadius: RADIUS.xl,
-  },
-  winCardInner: {
+  winCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFEF5',
-    borderRadius: RADIUS.xl - 2,
-    padding: SPACING.lg,
+    padding: SPACING.md,
   },
-  trophyContainer: {
-    marginRight: SPACING.md,
-  },
-  trophyBadge: {
+  winTrophyContainer: {
     width: 56,
     height: 56,
     borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FFD700',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
+    marginRight: SPACING.md,
   },
-  winInfo: {
+  winInfoSection: {
     flex: 1,
-  },
-  winLabel: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: '#FFA000',
-    letterSpacing: 1.5,
-    marginBottom: 4,
   },
   winPrizeName: {
     fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
+    color: '#FFFFFF',
+    marginBottom: 2,
   },
-  winCodeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  winSubtitle: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.medium,
+    color: 'rgba(255,255,255,0.9)',
     marginBottom: 4,
   },
-  winCodeLabel: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textMuted,
-  },
-  winCode: {
-    fontSize: FONT_SIZE.sm,
+  winNumberHighlight: {
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: '#FFA000',
-    letterSpacing: 1,
+    color: '#FFFFFF',
   },
   winDate: {
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textMuted,
+    color: 'rgba(255,255,255,0.7)',
   },
-  winArrow: {
+  winArrowContainer: {
     marginLeft: SPACING.sm,
   },
   // Empty State

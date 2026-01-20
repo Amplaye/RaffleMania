@@ -108,7 +108,8 @@ interface ExtractionResultModalProps {
   isWinner: boolean;
   prizeName?: string;
   prizeImage?: string;
-  ticketCode?: string;
+  winningNumber?: number;
+  userNumbers?: number[];
   onClose: () => void;
 }
 
@@ -117,7 +118,8 @@ export const ExtractionResultModal: React.FC<ExtractionResultModalProps> = ({
   isWinner,
   prizeName,
   prizeImage,
-  ticketCode,
+  winningNumber,
+  userNumbers = [],
   onClose,
 }) => {
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
@@ -192,10 +194,11 @@ export const ExtractionResultModal: React.FC<ExtractionResultModalProps> = ({
 
                 <Text style={styles.prizeName}>{prizeName}</Text>
 
-                {ticketCode && (
-                  <View style={styles.ticketCodeContainer}>
-                    <Text style={styles.ticketCodeLabel}>Biglietto Vincente</Text>
-                    <Text style={styles.ticketCode}>{ticketCode}</Text>
+                {winningNumber !== undefined && (
+                  <View style={styles.winningNumberContainer}>
+                    <Text style={styles.winningNumberLabel}>Numero Estratto</Text>
+                    <Text style={styles.winningNumber}>#{winningNumber}</Text>
+                    <Text style={styles.winnerMessage}>Il numero #{winningNumber} era tuo!</Text>
                   </View>
                 )}
 
@@ -219,20 +222,30 @@ export const ExtractionResultModal: React.FC<ExtractionResultModalProps> = ({
               <Text style={styles.loserTitle}>Peccato!</Text>
               <Text style={styles.loserSubtitle}>Non hai vinto questa volta</Text>
 
+              {/* Winning Number Display */}
+              {winningNumber !== undefined && (
+                <View style={styles.extractedNumberBox}>
+                  <Text style={styles.extractedNumberLabel}>Numero Estratto</Text>
+                  <Text style={styles.extractedNumber}>#{winningNumber}</Text>
+                </View>
+              )}
+
+              {/* User's Numbers */}
+              {userNumbers.length > 0 && (
+                <View style={styles.userNumbersBox}>
+                  <Text style={styles.userNumbersLabel}>I tuoi numeri erano:</Text>
+                  <Text style={styles.userNumbersList}>
+                    {userNumbers.map(n => `#${n}`).join(', ')}
+                  </Text>
+                </View>
+              )}
+
               {/* Encouragement */}
               <View style={styles.encouragementBox}>
                 <Ionicons name="flash" size={24} color={COLORS.primary} />
                 <Text style={styles.encouragementText}>
-                  Non arrenderti! Continua a partecipare per aumentare le tue possibilità di vincita.
+                  Più numeri hai, più chance di vincere! Continua a partecipare.
                 </Text>
-              </View>
-
-              {/* Stats */}
-              <View style={styles.statsRow}>
-                <View style={styles.statItem}>
-                  <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
-                  <Text style={styles.statText}>Prossima estrazione presto</Text>
-                </View>
               </View>
 
               {/* Close Button */}
@@ -327,26 +340,33 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: SPACING.md,
   },
-  ticketCodeContainer: {
+  winningNumberContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.md,
     borderRadius: RADIUS.md,
     marginBottom: SPACING.md,
+    alignItems: 'center',
   },
-  ticketCodeLabel: {
+  winningNumberLabel: {
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.medium,
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
   },
-  ticketCode: {
-    fontSize: FONT_SIZE.xl,
+  winningNumber: {
+    fontSize: 36,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: 2,
+    marginVertical: 4,
+  },
+  winnerMessage: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.medium,
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
   },
   winnerButton: {
     backgroundColor: '#FFFFFF',
@@ -391,7 +411,46 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.md,
     fontFamily: FONT_FAMILY.regular,
     color: '#888',
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
+  },
+  extractedNumberBox: {
+    backgroundColor: '#F5F5F5',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.md,
+    alignItems: 'center',
+  },
+  extractedNumberLabel: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.medium,
+    color: '#888',
+  },
+  extractedNumber: {
+    fontSize: 32,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: '#333',
+  },
+  userNumbersBox: {
+    backgroundColor: `${COLORS.primary}10`,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.md,
+    alignItems: 'center',
+  },
+  userNumbersLabel: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.medium,
+    color: '#666',
+    marginBottom: 4,
+  },
+  userNumbersList: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.primary,
   },
   encouragementBox: {
     flexDirection: 'row',

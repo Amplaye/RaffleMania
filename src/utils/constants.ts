@@ -171,20 +171,13 @@ export const NEON_STYLES = {
   },
 };
 
-// Font Family - Platform-specific for consistent rendering
-// Comic Sans MS is not available on Android, use system fonts
-export const FONT_FAMILY = Platform.select({
-  ios: {
-    regular: 'System',
-    medium: 'System',
-    bold: 'System',
-  },
-  android: {
-    regular: 'Roboto',
-    medium: 'Roboto',
-    bold: 'Roboto',
-  },
-}) as {regular: string; medium: string; bold: string};
+// Font Family - Poppins
+export const FONT_FAMILY = {
+  regular: 'Poppins-Regular',
+  medium: 'Poppins-Medium',
+  semibold: 'Poppins-SemiBold',
+  bold: 'Poppins-Bold',
+};
 
 // Spacing
 export const SPACING = {

@@ -126,17 +126,7 @@ const LevelItem: React.FC<{
             </Text>
           </View>
 
-          {isCurrent && (
-            <View style={styles.currentBadge}>
-              <LinearGradient
-                colors={[COLORS.primary, '#FF8500']}
-                style={styles.currentBadgeGradient}>
-                <Text style={styles.currentBadgeText}>ATTUALE</Text>
-              </LinearGradient>
-            </View>
-          )}
-
-          {isUnlocked && !isCurrent && (
+          {isUnlocked && (
             <View style={[styles.unlockedBadge, {backgroundColor: `${levelInfo.color}20`}]}>
               <Ionicons name="checkmark-circle" size={20} color={levelInfo.color} />
             </View>
@@ -194,7 +184,7 @@ const LevelItem: React.FC<{
 };
 
 export const LevelDetailScreen: React.FC<LevelDetailScreenProps> = ({navigation}) => {
-  const {colors} = useThemeColors();
+  const {colors, neon} = useThemeColors();
   const {level, totalXP, getLevelInfo} = useLevelStore();
   const currentLevelInfo = getLevelInfo();
 
@@ -214,27 +204,31 @@ export const LevelDetailScreen: React.FC<LevelDetailScreenProps> = ({navigation}
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Current Level Summary */}
-        <Card style={styles.summaryCard}>
-          <LinearGradient
-            colors={[currentLevelInfo.color, currentLevelInfo.color + '88']}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 1}}
-            style={styles.summaryGradient}>
-            <View style={styles.summaryContent}>
-              <View style={styles.summaryIconContainer}>
-                <Ionicons name={currentLevelInfo.icon as any} size={48} color={COLORS.white} />
+        <View style={styles.header}>
+          <View style={[styles.balanceCard, neon.glowStrong]}>
+            <LinearGradient
+              colors={[COLORS.primary, '#FF6B00']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}
+              style={styles.balanceGradient}>
+              <View style={styles.balanceContentWrapper}>
+                <View style={styles.balanceContentRow}>
+                  <View style={styles.levelIconContainer}>
+                    <Ionicons name={currentLevelInfo.icon as any} size={40} color={COLORS.white} />
+                  </View>
+                  <View style={styles.levelInfoContainer}>
+                    <Text style={styles.balanceLabel}>Il tuo livello</Text>
+                    <Text style={styles.levelName}>{currentLevelInfo.name}</Text>
+                    <Text style={styles.balanceSubtext}>{totalXP.toLocaleString()} XP totali</Text>
+                  </View>
+                  <View style={styles.levelNumberBadge}>
+                    <Text style={styles.levelNumberText}>{level}</Text>
+                  </View>
+                </View>
               </View>
-              <View style={styles.summaryInfo}>
-                <Text style={styles.summaryLabel}>Il tuo livello</Text>
-                <Text style={styles.summaryName}>{currentLevelInfo.name}</Text>
-                <Text style={styles.summaryXp}>{totalXP.toLocaleString()} XP totali</Text>
-              </View>
-              <View style={styles.summaryLevelBadge}>
-                <Text style={styles.summaryLevelNumber}>{level}</Text>
-              </View>
-            </View>
-          </LinearGradient>
-        </Card>
+            </LinearGradient>
+          </View>
+        </View>
 
         {/* All Levels */}
         <Text style={[styles.sectionTitle, {color: colors.text}]}>Tutti i Livelli</Text>
@@ -282,51 +276,59 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 40,
   },
-  // Summary Card
-  summaryCard: {
-    marginTop: SPACING.sm,
-    marginBottom: SPACING.md,
-    padding: 0,
-    overflow: 'hidden',
+  // Balance Card (same as Credits page)
+  header: {
+    paddingVertical: SPACING.md,
   },
-  summaryGradient: {
+  balanceCard: {
+    borderRadius: RADIUS.xl,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  balanceGradient: {
+    borderRadius: RADIUS.xl,
+  },
+  balanceContentWrapper: {
     padding: SPACING.lg,
   },
-  summaryContent: {
+  balanceContentRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  summaryIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  levelIconContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.md,
   },
-  summaryInfo: {
+  levelInfoContainer: {
     flex: 1,
   },
-  summaryLabel: {
+  balanceLabel: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.regular,
     color: 'rgba(255,255,255,0.8)',
   },
-  summaryName: {
-    fontSize: FONT_SIZE.xxl,
+  levelName: {
+    fontSize: FONT_SIZE.xl,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.white,
     marginTop: 2,
   },
-  summaryXp: {
-    fontSize: FONT_SIZE.md,
-    fontFamily: FONT_FAMILY.medium,
-    color: 'rgba(255,255,255,0.9)',
+  balanceSubtext: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    color: 'rgba(255,255,255,0.7)',
     marginTop: 4,
   },
-  summaryLevelBadge: {
+  levelNumberBadge: {
     width: 50,
     height: 50,
     borderRadius: 25,
@@ -334,7 +336,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  summaryLevelNumber: {
+  levelNumberText: {
     fontSize: FONT_SIZE.xxl,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
@@ -412,8 +414,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   currentBadgeGradient: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 2,
   },
   currentBadgeText: {
     fontSize: FONT_SIZE.xs,

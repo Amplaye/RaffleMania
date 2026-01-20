@@ -56,12 +56,12 @@ const AnimatedProgressBar: React.FC<{
 
   return (
     <View style={[styles.animatedProgressBg, {backgroundColor, height, borderRadius: height / 2}]}>
-      <Animated.View style={[styles.animatedProgressFill, {width: animatedWidth, borderRadius: height / 2}]}>
+      <Animated.View style={[styles.animatedProgressFill, {width: animatedWidth, height, borderRadius: height / 2}]}>
         <LinearGradient
-          colors={[color, color + 'CC']}
+          colors={[COLORS.primary, '#FF8500']}
           start={{x: 0, y: 0}}
           end={{x: 1, y: 0}}
-          style={[styles.animatedProgressGradient, {borderRadius: height / 2}]}
+          style={[styles.animatedProgressGradient, {height, borderRadius: height / 2}]}
         />
         <Animated.View
           style={[
@@ -74,9 +74,8 @@ const AnimatedProgressBar: React.FC<{
   );
 };
 
-// Level Card Component - Enhanced with animations, now clickable
+// Level Card Component
 const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors, onPress}) => {
-  // Subscribe to specific state values for reactivity
   const level = useLevelStore(state => state.level);
   const totalXP = useLevelStore(state => state.totalXP);
   const getLevelInfo = useLevelStore(state => state.getLevelInfo);
@@ -92,76 +91,68 @@ const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors, onPres
   return (
     <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
       <Card style={[styles.levelCard, neon.glowSubtle]}>
-        {/* Level Header with Large Badge */}
-        <View style={styles.levelMainHeader}>
-          <View style={[styles.levelBadgeContainer, neon.glowStrong]}>
+        {/* Header row */}
+        <View style={styles.levelHeader}>
+          {/* Badge icona livello */}
+          <View style={styles.levelBadge}>
             <LinearGradient
               colors={[levelInfo.color, levelInfo.color + '88']}
-              style={styles.levelBadgeLargeGradient}>
+              style={styles.levelBadgeGradient}>
               <Ionicons name={levelInfo.icon as any} size={36} color={COLORS.white} />
             </LinearGradient>
-            <View style={styles.levelNumberBadge}>
+            <View style={styles.levelNumberCircle}>
               <Text style={styles.levelNumberText}>{level}</Text>
             </View>
           </View>
-          <View style={styles.levelMainInfo}>
-            <Text style={[styles.levelRankName, {color: levelInfo.color}]}>{levelInfo.name}</Text>
-            <Text style={[styles.levelSubtitle, {color: colors.textMuted}]}>Livello {level}</Text>
+
+          {/* Info livello */}
+          <View style={styles.levelInfo}>
+            <Text style={[styles.levelName, {color: levelInfo.color}]}>{levelInfo.name}</Text>
+            <Text style={[styles.levelSubtext, {color: colors.textMuted}]}>Livello {level}</Text>
           </View>
-          <View style={[styles.totalXpContainer, {backgroundColor: `${colors.primary}15`}]}>
-            <Text style={[styles.totalXpValue, {color: colors.primary}]}>{totalXP}</Text>
-            <Text style={[styles.totalXpLabel, {color: colors.textMuted}]}>XP</Text>
-          </View>
+
         </View>
 
-        {/* Progress Section */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressLabels}>
-            <Text style={[styles.currentLevelLabel, {color: levelInfo.color}]}>
-              Lv.{level}
-            </Text>
-            <Text style={[styles.nextLevelLabel, {color: nextLevelInfo?.color || colors.textMuted}]}>
+        {/* Progress */}
+        <View style={styles.levelProgress}>
+          <View style={styles.levelProgressLabels}>
+            <Text style={[styles.levelProgressLabel, {color: levelInfo.color}]}>Lv.{level}</Text>
+            <Text style={[styles.levelProgressLabel, {color: nextLevelInfo?.color || colors.textMuted}]}>
               {nextLevelInfo ? `Lv.${nextLevelInfo.level}` : 'MAX'}
             </Text>
           </View>
           <AnimatedProgressBar
             progress={progress}
-            color={levelInfo.color}
+            color={COLORS.primary}
             backgroundColor={colors.border}
             height={12}
           />
-          <View style={styles.progressInfo}>
-            <Text style={[styles.progressPercentage, {color: colors.textSecondary}]}>
-              {Math.round(progress)}%
-            </Text>
-            <Text style={[styles.xpRemaining, {color: colors.textMuted}]}>
+          <View style={styles.levelProgressInfo}>
+            <Text style={[styles.levelProgressPercent, {color: colors.textSecondary}]}>{Math.round(progress)}%</Text>
+            <Text style={[styles.levelProgressXp, {color: colors.textMuted}]}>
               {xpNeeded > 0 ? `${xpNeeded} XP al prossimo livello` : 'Livello massimo raggiunto!'}
             </Text>
           </View>
         </View>
 
-        {/* Next Level Preview */}
+        {/* Next level */}
         {nextLevelInfo && (
-          <View style={[styles.nextLevelPreview, {backgroundColor: `${nextLevelInfo.color}10`, borderColor: `${nextLevelInfo.color}30`}]}>
-            <View style={[styles.nextLevelIconContainer, {backgroundColor: `${nextLevelInfo.color}20`}]}>
+          <View style={[styles.nextLevel, {backgroundColor: `${nextLevelInfo.color}10`, borderColor: `${nextLevelInfo.color}30`}]}>
+            <View style={[styles.nextLevelIcon, {backgroundColor: `${nextLevelInfo.color}20`}]}>
               <Ionicons name={nextLevelInfo.icon as any} size={20} color={nextLevelInfo.color} />
             </View>
-            <View style={styles.nextLevelInfo}>
+            <View style={styles.nextLevelText}>
               <Text style={[styles.nextLevelTitle, {color: colors.text}]}>Prossimo: {nextLevelInfo.name}</Text>
-              <Text style={[styles.nextLevelXp, {color: colors.textMuted}]}>
-                Raggiungi {nextLevelInfo.minXP} XP
-              </Text>
+              <Text style={[styles.nextLevelXp, {color: colors.textMuted}]}>Raggiungi {nextLevelInfo.minXP} XP</Text>
             </View>
             <Ionicons name="arrow-forward" size={18} color={nextLevelInfo.color} />
           </View>
         )}
 
-        {/* Tap to view all levels hint */}
-        <View style={styles.viewAllHint}>
-          <Text style={[styles.viewAllHintText, {color: colors.textMuted}]}>
-            Tocca per vedere tutti i livelli e vantaggi
-          </Text>
-        </View>
+        {/* Hint */}
+        <Text style={[styles.levelHint, {color: colors.textMuted}]}>
+          Tocca per vedere tutti i livelli e vantaggi
+        </Text>
       </Card>
     </TouchableOpacity>
   );
@@ -263,15 +254,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
             <Ionicons name="pencil" size={18} color={colors.primary} />
           </View>
           <View style={styles.profileHeaderRow}>
-            {/* Avatar with Frame */}
+            {/* Avatar with Frame - frame as border only */}
             <View style={styles.avatarContainer}>
               <LinearGradient
                 colors={currentFrame.colors}
                 start={{x: 0, y: 0}}
                 end={{x: 1, y: 1}}
-                style={[styles.avatarFrame, {padding: currentFrame.borderWidth}]}>
-                <View style={[styles.avatarInner, {backgroundColor: currentAvatar.color + '20'}]}>
-                  <Ionicons name={currentAvatar.icon as any} size={32} color={currentAvatar.color} />
+                style={styles.avatarFrame}>
+                <View style={[styles.avatarInner, {backgroundColor: colors.card, margin: currentFrame.borderWidth}]}>
+                  <View style={[styles.avatarIcon, {backgroundColor: currentAvatar.color + '20'}]}>
+                    <Ionicons name={currentAvatar.icon as any} size={32} color={currentAvatar.color} />
+                  </View>
                 </View>
               </LinearGradient>
             </View>
@@ -281,17 +274,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
             </View>
           </View>
 
-          <View style={[styles.statsRow, {borderTopColor: colors.border}]}>
+          <View style={[styles.statsRow, {borderTopColor: COLORS.primary}]}>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, {color: colors.primary}]}>{winsCount}</Text>
               <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Vincite</Text>
             </View>
-            <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
+            <View style={[styles.statDivider, {backgroundColor: COLORS.primary}]} />
             <View style={styles.statItem}>
               <Text style={[styles.statValue, {color: colors.primary}]}>{user?.watchedAdsCount || 0}</Text>
               <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Ads Viste</Text>
             </View>
-            <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
+            <View style={[styles.statDivider, {backgroundColor: COLORS.primary}]} />
             <View style={styles.statItem}>
               <Text style={[styles.statValue, {color: colors.primary}]}>{user?.credits || 0}</Text>
               <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Crediti</Text>
@@ -381,12 +374,20 @@ const styles = StyleSheet.create({
     marginRight: SPACING.md,
   },
   avatarFrame: {
-    borderRadius: 38,
+    borderRadius: 40,
   },
   avatarInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -411,23 +412,23 @@ const styles = StyleSheet.create({
   levelCard: {
     marginBottom: SPACING.md,
   },
-  levelMainHeader: {
+  levelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: SPACING.lg,
   },
-  levelBadgeContainer: {
+  levelBadge: {
     position: 'relative',
     marginRight: SPACING.md,
   },
-  levelBadgeLargeGradient: {
+  levelBadgeGradient: {
     width: 64,
     height: 64,
     borderRadius: RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  levelNumberBadge: {
+  levelNumberCircle: {
     position: 'absolute',
     bottom: -4,
     right: -4,
@@ -443,68 +444,68 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.text,
-    textAlign: 'center',
     includeFontPadding: false,
   },
-  levelMainInfo: {
+  levelInfo: {
     flex: 1,
   },
-  levelRankName: {
+  levelName: {
     fontSize: FONT_SIZE.xl,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
   },
-  levelSubtitle: {
+  levelSubtext: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.regular,
     marginTop: 2,
   },
-  totalXpContainer: {
-    alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+  xpBox: {
     borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    minWidth: 60,
   },
-  totalXpValue: {
+  xpValue: {
     fontSize: FONT_SIZE.xl,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.white,
+    includeFontPadding: false,
   },
-  totalXpLabel: {
+  xpLabel: {
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.regular,
+    color: COLORS.white,
+    includeFontPadding: false,
   },
-  // Progress Section
-  progressContainer: {
+  // Progress
+  levelProgress: {
     marginBottom: SPACING.md,
   },
-  progressLabels: {
+  levelProgressLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: SPACING.xs,
   },
-  currentLevelLabel: {
+  levelProgressLabel: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
   },
-  nextLevelLabel: {
-    fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-  },
-  progressInfo: {
+  levelProgressInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: SPACING.xs,
   },
-  progressPercentage: {
+  levelProgressPercent: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.semibold,
   },
-  xpRemaining: {
+  levelProgressXp: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.regular,
   },
@@ -528,15 +529,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
     transform: [{skewX: '-25deg'}],
   },
-  // Next Level Preview
-  nextLevelPreview: {
+  // Next Level
+  nextLevel: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: SPACING.md,
     borderRadius: RADIUS.md,
     borderWidth: 1,
   },
-  nextLevelIconContainer: {
+  nextLevelIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -544,7 +545,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: SPACING.sm,
   },
-  nextLevelInfo: {
+  nextLevelText: {
     flex: 1,
   },
   nextLevelTitle: {
@@ -557,14 +558,12 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.regular,
     marginTop: 2,
   },
-  viewAllHint: {
+  levelHint: {
     marginTop: SPACING.md,
-    alignItems: 'center',
-  },
-  viewAllHintText: {
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.regular,
     fontStyle: 'italic',
+    textAlign: 'center',
   },
   statsRow: {
     flexDirection: 'row',

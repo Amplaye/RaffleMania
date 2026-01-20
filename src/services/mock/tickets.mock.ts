@@ -1,5 +1,4 @@
 import {Ticket} from '../../types';
-import {generateTicketCode} from '../../utils/formatters';
 
 // Helper to get a date relative to now
 const getRelativeDate = (days: number, hours: number = 0): string => {
@@ -9,31 +8,60 @@ const getRelativeDate = (days: number, hours: number = 0): string => {
   return date.toISOString();
 };
 
+// Contatori globali per premio (simulano il database)
+// In produzione questi saranno gestiti dal backend
+export const globalPrizeCounters: Map<string, number> = new Map([
+  ['prize_001', 1247], // Pikachu VMAX - 1247 biglietti emessi globalmente
+  ['prize_002', 892],  // Charizard VMAX - 892 biglietti emessi globalmente
+  ['prize_003', 523],  // Umbreon VMAX
+  ['prize_004', 678],  // Gengar VMAX
+  ['prize_005', 345],  // Rayquaza VMAX
+]);
+
 // Current user's tickets for the active draw
-// Only primary tickets with unique codes are stored here
-// Each ticket represents entry to a specific prize draw
+// L'utente ha più numeri per lo stesso premio
 export const mockUserTickets: Ticket[] = [
+  // Premio 1: Pikachu VMAX - utente ha 3 numeri
   {
     id: 'ticket_001',
-    uniqueCode: 'ABC123XYZ',
+    ticketNumber: 42,
     userId: 'user_001',
     drawId: 'draw_001',
     prizeId: 'prize_001',
     source: 'ad',
     isWinner: false,
     createdAt: getRelativeDate(0, -6),
-    isPrimaryTicket: true,
   },
   {
+    id: 'ticket_002',
+    ticketNumber: 156,
+    userId: 'user_001',
+    drawId: 'draw_001',
+    prizeId: 'prize_001',
+    source: 'ad',
+    isWinner: false,
+    createdAt: getRelativeDate(0, -4),
+  },
+  {
+    id: 'ticket_003',
+    ticketNumber: 287,
+    userId: 'user_001',
+    drawId: 'draw_001',
+    prizeId: 'prize_001',
+    source: 'credits',
+    isWinner: false,
+    createdAt: getRelativeDate(0, -2),
+  },
+  // Premio 2: Charizard VMAX - utente ha 1 numero
+  {
     id: 'ticket_004',
-    uniqueCode: 'JKL012OPQ',
+    ticketNumber: 15,
     userId: 'user_001',
     drawId: 'draw_001',
     prizeId: 'prize_002',
     source: 'ad',
     isWinner: false,
     createdAt: getRelativeDate(-1, -1),
-    isPrimaryTicket: true,
   },
 ];
 
@@ -41,36 +69,36 @@ export const mockUserTickets: Ticket[] = [
 export const mockPastTickets: Ticket[] = [
   {
     id: 'ticket_past_001',
-    uniqueCode: 'WIN111AAA',
+    ticketNumber: 777,
     userId: 'user_001',
     drawId: 'draw_past_003',
     prizeId: 'prize_002',
     source: 'ad',
-    isWinner: true, // This user won!
+    isWinner: true,
     createdAt: getRelativeDate(-3, -5),
-    isPrimaryTicket: true,
+    prizeName: 'Charizard VMAX',
+    prizeImage: 'https://images.pokemontcg.io/swsh3/20_hires.png',
+    wonAt: getRelativeDate(-3, -5),
   },
   {
     id: 'ticket_past_002',
-    uniqueCode: 'OLD222BBB',
+    ticketNumber: 234,
     userId: 'user_001',
     drawId: 'draw_past_001',
     prizeId: 'prize_004',
     source: 'ad',
     isWinner: false,
     createdAt: getRelativeDate(-1, -2),
-    isPrimaryTicket: true,
   },
   {
     id: 'ticket_past_003',
-    uniqueCode: 'OLD333CCC',
+    ticketNumber: 89,
     userId: 'user_001',
     drawId: 'draw_past_002',
     prizeId: 'prize_005',
     source: 'credits',
     isWinner: false,
     createdAt: getRelativeDate(-2, -4),
-    isPrimaryTicket: true,
   },
 ];
 
@@ -88,40 +116,48 @@ export const getTicketById = (id: string): Ticket | undefined => {
   return getAllUserTickets().find(ticket => ticket.id === id);
 };
 
-// Check if user already has a primary ticket for a specific prize
-export const hasPrimaryTicketForPrize = (prizeId: string): boolean => {
-  return mockUserTickets.some(
-    ticket => ticket.prizeId === prizeId && ticket.isPrimaryTicket,
-  );
+// Ottieni il prossimo numero disponibile per un premio
+export const getNextTicketNumber = (prizeId: string): number => {
+  const current = globalPrizeCounters.get(prizeId) || 0;
+  const next = current + 1;
+  globalPrizeCounters.set(prizeId, next);
+  return next;
 };
 
-// Get the primary ticket for a specific prize (if exists)
-export const getPrimaryTicketForPrize = (prizeId: string): Ticket | undefined => {
-  return mockUserTickets.find(
-    ticket => ticket.prizeId === prizeId && ticket.isPrimaryTicket,
-  );
+// Ottieni il totale dei biglietti emessi per un premio (per calcolo probabilità)
+export const getTotalPoolTickets = (prizeId: string): number => {
+  return globalPrizeCounters.get(prizeId) || 1000;
 };
 
-// Simulate creating a new ticket
-// First ticket per prize gets a unique code (isPrimaryTicket: true)
-// Subsequent tickets are probability boosts only (isPrimaryTicket: false)
+// Ottieni tutti i biglietti dell'utente per un premio
+export const getTicketsForPrize = (prizeId: string): Ticket[] => {
+  return mockUserTickets.filter(ticket => ticket.prizeId === prizeId);
+};
+
+// Ottieni i numeri dell'utente per un premio
+export const getTicketNumbersForPrize = (prizeId: string): number[] => {
+  return getTicketsForPrize(prizeId)
+    .map(t => t.ticketNumber)
+    .sort((a, b) => a - b);
+};
+
+// Simulate creating a new ticket with progressive number
 export const createMockTicket = (
   source: 'ad' | 'credits',
   drawId: string,
   prizeId: string,
 ): Ticket => {
-  const isFirstTicket = !hasPrimaryTicketForPrize(prizeId);
+  const ticketNumber = getNextTicketNumber(prizeId);
 
   const newTicket: Ticket = {
-    id: `ticket_${Date.now()}`,
-    uniqueCode: isFirstTicket ? generateTicketCode() : '',
+    id: `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    ticketNumber,
     userId: 'user_001',
     drawId,
     prizeId,
     source,
     isWinner: false,
     createdAt: new Date().toISOString(),
-    isPrimaryTicket: isFirstTicket,
   };
 
   // Add to mock tickets array for persistence in session

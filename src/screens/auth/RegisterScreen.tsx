@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, Alert} from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {ScreenContainer, Input, Button} from '../../components/common';
 import {useAuthStore} from '../../store';
 import {COLORS, SPACING, FONT_SIZE, FONT_WEIGHT} from '../../utils/constants';
@@ -65,6 +66,14 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({navigation}) => {
   return (
     <ScreenContainer>
       <View style={styles.container}>
+        {/* Back Button */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+        </TouchableOpacity>
+
         <View style={styles.header}>
           <Text style={styles.title}>Crea Account</Text>
           <Text style={styles.subtitle}>
@@ -155,18 +164,35 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: SPACING.lg,
   },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    marginBottom: SPACING.md,
+  },
   header: {
     marginBottom: SPACING.xl,
+    alignItems: 'center',
   },
   title: {
     fontSize: FONT_SIZE.xxl,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.text,
     marginBottom: SPACING.xs,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: FONT_SIZE.md,
     color: COLORS.textSecondary,
+    textAlign: 'center',
   },
   form: {
     marginBottom: SPACING.lg,

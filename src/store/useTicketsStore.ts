@@ -3,18 +3,17 @@ import {Ticket} from '../types';
 import {
   mockUserTickets,
   mockPastTickets,
+  getNextTicketNumber,
+  getTotalPoolTickets,
 } from '../services/mock';
-import {generateTicketCode} from '../utils/formatters';
 
-// Probability bonus per ticket (0.5% = 0.005)
-export const TICKET_PROBABILITY_BONUS = 0.005;
-
-interface ExtractionResult {
+export interface ExtractionResult {
   isWinner: boolean;
+  winningNumber?: number;
+  userNumbers?: number[];
   prizeId?: string;
   prizeName?: string;
   prizeImage?: string;
-  ticketCode?: string;
 }
 
 interface TicketsState {
@@ -22,20 +21,22 @@ interface TicketsState {
   pastTickets: Ticket[];
   isLoading: boolean;
   todayAdsWatched: number;
-  isInitialized: boolean; // Track if initial fetch has been done
+  isInitialized: boolean;
 
   // Actions
   fetchTickets: () => Promise<void>;
   addTicket: (source: 'ad' | 'credits', drawId: string, prizeId: string) => Ticket;
   incrementAdsWatched: () => void;
   canWatchAd: () => boolean;
-  // Ticket probability system
-  getTicketsForPrize: (prizeId: string) => number;
-  getWinProbabilityForPrize: (prizeId: string) => number;
-  getPrimaryTicketForPrize: (prizeId: string) => Ticket | undefined;
-  hasPrimaryTicketForPrize: (prizeId: string) => boolean;
-  // Extraction simulation
+
+  // Ticket system - numeri progressivi
+  getTicketsForPrize: (prizeId: string) => Ticket[];
+  getTicketNumbersForPrize: (prizeId: string) => number[];
+  getTicketCountForPrize: (prizeId: string) => number;
+
+  // Extraction - sistema "pentolone"
   simulateExtraction: (prizeId: string, prizeName: string, prizeImage: string) => ExtractionResult;
+  forceWinExtraction: (prizeId: string, prizeName: string, prizeImage: string) => ExtractionResult;
 }
 
 export const useTicketsStore = create<TicketsState>((set, get) => ({
@@ -46,7 +47,6 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
   isInitialized: false,
 
   fetchTickets: async () => {
-    // Only fetch mock data on first call, preserve state on subsequent calls
     const {isInitialized} = get();
     if (isInitialized) {
       return;
@@ -66,23 +66,18 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
   },
 
   addTicket: (source: 'ad' | 'credits', drawId: string, prizeId: string) => {
-    const {activeTickets} = get();
-
-    // Check if user already has a primary ticket for this prize
-    const hasPrimary = activeTickets.some(
-      ticket => ticket.prizeId === prizeId && ticket.isPrimaryTicket,
-    );
+    // Ottieni il prossimo numero globale per questo premio
+    const ticketNumber = getNextTicketNumber(prizeId);
 
     const newTicket: Ticket = {
       id: `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      uniqueCode: hasPrimary ? '' : generateTicketCode(),
+      ticketNumber,
       userId: 'user_001',
       drawId,
       prizeId,
       source,
       isWinner: false,
       createdAt: new Date().toISOString(),
-      isPrimaryTicket: !hasPrimary,
     };
 
     set(state => ({
@@ -99,74 +94,63 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
   },
 
   canWatchAd: () => {
-    // No limit on ads - users can watch unlimited ads
     return true;
   },
 
   getTicketsForPrize: (prizeId: string) => {
     const {activeTickets} = get();
-    return activeTickets.filter(ticket => ticket.prizeId === prizeId).length;
+    return activeTickets.filter(ticket => ticket.prizeId === prizeId);
   },
 
-  getWinProbabilityForPrize: (prizeId: string) => {
-    const ticketCount = get().getTicketsForPrize(prizeId);
-    // Each ticket gives +0.5% win probability bonus
-    // No cap - unlimited probability accumulation
-    const probability = ticketCount * TICKET_PROBABILITY_BONUS;
-    return probability;
+  getTicketNumbersForPrize: (prizeId: string) => {
+    const tickets = get().getTicketsForPrize(prizeId);
+    return tickets.map(t => t.ticketNumber).sort((a, b) => a - b);
   },
 
-  getPrimaryTicketForPrize: (prizeId: string) => {
-    const {activeTickets} = get();
-    return activeTickets.find(
-      ticket => ticket.prizeId === prizeId && ticket.isPrimaryTicket,
-    );
-  },
-
-  hasPrimaryTicketForPrize: (prizeId: string) => {
-    const {activeTickets} = get();
-    return activeTickets.some(
-      ticket => ticket.prizeId === prizeId && ticket.isPrimaryTicket,
-    );
+  getTicketCountForPrize: (prizeId: string) => {
+    return get().getTicketsForPrize(prizeId).length;
   },
 
   simulateExtraction: (prizeId: string, prizeName: string, prizeImage: string) => {
     const {activeTickets, pastTickets} = get();
 
-    // Get tickets for this prize
-    const prizeTickets = activeTickets.filter(t => t.prizeId === prizeId);
+    // Ottieni i biglietti dell'utente per questo premio
+    const userTickets = activeTickets.filter(t => t.prizeId === prizeId);
+    const userNumbers = userTickets.map(t => t.ticketNumber);
 
-    if (prizeTickets.length === 0) {
-      // No tickets for this prize, user loses
+    if (userNumbers.length === 0) {
       return {isWinner: false};
     }
 
-    // Calculate win probability (each ticket = 0.5% chance, capped at 50% for simulation)
-    const winProbability = Math.min(prizeTickets.length * TICKET_PROBABILITY_BONUS, 0.5);
+    // Ottieni il totale dei biglietti nel "pentolone" per questo premio
+    const totalPoolTickets = getTotalPoolTickets(prizeId);
 
-    // Random win/lose (for demo, we give 30% chance to win)
-    const random = Math.random();
-    const isWinner = random < 0.3; // 30% chance to win for demo purposes
+    // Estrai un numero casuale dal pentolone (1 a totalPoolTickets)
+    const winningNumber = Math.floor(Math.random() * totalPoolTickets) + 1;
 
-    // Get primary ticket
-    const primaryTicket = prizeTickets.find(t => t.isPrimaryTicket) || prizeTickets[0];
+    // Verifica se l'utente ha il numero vincente
+    const isWinner = userNumbers.includes(winningNumber);
 
-    // Update tickets - move from active to past
+    // Trova il biglietto vincente (se l'utente ha vinto)
+    const winningTicket = isWinner
+      ? userTickets.find(t => t.ticketNumber === winningNumber)
+      : undefined;
+
+    // Sposta i biglietti da attivi a passati
     const now = new Date().toISOString();
-    const updatedPrizeTickets = prizeTickets.map(ticket => ({
+    const updatedUserTickets = userTickets.map(ticket => ({
       ...ticket,
-      isWinner: isWinner && ticket.id === primaryTicket.id,
-      wonAt: isWinner && ticket.id === primaryTicket.id ? now : undefined,
-      // Store prize info for winning tickets display
-      prizeName: isWinner && ticket.id === primaryTicket.id ? prizeName : undefined,
-      prizeImage: isWinner && ticket.id === primaryTicket.id ? prizeImage : undefined,
+      isWinner: ticket.ticketNumber === winningNumber,
+      wonAt: ticket.ticketNumber === winningNumber ? now : undefined,
+      prizeName: ticket.ticketNumber === winningNumber ? prizeName : undefined,
+      prizeImage: ticket.ticketNumber === winningNumber ? prizeImage : undefined,
     }));
 
-    // Keep other active tickets, remove prize tickets
+    // Rimuovi i biglietti di questo premio dagli attivi
     const remainingActiveTickets = activeTickets.filter(t => t.prizeId !== prizeId);
 
-    // Add to past tickets
-    const newPastTickets = [...updatedPrizeTickets, ...pastTickets];
+    // Aggiungi ai biglietti passati
+    const newPastTickets = [...updatedUserTickets, ...pastTickets];
 
     set({
       activeTickets: remainingActiveTickets,
@@ -175,12 +159,56 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
 
     return {
       isWinner,
+      winningNumber,
+      userNumbers,
       prizeId,
       prizeName,
       prizeImage,
-      ticketCode: primaryTicket.uniqueCode,
+    };
+  },
+
+  forceWinExtraction: (prizeId: string, prizeName: string, prizeImage: string) => {
+    const {activeTickets, pastTickets} = get();
+
+    // Ottieni i biglietti dell'utente per questo premio
+    const userTickets = activeTickets.filter(t => t.prizeId === prizeId);
+    const userNumbers = userTickets.map(t => t.ticketNumber);
+
+    if (userNumbers.length === 0) {
+      return {isWinner: false};
+    }
+
+    // Forza la vincita usando il primo numero dell'utente
+    const winningNumber = userNumbers[0];
+    const now = new Date().toISOString();
+
+    // Sposta i biglietti da attivi a passati, marcando il primo come vincente
+    const updatedUserTickets = userTickets.map(ticket => ({
+      ...ticket,
+      isWinner: ticket.ticketNumber === winningNumber,
+      wonAt: ticket.ticketNumber === winningNumber ? now : undefined,
+      prizeName: ticket.ticketNumber === winningNumber ? prizeName : undefined,
+      prizeImage: ticket.ticketNumber === winningNumber ? prizeImage : undefined,
+    }));
+
+    // Rimuovi i biglietti di questo premio dagli attivi
+    const remainingActiveTickets = activeTickets.filter(t => t.prizeId !== prizeId);
+
+    // Aggiungi ai biglietti passati
+    const newPastTickets = [...updatedUserTickets, ...pastTickets];
+
+    set({
+      activeTickets: remainingActiveTickets,
+      pastTickets: newPastTickets,
+    });
+
+    return {
+      isWinner: true,
+      winningNumber,
+      userNumbers,
+      prizeId,
+      prizeName,
+      prizeImage,
     };
   },
 }));
-
-export type {ExtractionResult};

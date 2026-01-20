@@ -48,25 +48,19 @@ const AdBanner: React.FC = () => {
   const {colors, isDark} = useThemeColors();
 
   return (
-    <View style={styles.adBannerContainer}>
-      <LinearGradient
-        colors={isDark ? ['#2A2520', '#252015'] : ['#FFF5E6', '#FFECD2']}
-        start={{x: 0, y: 0}}
-        end={{x: 1, y: 0}}
-        style={styles.adBannerGradient}>
-        <View style={styles.adBannerContent}>
-          <View style={styles.adBannerLeft}>
-            <Text style={styles.adBannerLabel}>AD</Text>
-          </View>
-          <View style={styles.adBannerTextContainer}>
-            <Text style={[styles.adBannerTitle, {color: colors.text}]}>Spazio Pubblicitario</Text>
-            <Text style={[styles.adBannerSubtitle, {color: colors.textMuted}]}>Il tuo banner qui</Text>
-          </View>
-          <TouchableOpacity style={styles.adBannerButton}>
-            <Text style={styles.adBannerButtonText}>Scopri</Text>
-          </TouchableOpacity>
+    <View style={styles.adBannerWrapper}>
+      <View style={[styles.adBanner, {backgroundColor: isDark ? '#252525' : '#FFFFFF'}]}>
+        <View style={styles.adBannerIcon}>
+          <Ionicons name="megaphone" size={20} color={COLORS.primary} />
         </View>
-      </LinearGradient>
+        <View style={styles.adBannerText}>
+          <Text style={[styles.adBannerTitle, {color: colors.text}]}>Il tuo brand qui!</Text>
+          <Text style={[styles.adBannerSubtitle, {color: colors.textMuted}]}>Sponsorizza la tua azienda</Text>
+        </View>
+        <View style={styles.adBannerBadge}>
+          <Text style={styles.adBannerBadgeText}>AD</Text>
+        </View>
+      </View>
     </View>
   );
 };
@@ -212,68 +206,58 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  adBannerContainer: {
+  adBannerWrapper: {
     marginHorizontal: 16,
-    marginBottom: 6,
-    borderRadius: 12,
+    marginBottom: 8,
   },
-  adBannerGradient: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  adBannerContent: {
+  adBanner: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 0, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  adBannerLeft: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    marginRight: 10,
+  adBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 107, 0, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  adBannerLabel: {
-    color: COLORS.white,
-    fontSize: 10,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    includeFontPadding: false,
-  },
-  adBannerTextContainer: {
+  adBannerText: {
     flex: 1,
-    justifyContent: 'center',
+    marginLeft: 12,
   },
   adBannerTitle: {
-    fontSize: FONT_SIZE.sm,
+    fontSize: 15,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
     includeFontPadding: false,
   },
   adBannerSubtitle: {
-    fontSize: FONT_SIZE.xs,
+    fontSize: 12,
     fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textMuted,
-    marginTop: 0,
     includeFontPadding: false,
+    marginTop: 2,
   },
-  adBannerButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 30,
+  adBannerBadge: {
+    backgroundColor: 'rgba(255, 107, 0, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
-  adBannerButtonText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZE.xs,
+  adBannerBadgeText: {
+    color: COLORS.primary,
+    fontSize: 10,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    textAlign: 'center',
     includeFontPadding: false,
   },
   tabBarContainer: {

@@ -70,13 +70,13 @@ export const Input: React.FC<InputProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   label: {
     fontSize: FONT_SIZE.sm,
     fontWeight: '500',
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.sm,
     includeFontPadding: false,
   },
   inputContainer: {
@@ -85,15 +85,17 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.surface,
-    minHeight: 48,
+    height: 48,
   },
   input: {
     flex: 1,
     fontSize: FONT_SIZE.md,
     color: COLORS.text,
-    paddingVertical: 12,
+    height: 48,
+    paddingVertical: 0,
     paddingHorizontal: SPACING.md,
     includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   inputWithLeftIcon: {
     paddingLeft: SPACING.xs,

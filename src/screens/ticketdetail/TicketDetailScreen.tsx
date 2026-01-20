@@ -7,12 +7,13 @@ import {
   ScrollView,
   Animated,
   TouchableOpacity,
+  StatusBar,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
-import {ScreenContainer, Card} from '../../components/common';
 import {useTicketsStore, usePrizesStore} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
+import {AnimatedBackground} from '../../components/common';
 import {
   COLORS,
   SPACING,
@@ -21,7 +22,7 @@ import {
   FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
-import {formatDate, formatTicketCode} from '../../utils/formatters';
+import {formatDate} from '../../utils/formatters';
 
 interface TicketDetailScreenProps {
   route: {params: {ticketId: string}};
@@ -29,213 +30,235 @@ interface TicketDetailScreenProps {
 }
 
 export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, navigation}) => {
-  const {colors, neon} = useThemeColors();
+  const {colors, gradientColors, isDark} = useThemeColors();
   const {ticketId} = route.params;
   const {activeTickets, pastTickets} = useTicketsStore();
   const {prizes} = usePrizesStore();
 
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
 
-  // Find ticket in active or past tickets
   const ticket = [...activeTickets, ...pastTickets].find(t => t.id === ticketId);
-  const prize = ticket ? prizes.find(p => p.id === ticket.prizeId) : null;
+  const prize = ticket?.prizeId ? prizes.find(p => p.id === ticket.prizeId) : null;
+
+  const displayPrizeName = ticket?.prizeName || prize?.name || 'Premio';
+  const displayPrizeImage = ticket?.prizeImage || prize?.imageUrl;
+  const displayPrizeDescription = prize?.description || '';
+
+  const imageBackgroundColors = ['#FFF8F0', '#FFF5E6', '#FFECD2'];
 
   useEffect(() => {
     Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }),
       Animated.spring(scaleAnim, {
         toValue: 1,
         friction: 8,
         tension: 40,
         useNativeDriver: true,
       }),
-      Animated.timing(opacityAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
     ]).start();
   }, []);
 
-  if (!ticket || !prize) {
+  if (!ticket) {
     return (
-      <ScreenContainer>
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={64} color={colors.textMuted} />
-          <Text style={[styles.errorText, {color: colors.textMuted}]}>Biglietto non trovato</Text>
+      <LinearGradient
+        colors={gradientColors as unknown as string[]}
+        locations={[0, 0.25, 0.5, 0.75, 1]}
+        start={{x: 0.5, y: 0}}
+        end={{x: 0.5, y: 1}}
+        style={styles.container}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
+        <AnimatedBackground />
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={[styles.backButton, {backgroundColor: colors.card}]}
+            onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
+          </TouchableOpacity>
         </View>
-      </ScreenContainer>
+        <View style={styles.centerContent}>
+          <Ionicons name="alert-circle" size={64} color={colors.textMuted} />
+          <Text style={[styles.errorText, {color: colors.text}]}>Biglietto non trovato</Text>
+        </View>
+      </LinearGradient>
     );
   }
 
   const isWinner = ticket.isWinner;
-  const isActive = activeTickets.some(t => t.id === ticketId);
 
   return (
-    <ScreenContainer>
-      {/* Custom Header */}
-      <View style={styles.customHeader}>
+    <LinearGradient
+      colors={gradientColors as unknown as string[]}
+      locations={[0, 0.25, 0.5, 0.75, 1]}
+      start={{x: 0.5, y: 0}}
+      end={{x: 0.5, y: 1}}
+      style={styles.container}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
+      <AnimatedBackground />
+
+      {/* Header */}
+      <View style={styles.header}>
         <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+          style={[styles.backButton, {backgroundColor: colors.card}]}
+          onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.screenTitle, {color: colors.text}]}>Dettaglio Biglietto</Text>
+        <Text style={[styles.headerTitle, {color: colors.text}]}>
+          {isWinner ? 'Hai Vinto!' : 'Dettaglio'}
+        </Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Prize Image Card */}
-        <Animated.View
-          style={[
-            styles.imageCard,
-            {
-              opacity: opacityAnim,
-              transform: [{scale: scaleAnim}],
-            },
-          ]}>
-          {isWinner && (
-            <LinearGradient
-              colors={['#FFD700', '#FFA000', '#FF8C00']}
-              style={styles.winnerBorder}>
-              <View style={styles.imageContainer}>
-                <Image
-                  source={{uri: prize.imageUrl}}
-                  style={styles.prizeImage}
-                  resizeMode="contain"
-                />
-              </View>
-            </LinearGradient>
-          )}
-          {!isWinner && (
-            <View style={[styles.imageContainerNormal, {backgroundColor: colors.card}]}>
-              <Image
-                source={{uri: prize.imageUrl}}
-                style={styles.prizeImage}
-                resizeMode="contain"
-              />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <Animated.View style={{opacity: fadeAnim, transform: [{scale: scaleAnim}]}}>
+
+          {/* Main Card - Same style as PrizeCard */}
+          <View style={[styles.card, {backgroundColor: colors.card}]}>
+
+            {/* Image Section with cream gradient */}
+            <View style={styles.imageContainer}>
+              <LinearGradient
+                colors={imageBackgroundColors}
+                start={{x: 0, y: 0}}
+                end={{x: 0, y: 1}}
+                style={StyleSheet.absoluteFill}>
+                <View style={styles.imageWrapper}>
+                  {displayPrizeImage && (
+                    <Image
+                      source={{uri: displayPrizeImage}}
+                      style={styles.prizeImage}
+                      resizeMode="contain"
+                    />
+                  )}
+                </View>
+              </LinearGradient>
+
+              <View style={styles.imageSeparator} />
             </View>
-          )}
-        </Animated.View>
 
-        {/* Winner Badge */}
-        {isWinner && (
-          <View style={styles.winnerBadge}>
-            <LinearGradient
-              colors={['#FFD700', '#FFA000']}
-              style={styles.winnerBadgeGradient}>
-              <Ionicons name="trophy" size={20} color={COLORS.white} />
-              <Text style={styles.winnerBadgeText}>HAI VINTO!</Text>
-            </LinearGradient>
-          </View>
-        )}
-
-        {/* Status Badge */}
-        {!isWinner && (
-          <View style={[styles.statusBadge, isActive ? [{backgroundColor: `${colors.primary}15`}, neon.glowSubtle] : {backgroundColor: `${colors.success}15`}]}>
-            <Ionicons
-              name={isActive ? 'time' : 'checkmark-circle'}
-              size={16}
-              color={isActive ? colors.primary : colors.success}
-            />
-            <Text style={[styles.statusText, isActive ? {color: colors.primary} : {color: colors.success}]}>
-              {isActive ? 'In attesa dell\'estrazione' : 'Estrazione completata'}
-            </Text>
-          </View>
-        )}
-
-        {/* Prize Name */}
-        <Text style={[styles.prizeName, {color: colors.text}]}>{prize.name}</Text>
-
-        {/* Ticket Info Card */}
-        <Card style={[styles.infoCard, neon.glowSubtle]}>
-          <Text style={[styles.infoTitle, {color: colors.text}]}>Dettagli Biglietto</Text>
-
-          <View style={styles.infoRow}>
-            <View style={[styles.infoIconContainer, {backgroundColor: `${colors.primary}15`}]}>
-              <Ionicons name="ticket" size={18} color={colors.primary} />
-            </View>
-            <View style={styles.infoContent}>
-              <Text style={[styles.infoLabel, {color: colors.textMuted}]}>Codice biglietto</Text>
-              <Text style={[styles.infoValue, {color: colors.text}]}>{formatTicketCode(ticket.uniqueCode)}</Text>
-            </View>
-          </View>
-
-          <View style={[styles.infoDivider, {backgroundColor: colors.border}]} />
-
-          <View style={styles.infoRow}>
-            <View style={[styles.infoIconContainer, {backgroundColor: `${colors.primary}15`}]}>
-              <Ionicons name="calendar" size={18} color={colors.primary} />
-            </View>
-            <View style={styles.infoContent}>
-              <Text style={[styles.infoLabel, {color: colors.textMuted}]}>Data partecipazione</Text>
-              <Text style={[styles.infoValue, {color: colors.text}]}>{formatDate(ticket.createdAt)}</Text>
-            </View>
-          </View>
-        </Card>
-
-        {/* Prize Description */}
-        <Card style={styles.descriptionCard}>
-          <Text style={[styles.descriptionTitle, {color: colors.text}]}>Descrizione Premio</Text>
-          <Text style={[styles.descriptionText, {color: colors.textSecondary}]}>{prize.description}</Text>
-        </Card>
-
-        {/* Winner Shipping Info */}
-        {isWinner && (
-          <Card style={styles.shippingCard}>
-            <LinearGradient
-              colors={['#FFD700', '#FFA000']}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 0}}
-              style={styles.shippingHeader}>
-              <Ionicons name="cube" size={20} color={COLORS.white} />
-              <Text style={styles.shippingTitle}>Spedizione</Text>
-            </LinearGradient>
-            <View style={styles.shippingContent}>
-              <Text style={[styles.shippingText, {color: colors.textSecondary}]}>
-                Complimenti! Il tuo premio verra spedito all'indirizzo registrato.
-                Riceverai un'email con il tracking non appena sara disponibile.
+            {/* Info Section */}
+            <View style={styles.infoContainer}>
+              {/* Prize Name */}
+              <Text style={[styles.prizeName, {color: colors.text}]}>
+                {displayPrizeName}
               </Text>
-              <View style={styles.shippingStatus}>
+
+              {/* Description */}
+              {displayPrizeDescription && (
+                <Text style={[styles.prizeDescription, {color: colors.textMuted}]} numberOfLines={2}>
+                  {displayPrizeDescription}
+                </Text>
+              )}
+
+              {/* Ticket Number Box */}
+              <View style={[styles.numberBox, {backgroundColor: isWinner ? '#FFF8E1' : `${COLORS.primary}10`}]}>
+                <View style={styles.numberHeader}>
+                  <Ionicons
+                    name="ticket"
+                    size={14}
+                    color={isWinner ? '#FF8C00' : COLORS.primary}
+                  />
+                  <Text style={[styles.numberLabel, {color: isWinner ? '#F57C00' : colors.textMuted}]}>
+                    {isWinner ? 'Numero Vincente' : 'Il tuo numero'}
+                  </Text>
+                </View>
+                <Text style={[styles.ticketNumber, {color: isWinner ? '#FF8C00' : COLORS.primary}]}>
+                  #{ticket.ticketNumber}
+                </Text>
+              </View>
+
+              {/* Date */}
+              <View style={styles.dateRow}>
+                <Ionicons name="calendar-outline" size={14} color={isWinner ? '#000000' : colors.textMuted} />
+                <Text style={[
+                  styles.dateText,
+                  {color: isWinner ? '#000000' : colors.textMuted},
+                  isWinner && styles.dateTextBold
+                ]}>
+                  {isWinner
+                    ? `Vinto il ${formatDate(ticket.wonAt || ticket.createdAt)}`
+                    : `Partecipazione: ${formatDate(ticket.createdAt)}`
+                  }
+                </Text>
+              </View>
+
+              {/* Status */}
+              <View style={[styles.statusRow, {backgroundColor: isWinner ? '#E8F5E9' : `${colors.success}10`}]}>
+                <Ionicons
+                  name={isWinner ? 'trophy' : 'checkmark-circle'}
+                  size={16}
+                  color={isWinner ? '#4CAF50' : colors.success}
+                />
+                <Text style={[styles.statusText, {color: isWinner ? '#4CAF50' : colors.success}]}>
+                  {isWinner ? 'Premio Vinto!' : 'Estrazione completata'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Shipping Card - Winners Only */}
+          {isWinner && (
+            <View style={[styles.shippingCard, {backgroundColor: colors.card}]}>
+              <View style={styles.shippingHeader}>
+                <View style={styles.shippingIconContainer}>
+                  <LinearGradient
+                    colors={['#FFD700', '#FFA500']}
+                    style={styles.shippingIconGradient}>
+                    <Ionicons name="cube" size={18} color="#FFFFFF" />
+                  </LinearGradient>
+                </View>
+                <Text style={[styles.shippingTitle, {color: colors.text}]}>Spedizione</Text>
+              </View>
+              <Text style={[styles.shippingText, {color: colors.textSecondary}]}>
+                Il premio verrà spedito all'indirizzo registrato. Riceverai un'email con il tracking.
+              </Text>
+              <View style={styles.shippingStatusRow}>
                 <View style={styles.shippingDot} />
                 <Text style={styles.shippingStatusText}>In preparazione</Text>
               </View>
             </View>
-          </Card>
-        )}
+          )}
+
+        </Animated.View>
       </ScrollView>
-    </ScreenContainer>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
-  customHeader: {
+  container: {
+    flex: 1,
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.xs,
+    paddingTop: SPACING.xl + 30,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: RADIUS.md,
   },
-  screenTitle: {
+  headerTitle: {
     flex: 1,
-    fontSize: FONT_SIZE.lg,
+    fontSize: FONT_SIZE.xl,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     textAlign: 'center',
+    marginRight: 44,
   },
   headerSpacer: {
-    width: 40,
+    width: 0,
   },
-  errorContainer: {
+  centerContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -243,198 +266,176 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.medium,
-    color: COLORS.textMuted,
     marginTop: SPACING.md,
   },
-  imageCard: {
-    marginBottom: SPACING.md,
+  scrollContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: 120,
+  },
+
+  // Main Card - Same as PrizeCard
+  card: {
+    borderRadius: RADIUS.xl,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 8},
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 10,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    marginBottom: SPACING.lg,
   },
   imageContainer: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.xl - 3,
-    padding: SPACING.lg,
-    alignItems: 'center',
-  },
-  imageContainerNormal: {
-    backgroundColor: COLORS.card,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
-    alignItems: 'center',
-  },
-  winnerBorder: {
-    padding: 3,
-    borderRadius: RADIUS.xl,
-  },
-  prizeImage: {
-    width: 200,
-    height: 200,
-  },
-  winnerBadge: {
-    alignSelf: 'center',
-    marginBottom: SPACING.md,
-    borderRadius: RADIUS.xl,
+    height: 220,
+    position: 'relative',
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
     overflow: 'hidden',
   },
-  winnerBadgeGradient: {
-    flexDirection: 'row',
+  imageWrapper: {
+    flex: 1,
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    gap: SPACING.sm,
+    justifyContent: 'center',
+    padding: SPACING.lg,
   },
-  winnerBadgeText: {
-    fontSize: FONT_SIZE.md,
+  prizeImage: {
+    width: '85%',
+    height: '100%',
+  },
+  imageSeparator: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+  },
+
+  // Info Section
+  infoContainer: {
+    padding: SPACING.lg,
+  },
+  prizeName: {
+    fontSize: FONT_SIZE.xl,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
-    letterSpacing: 1,
+    marginBottom: SPACING.xs,
   },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.lg,
-    gap: SPACING.xs,
+  prizeDescription: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    lineHeight: 18,
     marginBottom: SPACING.md,
   },
-  activeBadge: {
-    backgroundColor: `${COLORS.primary}15`,
+
+  // Number Box
+  numberBox: {
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
   },
-  expiredBadge: {
-    backgroundColor: `${COLORS.success}15`,
+  numberHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  numberLabel: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.medium,
+  },
+  ticketNumber: {
+    fontSize: 32,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+
+  // Date
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: SPACING.md,
+  },
+  dateText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+  },
+  dateTextBold: {
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+
+  // Status
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.lg,
   },
   statusText: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.medium,
     fontWeight: FONT_WEIGHT.medium,
   },
-  activeText: {
-    color: COLORS.primary,
-  },
-  expiredText: {
-    color: COLORS.success,
-  },
-  prizeName: {
-    fontSize: FONT_SIZE.xxl,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: SPACING.xs,
-  },
-  prizeValue: {
-    fontSize: FONT_SIZE.md,
-    fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    marginBottom: SPACING.lg,
-  },
-  infoCard: {
-    marginBottom: SPACING.md,
-  },
-  infoTitle: {
-    fontSize: FONT_SIZE.lg,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.md,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  infoIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: `${COLORS.primary}15`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  infoContent: {
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textMuted,
-  },
-  infoValue: {
-    fontSize: FONT_SIZE.md,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.semibold,
-    color: COLORS.text,
-    marginTop: 2,
-  },
-  infoDivider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: SPACING.md,
-  },
-  descriptionCard: {
-    marginBottom: SPACING.md,
-  },
-  descriptionTitle: {
-    fontSize: FONT_SIZE.lg,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
-  descriptionText: {
-    fontSize: FONT_SIZE.md,
-    fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textSecondary,
-    lineHeight: 22,
-  },
+
+  // Shipping Card
   shippingCard: {
-    marginBottom: SPACING.xl,
-    overflow: 'hidden',
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 6,
   },
   shippingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.md,
     gap: SPACING.sm,
-    marginHorizontal: -SPACING.md,
-    marginTop: -SPACING.md,
     marginBottom: SPACING.md,
   },
+  shippingIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  shippingIconGradient: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   shippingTitle: {
-    fontSize: FONT_SIZE.md,
+    fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
-  },
-  shippingContent: {
-    paddingTop: SPACING.xs,
   },
   shippingText: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textSecondary,
     lineHeight: 20,
     marginBottom: SPACING.md,
   },
-  shippingStatus: {
+  shippingStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: 8,
   },
   shippingDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#FFA000',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FFA500',
   },
   shippingStatusText: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.medium,
     fontWeight: FONT_WEIGHT.medium,
-    color: '#FFA000',
+    color: '#FFA500',
   },
 });
 

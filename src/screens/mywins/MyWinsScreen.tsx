@@ -23,7 +23,7 @@ import {
   RADIUS,
   COLORS,
 } from '../../utils/constants';
-import {formatDate, formatTicketCode} from '../../utils/formatters';
+import {formatDate, formatTicketNumber} from '../../utils/formatters';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 
@@ -134,7 +134,7 @@ const WinCard: React.FC<{
               <View style={styles.codeRow}>
                 <Ionicons name="ticket" size={14} color="#FFA000" />
                 <Text style={[styles.ticketCode, {color: colors.textMuted}]}>
-                  {formatTicketCode(ticket.uniqueCode)}
+                  Numero vincente: {formatTicketNumber(ticket.ticketNumber)}
                 </Text>
               </View>
               <View style={styles.dateRow}>

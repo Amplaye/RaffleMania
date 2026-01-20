@@ -12,6 +12,10 @@ export const setDebugCountdown = (seconds: number | null) => {
   debugOverrideSeconds = seconds;
 };
 
+export const resetDebugCountdown = () => {
+  debugOverrideSeconds = null;
+};
+
 export const useCountdown = (targetDate: string | undefined) => {
   const [countdown, setCountdown] = useState<CountdownParts>({
     days: 0,

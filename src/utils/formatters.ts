@@ -40,13 +40,9 @@ export const formatNumber = (num: number): string => {
   return new Intl.NumberFormat('it-IT').format(num);
 };
 
-// Ticket code formatting (add dashes for readability)
-export const formatTicketCode = (code: string): string => {
-  // Format: ABC-123-XYZ
-  if (code.length === 9) {
-    return `${code.slice(0, 3)}-${code.slice(3, 6)}-${code.slice(6, 9)}`;
-  }
-  return code;
+// Ticket number formatting (es: 42 -> "#42")
+export const formatTicketNumber = (num: number): string => {
+  return `#${num}`;
 };
 
 // Countdown formatting
@@ -91,16 +87,6 @@ export const padNumber = (num: number, length: number = 2): string => {
 export const truncateText = (text: string, maxLength: number): string => {
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 3)}...`;
-};
-
-// Generate unique code for tickets
-export const generateTicketCode = (): string => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 9; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
 };
 
 // Generate referral code

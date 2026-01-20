@@ -17,7 +17,8 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {AnimatedBackground, AdOrCreditsModal} from '../../components/common';
-import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, useAuthStore, XP_REWARDS, TICKET_PROBABILITY_BONUS} from '../../store';
+import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, useAuthStore, XP_REWARDS} from '../../store';
+import {getTotalPoolTickets} from '../../services/mock';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {Prize} from '../../types';
 import {
@@ -37,11 +38,10 @@ interface PrizesScreenProps {
 
 // Ticket Success Modal Component
 interface TicketModalInfo {
-  ticketCode: string;
+  ticketNumber: number;
   prizeName: string;
-  isPrimaryTicket: boolean;
-  totalTickets: number;
-  probabilityBonus: number;
+  userNumbers: number[];
+  totalPoolTickets: number;
 }
 
 const TicketSuccessModal: React.FC<{
@@ -102,83 +102,44 @@ const TicketSuccessModal: React.FC<{
             styles.modalContent,
             {transform: [{scale: scaleAnim}]},
           ]}>
-          {/* Success Icon - Only for Primary Ticket */}
-          {ticketInfo.isPrimaryTicket && (
-            <View style={styles.modalIconContainer}>
-              <LinearGradient
-                colors={[COLORS.primary, '#FF8500']}
-                style={styles.modalIconGradient}>
-                <Ionicons name="ticket" size={40} color={COLORS.white} />
-              </LinearGradient>
-            </View>
-          )}
+          {/* Success Icon */}
+          <View style={styles.modalIconContainer}>
+            <LinearGradient
+              colors={[COLORS.primary, '#FF8500']}
+              style={styles.modalIconGradient}>
+              <Ionicons name="ticket" size={40} color={COLORS.white} />
+            </LinearGradient>
+          </View>
 
-          {ticketInfo.isPrimaryTicket ? (
-            <>
-              <Text style={styles.modalTitle}>Biglietto Ottenuto!</Text>
-              <Text style={styles.modalSubtitle}>Hai il tuo biglietto per l'estrazione</Text>
+          {/* Title */}
+          <Text style={styles.modalTitle}>Nuovo Numero Ottenuto!</Text>
+          <Text style={styles.modalSubtitle}>Hai un nuovo numero per l'estrazione</Text>
 
-              <Animated.View
-                style={[
-                  styles.modalTicketCard,
-                  {transform: [{scale: ticketScaleAnim}]},
-                ]}>
-                <LinearGradient
-                  colors={[COLORS.primary, '#FF6B00']}
-                  start={{x: 0, y: 0}}
-                  end={{x: 1, y: 1}}
-                  style={styles.modalTicketGradient}>
-                  <View style={styles.modalTicketContent}>
-                    <View style={styles.modalTicketHeader}>
-                      <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
-                      <Text style={styles.modalTicketLabel}>CODICE BIGLIETTO</Text>
-                    </View>
-                    <Text style={styles.modalTicketCode}>{ticketInfo.ticketCode}</Text>
-                    <View style={styles.modalTicketDivider} />
-                    <View style={styles.modalTicketPrizeRow}>
-                      <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
-                      <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
-                    </View>
-                  </View>
-                </LinearGradient>
-              </Animated.View>
-            </>
-          ) : (
-            <>
-              <Text style={styles.modalTitle}>Chance Aumentata!</Text>
-
-              <Animated.View
-                style={[
-                  styles.modalBoostCard,
-                  {transform: [{scale: ticketScaleAnim}]},
-                ]}>
-                <LinearGradient
-                  colors={['#00B894', '#00A085']}
-                  start={{x: 0, y: 0}}
-                  end={{x: 1, y: 1}}
-                  style={styles.modalBoostGradient}>
-                  <View style={styles.modalBoostContent}>
-                    <View style={styles.modalBoostStatsRow}>
-                      <View style={styles.modalBoostStatItem}>
-                        <Text style={styles.modalBoostStatNumber}>{ticketInfo.totalTickets}</Text>
-                        <Text style={styles.modalBoostStatText}>Biglietti</Text>
-                      </View>
-                      <View style={styles.modalBoostStatDivider} />
-                      <View style={styles.modalBoostStatItem}>
-                        <Text style={styles.modalBoostStatNumber}>{(ticketInfo.totalTickets * 0.5).toFixed(1)}%</Text>
-                        <Text style={styles.modalBoostStatText}>Chance</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.modalBoostPrizeRow}>
-                      <Ionicons name="gift" size={14} color="rgba(255,255,255,0.7)" />
-                      <Text style={styles.modalBoostPrizeName}>{ticketInfo.prizeName}</Text>
-                    </View>
-                  </View>
-                </LinearGradient>
-              </Animated.View>
-            </>
-          )}
+          {/* Ticket Number Card */}
+          <Animated.View
+            style={[
+              styles.modalTicketCard,
+              {transform: [{scale: ticketScaleAnim}]},
+            ]}>
+            <LinearGradient
+              colors={[COLORS.primary, '#FF6B00']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}
+              style={styles.modalTicketGradient}>
+              <View style={styles.modalTicketContent}>
+                <View style={styles.modalTicketHeader}>
+                  <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
+                  <Text style={styles.modalTicketLabel}>IL TUO NUMERO</Text>
+                </View>
+                <Text style={styles.modalTicketCode}>#{ticketInfo.ticketNumber}</Text>
+                <View style={styles.modalTicketDivider} />
+                <View style={styles.modalTicketPrizeRow}>
+                  <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
+                  <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
+                </View>
+              </View>
+            </LinearGradient>
+          </Animated.View>
 
           {/* Good Luck Message */}
           <View style={styles.modalLuckContainer}>
@@ -257,13 +218,7 @@ const ShimmerProgressBar: React.FC<{
       </View>
 
       <View style={[styles.progressBar, {backgroundColor: `${colors.primary}15`}]}>
-        <Animated.View style={[styles.progressFill, {width: animatedWidth}]}>
-          <LinearGradient
-            colors={['#FF8C00', '#FF6B00', '#FF5500']}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 0}}
-            style={styles.progressGradient}
-          />
+        <Animated.View style={[styles.progressFill, {width: animatedWidth, backgroundColor: COLORS.primary}]}>
           <Animated.View
             style={[
               styles.progressShimmer,
@@ -294,7 +249,6 @@ const PrizeCard: React.FC<{
   const {colors, neon} = useThemeColors();
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -312,32 +266,14 @@ const PrizeCard: React.FC<{
         useNativeDriver: true,
       }),
     ]).start();
-
-    // Subtle glow pulse animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 1,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowAnim, {
-          toValue: 0,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
   }, []);
 
   const handleWatchAd = () => {
     onWatchAd(item);
   };
 
-  const glowOpacity = glowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.3, 0.6],
-  });
+  // Image background colors - cream gradient
+  const imageBackgroundColors = ['#FFF8F0', '#FFF5E6', '#FFECD2'];
 
   return (
     <Animated.View
@@ -352,32 +288,21 @@ const PrizeCard: React.FC<{
         style={[styles.card, {backgroundColor: colors.card}]}
         activeOpacity={0.9}
         onPress={() => onPress(item)}>
-        {/* Glow Border */}
-        <Animated.View style={[styles.cardGlow, {opacity: glowOpacity}]} />
-
         {/* Prize Image */}
         <View style={styles.imageContainer}>
           <LinearGradient
-            colors={['#FFF8F0', '#FFF5E6', '#FFECD2']}
-            style={styles.imageGradient}>
-            <Image
-              source={{uri: item.imageUrl}}
-              style={styles.prizeImage}
-              resizeMode="contain"
-            />
+            colors={imageBackgroundColors}
+            start={{x: 0, y: 0}}
+            end={{x: 0, y: 1}}
+            style={StyleSheet.absoluteFill}>
+            <View style={styles.imageWrapper}>
+              <Image
+                source={{uri: item.imageUrl}}
+                style={styles.prizeImage}
+                resizeMode="contain"
+              />
+            </View>
           </LinearGradient>
-          {/* Value Badge */}
-          <View style={styles.valueBadge}>
-            <LinearGradient
-              colors={[COLORS.primary, '#FF8500']}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 0}}
-              style={styles.valueBadgeGradient}>
-              <View style={styles.valueBadgeContent}>
-                <Text style={styles.valueBadgeText}>€{item.value}</Text>
-              </View>
-            </LinearGradient>
-          </View>
           {/* Info Badge */}
           <View style={styles.infoBadge}>
             <LinearGradient
@@ -388,6 +313,8 @@ const PrizeCard: React.FC<{
               <Ionicons name="information" size={18} color={COLORS.white} />
             </LinearGradient>
           </View>
+          {/* Bottom separator */}
+          <View style={styles.imageSeparator} />
         </View>
 
         {/* Prize Info */}
@@ -431,7 +358,7 @@ const PrizeCard: React.FC<{
 export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
   const {prizes, fetchPrizes, incrementAdsForPrize} = usePrizesStore();
-  const {addTicket, incrementAdsWatched, getTicketsForPrize, getPrimaryTicketForPrize} = useTicketsStore();
+  const {addTicket, incrementAdsWatched, getTicketsForPrize, getTicketNumbersForPrize} = useTicketsStore();
   const {currentDraw} = usePrizesStore();
   const addXP = useLevelStore(state => state.addXP);
   const {useCreditsForTicket} = useCreditsStore();
@@ -476,21 +403,18 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     addXP(XP_REWARDS.WATCH_AD);
 
     if (currentDraw) {
-      // Check if this will be the first ticket (before adding)
-      const existingPrimaryTicket = getPrimaryTicketForPrize(selectedPrize.id);
-      const isFirstTicket = !existingPrimaryTicket;
-
+      // Add new ticket and get the assigned number
       const newTicket = addTicket('ad', currentDraw.id, selectedPrize.id);
 
-      // Get updated ticket count after adding
-      const newTicketCount = getTicketsForPrize(selectedPrize.id);
+      // Get all user's numbers for this prize (including the new one)
+      const userNumbers = getTicketNumbersForPrize(selectedPrize.id);
+      const totalPool = getTotalPoolTickets(selectedPrize.id);
 
       setNewTicketInfo({
-        ticketCode: isFirstTicket ? newTicket.uniqueCode : (existingPrimaryTicket?.uniqueCode || ''),
+        ticketNumber: newTicket.ticketNumber,
         prizeName: selectedPrize.name,
-        isPrimaryTicket: isFirstTicket,
-        totalTickets: newTicketCount,
-        probabilityBonus: 0.5,
+        userNumbers,
+        totalPoolTickets: totalPool,
       });
       setShowTicketModal(true);
     }
@@ -512,21 +436,18 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     // Increment ads for this prize (counts as participation)
     incrementAdsForPrize(selectedPrize.id);
 
-    // Check if this will be the first ticket (before adding)
-    const existingPrimaryTicket = getPrimaryTicketForPrize(selectedPrize.id);
-    const isFirstTicket = !existingPrimaryTicket;
-
+    // Add new ticket and get the assigned number
     const newTicket = addTicket('credits', currentDraw.id, selectedPrize.id);
 
-    // Get updated ticket count after adding
-    const newTicketCount = getTicketsForPrize(selectedPrize.id);
+    // Get all user's numbers for this prize (including the new one)
+    const userNumbers = getTicketNumbersForPrize(selectedPrize.id);
+    const totalPool = getTotalPoolTickets(selectedPrize.id);
 
     setNewTicketInfo({
-      ticketCode: isFirstTicket ? newTicket.uniqueCode : (existingPrimaryTicket?.uniqueCode || ''),
+      ticketNumber: newTicket.ticketNumber,
       prizeName: selectedPrize.name,
-      isPrimaryTicket: isFirstTicket,
-      totalTickets: newTicketCount,
-      probabilityBonus: 0.5,
+      userNumbers,
+      totalPoolTickets: totalPool,
     });
     setShowTicketModal(true);
   };
@@ -646,30 +567,23 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: RADIUS.xl,
-    shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 6},
-    shadowOpacity: 0.15,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 8},
+    shadowOpacity: 0.12,
     shadowRadius: 16,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 0, 0.1)',
-  },
-  cardGlow: {
-    position: 'absolute',
-    top: -2,
-    left: -2,
-    right: -2,
-    bottom: -2,
-    borderRadius: RADIUS.xl + 2,
-    borderWidth: 2,
+    elevation: 10,
+    overflow: 'hidden',
+    borderWidth: 1.5,
     borderColor: COLORS.primary,
-    zIndex: -1,
   },
   imageContainer: {
     height: 220,
     position: 'relative',
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    overflow: 'hidden',
   },
-  imageGradient: {
+  imageWrapper: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -679,29 +593,13 @@ const styles = StyleSheet.create({
     width: '85%',
     height: '100%',
   },
-  valueBadge: {
+  imageSeparator: {
     position: 'absolute',
-    top: SPACING.md,
-    left: SPACING.md,
-    borderRadius: RADIUS.lg,
-    shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  valueBadgeGradient: {
-    borderRadius: RADIUS.lg,
-  },
-  valueBadgeContent: {
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.md,
-  },
-  valueBadgeText: {
-    fontSize: FONT_SIZE.md,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
   },
   infoBadge: {
     position: 'absolute',
@@ -998,6 +896,34 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.medium,
     fontWeight: FONT_WEIGHT.medium,
     color: COLORS.textSecondary,
+  },
+  modalNumbersSummary: {
+    marginBottom: SPACING.md,
+    alignItems: 'center',
+  },
+  modalNumbersTitle: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.medium,
+    fontWeight: FONT_WEIGHT.medium,
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  modalNumbersList: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.primary,
+  },
+  modalPoolInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: SPACING.md,
+  },
+  modalPoolText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    color: COLORS.textMuted,
   },
   modalCloseButton: {
     backgroundColor: COLORS.primary,

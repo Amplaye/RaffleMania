@@ -17,7 +17,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import {AnimatedBackground, AdOrCreditsModal} from '../../components/common';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
-import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, useAuthStore, XP_REWARDS, TICKET_PROBABILITY_BONUS} from '../../store';
+import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, useAuthStore, XP_REWARDS} from '../../store';
+import {getTotalPoolTickets} from '../../services/mock';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {Prize} from '../../types';
 import {
@@ -35,11 +36,10 @@ type Props = NativeStackScreenProps<RootStackParamList, 'PrizeDetail'>;
 
 // Ticket Success Modal Component
 interface TicketModalInfo {
-  ticketCode: string;
+  ticketNumber: number;
   prizeName: string;
-  isPrimaryTicket: boolean; // true = first ticket with code, false = probability boost
-  totalTickets: number;
-  probabilityBonus: number; // e.g., 0.5 for +0.5%
+  userNumbers: number[];
+  totalPoolTickets: number;
 }
 
 const TicketSuccessModal: React.FC<{
@@ -100,98 +100,53 @@ const TicketSuccessModal: React.FC<{
             styles.modalContent,
             {transform: [{scale: scaleAnim}]},
           ]}>
-          {/* Success Icon - Only for Primary Ticket */}
-          {ticketInfo.isPrimaryTicket && (
-            <View style={styles.modalIconContainer}>
-              <LinearGradient
-                colors={[COLORS.primary, '#FF8500']}
-                style={styles.modalIconGradient}>
-                <Ionicons
-                  name="ticket"
-                  size={40}
-                  color={COLORS.white}
-                />
-              </LinearGradient>
-            </View>
-          )}
+          {/* Success Icon */}
+          <View style={styles.modalIconContainer}>
+            <LinearGradient
+              colors={[COLORS.primary, '#FF8500']}
+              style={styles.modalIconGradient}>
+              <Ionicons name="ticket" size={40} color={COLORS.white} />
+            </LinearGradient>
+          </View>
 
-          {ticketInfo.isPrimaryTicket ? (
-            <>
-              <Text style={styles.modalTitle}>Biglietto Ottenuto!</Text>
-              <Text style={styles.modalSubtitle}>Hai il tuo biglietto per l'estrazione</Text>
+          {/* Title */}
+          <Text style={styles.modalTitle}>Nuovo Numero Ottenuto!</Text>
+          <Text style={styles.modalSubtitle}>Hai un nuovo numero per l'estrazione</Text>
 
-              <Animated.View
-                style={[
-                  styles.modalTicketCard,
-                  {transform: [{scale: ticketScaleAnim}]},
-                ]}>
-                <LinearGradient
-                  colors={[COLORS.primary, '#FF6B00']}
-                  start={{x: 0, y: 0}}
-                  end={{x: 1, y: 1}}
-                  style={styles.modalTicketGradient}>
-                  <View style={styles.modalTicketContent}>
-                    <View style={styles.modalTicketHeader}>
-                      <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
-                      <Text style={styles.modalTicketLabel}>CODICE BIGLIETTO</Text>
-                    </View>
-                    <Text style={styles.modalTicketCode}>{ticketInfo.ticketCode}</Text>
-                    <View style={styles.modalTicketDivider} />
-                    <View style={styles.modalTicketPrizeRow}>
-                      <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
-                      <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
-                    </View>
-                  </View>
-                </LinearGradient>
-              </Animated.View>
-            </>
-          ) : (
-            <>
-              {/* Title for Duplicate Ticket - Inline */}
-              <Text style={styles.modalTitle}>Chance Aumentata!</Text>
+          {/* Ticket Number Card */}
+          <Animated.View
+            style={[
+              styles.modalTicketCard,
+              {transform: [{scale: ticketScaleAnim}]},
+            ]}>
+            <LinearGradient
+              colors={[COLORS.primary, '#FF6B00']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}
+              style={styles.modalTicketGradient}>
+              <View style={styles.modalTicketContent}>
+                <View style={styles.modalTicketHeader}>
+                  <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
+                  <Text style={styles.modalTicketLabel}>IL TUO NUMERO</Text>
+                </View>
+                <Text style={styles.modalTicketCode}>#{ticketInfo.ticketNumber}</Text>
+                <View style={styles.modalTicketDivider} />
+                <View style={styles.modalTicketPrizeRow}>
+                  <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
+                  <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
+                </View>
+              </View>
+            </LinearGradient>
+          </Animated.View>
 
-              {/* Boost Card - Compact Design */}
-              <Animated.View
-                style={[
-                  styles.modalBoostCard,
-                  {transform: [{scale: ticketScaleAnim}]},
-                ]}>
-                <LinearGradient
-                  colors={['#00B894', '#00A085']}
-                  start={{x: 0, y: 0}}
-                  end={{x: 1, y: 1}}
-                  style={styles.modalBoostGradient}>
-                  <View style={styles.modalBoostContent}>
-                    {/* Stats Row - Only Biglietti and Chance */}
-                    <View style={styles.modalBoostStatsRow}>
-                      <View style={styles.modalBoostStatItem}>
-                        <Text style={styles.modalBoostStatNumber}>{ticketInfo.totalTickets}</Text>
-                        <Text style={styles.modalBoostStatText}>Biglietti</Text>
-                      </View>
-                      <View style={styles.modalBoostStatDivider} />
-                      <View style={styles.modalBoostStatItem}>
-                        <Text style={styles.modalBoostStatNumber}>{(ticketInfo.totalTickets * 0.5).toFixed(1)}%</Text>
-                        <Text style={styles.modalBoostStatText}>Chance</Text>
-                      </View>
-                    </View>
-
-                    {/* Prize Name */}
-                    <View style={styles.modalBoostPrizeRow}>
-                      <Ionicons name="gift" size={14} color="rgba(255,255,255,0.7)" />
-                      <Text style={styles.modalBoostPrizeName}>{ticketInfo.prizeName}</Text>
-                    </View>
-                  </View>
-                </LinearGradient>
-              </Animated.View>
-            </>
-          )}
-
+          {/* Good Luck Message */}
           <View style={styles.modalLuckContainer}>
             <Ionicons name="star" size={16} color="#FFD700" />
             <Text style={styles.modalLuckText}>Buona fortuna!</Text>
             <Ionicons name="star" size={16} color="#FFD700" />
           </View>
 
+          {/* Close Button */}
           <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
             <Text style={styles.modalCloseButtonText}>Continua</Text>
           </TouchableOpacity>
@@ -285,17 +240,17 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const {prizeId} = route.params;
   const {colors, gradientColors, isDark, neon} = useThemeColors();
   const {prizes, incrementAdsForPrize, currentDraw} = usePrizesStore();
-  const {addTicket, incrementAdsWatched, getTicketsForPrize, getWinProbabilityForPrize, getPrimaryTicketForPrize, hasPrimaryTicketForPrize} = useTicketsStore();
+  const {addTicket, incrementAdsWatched, getTicketsForPrize, getTicketNumbersForPrize} = useTicketsStore();
   const addXP = useLevelStore(state => state.addXP);
   const {useCreditsForTicket} = useCreditsStore();
   const {user} = useAuthStore();
 
   // Get ticket stats for this prize
-  const myTicketCount = getTicketsForPrize(prizeId);
-  const winProbability = getWinProbabilityForPrize(prizeId);
-  const winProbabilityPercent = (winProbability * 100).toFixed(1);
-  const primaryTicket = getPrimaryTicketForPrize(prizeId);
-  const hasPrimaryTicket = hasPrimaryTicketForPrize(prizeId);
+  const myTickets = getTicketsForPrize(prizeId);
+  const myTicketCount = myTickets.length;
+  const myNumbers = getTicketNumbersForPrize(prizeId);
+  const totalPoolTickets = getTotalPoolTickets(prizeId);
+  const hasTickets = myTicketCount > 0;
 
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [newTicketInfo, setNewTicketInfo] = useState<TicketModalInfo | null>(null);
@@ -346,22 +301,18 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
     addXP(XP_REWARDS.WATCH_AD);
 
     if (currentDraw) {
-      // Check if this will be the first ticket (before adding)
-      const existingPrimaryTicket = getPrimaryTicketForPrize(prize.id);
-      const isFirstTicket = !existingPrimaryTicket;
-
+      // Add new ticket and get the assigned number
       const newTicket = addTicket('ad', currentDraw.id, prize.id);
 
-      // Get updated ticket count after adding
-      const newTicketCount = getTicketsForPrize(prize.id);
+      // Get all user's numbers for this prize (including the new one)
+      const userNumbers = getTicketNumbersForPrize(prize.id);
+      const totalPool = getTotalPoolTickets(prize.id);
 
       setNewTicketInfo({
-        // If boost ticket, show the existing primary ticket code
-        ticketCode: isFirstTicket ? newTicket.uniqueCode : (existingPrimaryTicket?.uniqueCode || ''),
+        ticketNumber: newTicket.ticketNumber,
         prizeName: prize.name,
-        isPrimaryTicket: isFirstTicket,
-        totalTickets: newTicketCount,
-        probabilityBonus: 0.5, // Each ticket gives +0.5%
+        userNumbers,
+        totalPoolTickets: totalPool,
       });
       setShowTicketModal(true);
     }
@@ -383,21 +334,18 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
       return;
     }
 
-    // Check if this will be the first ticket (before adding)
-    const existingPrimaryTicket = getPrimaryTicketForPrize(prize.id);
-    const isFirstTicket = !existingPrimaryTicket;
-
+    // Add new ticket and get the assigned number
     const newTicket = addTicket('credits', currentDraw.id, prize.id);
 
-    // Get updated ticket count after adding
-    const newTicketCount = getTicketsForPrize(prize.id);
+    // Get all user's numbers for this prize (including the new one)
+    const userNumbers = getTicketNumbersForPrize(prize.id);
+    const totalPool = getTotalPoolTickets(prize.id);
 
     setNewTicketInfo({
-      ticketCode: isFirstTicket ? newTicket.uniqueCode : (existingPrimaryTicket?.uniqueCode || ''),
+      ticketNumber: newTicket.ticketNumber,
       prizeName: prize.name,
-      isPrimaryTicket: isFirstTicket,
-      totalTickets: newTicketCount,
-      probabilityBonus: 0.5,
+      userNumbers,
+      totalPoolTickets: totalPool,
     });
     setShowTicketModal(true);
   };
@@ -518,7 +466,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
               <View style={[styles.statIconContainer, {backgroundColor: 'rgba(0, 184, 148, 0.1)'}]}>
                 <Ionicons name="trending-up-outline" size={20} color={COLORS.success} />
               </View>
-              <Text style={[styles.statValue, {color: colors.text}]}>{winProbabilityPercent}%</Text>
+              <Text style={[styles.statValue, {color: colors.text}]}>{myTicketCount > 0 ? ((myTicketCount / totalPoolTickets) * 100).toFixed(2) : '0'}%</Text>
               <Text style={[styles.statLabel, {color: colors.textMuted}]}>Probabilità</Text>
             </View>
 
@@ -534,8 +482,8 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
           </View>
         </Animated.View>
 
-        {/* My Ticket Card - shows primary ticket code */}
-        {primaryTicket && (
+        {/* My Ticket Card - shows user's numbers */}
+        {hasTickets && (
           <Animated.View
             style={[
               styles.myTicketCard,
@@ -550,31 +498,30 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
               <View style={styles.myTicketIconContainer}>
                 <Ionicons name="ticket" size={20} color={COLORS.primary} />
               </View>
-              <Text style={[styles.myTicketTitle, {color: colors.text}]}>Il Tuo Biglietto</Text>
-              {/* Duplicate ticket counter */}
-              {myTicketCount > 1 && (
-                <View style={styles.duplicateCounterContainer}>
-                  <LinearGradient
-                    colors={['#00B894', '#00A085']}
-                    start={{x: 0, y: 0}}
-                    end={{x: 1, y: 0}}
-                    style={styles.duplicateCounterGradient}>
-                    <View style={styles.duplicateCounterContent}>
-                      <Ionicons name="copy" size={12} color={COLORS.white} />
-                      <Text style={styles.duplicateCounterText}>+{myTicketCount - 1}</Text>
-                    </View>
-                  </LinearGradient>
-                </View>
-              )}
+              <Text style={[styles.myTicketTitle, {color: colors.text}]}>I Tuoi Numeri</Text>
+              {/* Ticket count badge */}
+              <View style={styles.duplicateCounterContainer}>
+                <LinearGradient
+                  colors={['#00B894', '#00A085']}
+                  start={{x: 0, y: 0}}
+                  end={{x: 1, y: 0}}
+                  style={styles.duplicateCounterGradient}>
+                  <View style={styles.duplicateCounterContent}>
+                    <Text style={styles.duplicateCounterText}>{myTicketCount}</Text>
+                  </View>
+                </LinearGradient>
+              </View>
             </View>
             <View style={styles.myTicketCodeContainer}>
-              <Text style={[styles.myTicketCode, {color: colors.text}]}>{primaryTicket.uniqueCode}</Text>
+              <Text style={[styles.myTicketCode, {color: colors.text}]}>
+                {myNumbers.map(n => `#${n}`).join(', ')}
+              </Text>
               <View style={styles.myTicketBadge}>
                 <Text style={styles.myTicketBadgeText}>Estrazione</Text>
               </View>
             </View>
             <Text style={[styles.myTicketHint, {color: colors.textMuted}]}>
-              Questo codice partecipera all'estrazione
+              Questi numeri parteciperanno all'estrazione
             </Text>
           </Animated.View>
         )}
@@ -600,14 +547,14 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
                   <View style={styles.probabilityLeft}>
                     <Ionicons name="trending-up" size={24} color={COLORS.white} />
                     <View style={styles.probabilityTextContainer}>
-                      <Text style={styles.probabilityTitle}>Le tue probabilita</Text>
+                      <Text style={styles.probabilityTitle}>Le tue probabilità</Text>
                       <Text style={styles.probabilitySubtitle}>
-                        {myTicketCount} {myTicketCount === 1 ? 'biglietto' : 'biglietti'} = +{(myTicketCount * 0.5).toFixed(1)}% chance
+                        {myTicketCount} {myTicketCount === 1 ? 'numero' : 'numeri'} su {totalPoolTickets} totali
                       </Text>
                     </View>
                   </View>
                   <View style={styles.probabilityBadge}>
-                    <Text style={styles.probabilityValue}>{winProbabilityPercent}%</Text>
+                    <Text style={styles.probabilityValue}>{((myTicketCount / totalPoolTickets) * 100).toFixed(2)}%</Text>
                   </View>
                 </View>
               </View>
@@ -1358,6 +1305,34 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.medium,
     fontWeight: FONT_WEIGHT.medium,
     color: COLORS.textSecondary,
+  },
+  modalNumbersSummary: {
+    marginBottom: SPACING.md,
+    alignItems: 'center',
+  },
+  modalNumbersTitle: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.medium,
+    fontWeight: FONT_WEIGHT.medium,
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  modalNumbersList: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.primary,
+  },
+  modalPoolInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: SPACING.md,
+  },
+  modalPoolText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    color: COLORS.textMuted,
   },
   modalCloseButton: {
     backgroundColor: COLORS.primary,
