@@ -211,17 +211,13 @@ if (isset($_GET['edit'])) {
                 </div>
 
                 <div class="rafflemania-form-row">
-                    <label>Durata Timer (secondi)</label>
-                    <input type="number" name="timer_duration" min="60" value="<?php echo esc_attr($editing->timer_duration ?? 86400); ?>">
-                    <small>86400 = 24 ore, 43200 = 12 ore, 3600 = 1 ora</small>
-                </div>
-
-                <div class="rafflemania-form-row">
                     <label>
                         <input type="checkbox" name="is_active" <?php checked($editing->is_active ?? true, 1); ?>>
                         Premio Attivo
                     </label>
                 </div>
+                <!-- Timer duration fixed at 24 hours (86400 seconds) for all prizes -->
+                <input type="hidden" name="timer_duration" value="86400">
             </div>
 
             <div class="rafflemania-form-row" style="margin-top: 16px;">
