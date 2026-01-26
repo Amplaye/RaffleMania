@@ -1,14 +1,14 @@
-import React from 'react';
+import React, {useEffect, useRef, useState, useCallback} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator, NativeStackScreenProps} from '@react-navigation/native-stack';
 import {View, Text, StyleSheet, StatusBar, Platform} from 'react-native';
-import {useAuthStore, usePrizesStore} from '../store';
+import {useAuthStore, usePrizesStore, useExtractionStore, useTicketsStore} from '../store';
 import {useThemeColors} from '../hooks/useThemeColors';
-import {useCountdown} from '../hooks/useCountdown';
+import {Prize} from '../types';
 import {AuthNavigator} from './AuthNavigator';
 import {TabNavigator} from './TabNavigator';
 import {COLORS, FONT_SIZE, FONT_WEIGHT} from '../utils/constants';
-import {ScreenContainer, Button, UrgencyBorderEffect} from '../components/common';
+import {ScreenContainer, Button, UrgencyBorderEffect, ExtractionStartEffect, ExtractionResultModal} from '../components/common';
 
 // Import actual screens
 import {CreditsScreen} from '../screens/credits';
@@ -20,6 +20,7 @@ import {TicketDetailScreen} from '../screens/ticketdetail';
 import {LevelDetailScreen} from '../screens/leveldetail';
 import {PrizeDetailScreen} from '../screens/prizedetail';
 import {AvatarCustomizationScreen} from '../screens/avatar';
+import {LeaderboardScreen} from '../screens/leaderboard';
 
 // Stack param list
 export type RootStackParamList = {
@@ -34,6 +35,7 @@ export type RootStackParamList = {
   MyWins: undefined;
   LevelDetail: undefined;
   AvatarCustomization: undefined;
+  Leaderboard: undefined;
 };
 
 type PlaceholderProps = NativeStackScreenProps<RootStackParamList, keyof RootStackParamList>;
@@ -148,21 +150,141 @@ const MainStack: React.FC = () => {
         component={AvatarCustomizationScreen}
         options={{title: 'Personalizza Avatar'}}
       />
+      <Stack.Screen
+        name="Leaderboard"
+        component={LeaderboardScreen}
+        options={{title: 'Classifica'}}
+      />
     </Stack.Navigator>
   );
 };
 
 export const AppNavigator: React.FC = () => {
   const {isAuthenticated} = useAuthStore();
-  const {currentDraw} = usePrizesStore();
-  const {totalSeconds, isLastMinute} = useCountdown(currentDraw?.scheduledAt);
+  const {
+    prizes,
+    markPrizeAsExtracting,
+    completePrizeExtraction,
+    resetPrizeForNextRound,
+    addWin,
+  } = usePrizesStore();
+  const {simulateExtraction, getTicketsForPrize, getTicketNumbersForPrize} = useTicketsStore();
+  const {
+    showExtractionEffect,
+    showResultModal,
+    extractionResult,
+    startExtraction,
+    showResult,
+    hideResult,
+  } = useExtractionStore();
+  const user = useAuthStore(state => state.user);
+
+  // Track which prizes have already triggered extraction
+  const extractedPrizeIds = useRef<Set<string>>(new Set());
+  const isInitialized = useRef(false);
+
+  // State for urgency effect
+  const [urgencyPrize, setUrgencyPrize] = useState<Prize | null>(null);
+  const [urgencySeconds, setUrgencySeconds] = useState(0);
+
+  // Trigger extraction for a prize - defined before useEffect that uses it
+  const triggerExtraction = useCallback((prize: Prize) => {
+    // Mark prize as extracting
+    markPrizeAsExtracting(prize.id);
+
+    // Start the extraction effect
+    startExtraction();
+
+    // After effect, simulate the extraction
+    setTimeout(() => {
+      const result = simulateExtraction(prize.id, prize.name, prize.imageUrl);
+
+      // Generate drawId for this prize
+      const drawId = `draw_${prize.id}_${(prize.timerStartedAt || new Date().toISOString()).replace(/[^0-9]/g, '').slice(0, 14)}`;
+
+      // If winner, add to wins
+      if (result.isWinner && user) {
+        const userTickets = getTicketsForPrize(prize.id);
+        if (userTickets.length > 0) {
+          addWin(prize.id, drawId, userTickets[0].id, user.id);
+        }
+      }
+
+      showResult({
+        ...result,
+        prizeImage: prize.imageUrl,
+      });
+
+      // Complete extraction and reset for next round
+      completePrizeExtraction(prize.id);
+
+      // After a delay, reset the prize for a new round
+      setTimeout(() => {
+        resetPrizeForNextRound(prize.id);
+        // Allow re-extraction for this prize in the future
+        extractedPrizeIds.current.delete(prize.id);
+      }, 2000);
+    }, 3000); // Duration of extraction effect
+  }, [user, markPrizeAsExtracting, startExtraction, simulateExtraction, getTicketsForPrize, addWin, showResult, completePrizeExtraction, resetPrizeForNextRound]);
+
+  // Initialize
+  useEffect(() => {
+    isInitialized.current = true;
+  }, []);
+
+  // Monitor all prizes with active timers
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const interval = setInterval(() => {
+      if (!isInitialized.current) return;
+
+      const now = Date.now();
+
+      // Find prizes with countdown status
+      const prizesWithTimer = prizes.filter(p => p.timerStatus === 'countdown' && p.scheduledAt);
+
+      // Check each prize
+      for (const prize of prizesWithTimer) {
+        const scheduledTime = new Date(prize.scheduledAt!).getTime();
+        const remainingSeconds = Math.max(0, Math.floor((scheduledTime - now) / 1000));
+
+        // Update urgency for the prize with least time remaining
+        if (remainingSeconds <= 60 && remainingSeconds > 0) {
+          setUrgencyPrize(prize);
+          setUrgencySeconds(remainingSeconds);
+        }
+
+        // Timer has expired - trigger extraction
+        if (remainingSeconds === 0 && !extractedPrizeIds.current.has(prize.id)) {
+          extractedPrizeIds.current.add(prize.id);
+          triggerExtraction(prize);
+        }
+      }
+
+      // Clear urgency if no prize is in last minute
+      const anyInLastMinute = prizesWithTimer.some(p => {
+        const scheduledTime = new Date(p.scheduledAt!).getTime();
+        const remaining = Math.floor((scheduledTime - now) / 1000);
+        return remaining > 0 && remaining <= 60;
+      });
+      if (!anyInLastMinute) {
+        setUrgencyPrize(null);
+        setUrgencySeconds(0);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [prizes, isAuthenticated, triggerExtraction]);
 
   // Determine urgency intensity based on remaining time
   const getUrgencyIntensity = (): 'low' | 'medium' | 'high' => {
-    if (totalSeconds <= 10) return 'high';
-    if (totalSeconds <= 30) return 'medium';
+    if (urgencySeconds <= 10) return 'high';
+    if (urgencySeconds <= 30) return 'medium';
     return 'low';
   };
+
+  const isLastMinute = urgencyPrize !== null && urgencySeconds > 0 && urgencySeconds <= 60;
 
   return (
     <View style={styles.appContainer}>
@@ -175,6 +297,26 @@ export const AppNavigator: React.FC = () => {
         <UrgencyBorderEffect
           isActive={isLastMinute}
           intensity={getUrgencyIntensity()}
+        />
+      )}
+
+      {/* Global Extraction Effect - visible across ALL screens */}
+      {isAuthenticated && showExtractionEffect && (
+        <ExtractionStartEffect
+          visible={showExtractionEffect}
+        />
+      )}
+
+      {/* Global Extraction Result Modal - visible across ALL screens */}
+      {isAuthenticated && (
+        <ExtractionResultModal
+          visible={showResultModal}
+          isWinner={extractionResult?.isWinner || false}
+          prizeName={extractionResult?.prizeName}
+          prizeImage={extractionResult?.prizeImage}
+          winningNumber={extractionResult?.winningNumber}
+          userNumbers={extractionResult?.userNumbers}
+          onClose={hideResult}
         />
       )}
     </View>

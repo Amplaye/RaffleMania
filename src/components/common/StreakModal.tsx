@@ -395,9 +395,10 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     maxWidth: 360,
-    borderRadius: 20,
+    borderRadius: RADIUS.xl,
     borderWidth: 2,
     borderColor: '#FF6B00',
+    overflow: 'hidden',
   },
   gradientBg: {
     position: 'absolute',
@@ -405,6 +406,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    borderRadius: RADIUS.xl,
   },
   header: {
     alignItems: 'center',

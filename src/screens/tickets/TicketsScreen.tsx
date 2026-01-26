@@ -280,7 +280,7 @@ const WinningTicketCard: React.FC<{
       ]}>
       <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
         <LinearGradient
-          colors={['#FFD700', '#FFA500', '#FF8C00']}
+          colors={['#FFB347', '#FF9636', '#FF7F24']}
           start={{x: 0, y: 0}}
           end={{x: 1, y: 0}}
           style={styles.winCardGradient}>

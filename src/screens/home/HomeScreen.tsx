@@ -21,7 +21,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import {AnimatedBackground, StreakModal, AdOrCreditsModal, ExtractionStartEffect, ExtractionResultModal} from '../../components/common';
 import {useTicketsStore, usePrizesStore, useLevelStore, XP_REWARDS, useStreakStore, useCreditsStore, useAuthStore, ExtractionResult} from '../../store';
 import {getTotalPoolTickets} from '../../services/mock';
-import {useCountdown, setDebugCountdown, resetDebugCountdown} from '../../hooks/useCountdown';
+import {usePrizeCountdown} from '../../hooks/useCountdown';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -425,7 +425,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     simulateExtraction,
     forceWinExtraction,
   } = useTicketsStore();
-  const {prizes, currentDraw, fetchPrizes, fetchDraws, incrementAdsForPrize, moveToNextDraw, addWin} = usePrizesStore();
+  const {
+    prizes,
+    fetchPrizes,
+    fetchDraws,
+    incrementAdsForPrize,
+    startTimerForPrize,
+    markPrizeAsExtracting,
+    completePrizeExtraction,
+    resetPrizeForNextRound,
+    addWin,
+  } = usePrizesStore();
   const addXP = useLevelStore(state => state.addXP);
   const {currentStreak, checkAndUpdateStreak, getNextMilestone, hasClaimedToday} = useStreakStore();
   const {useCreditsForTicket} = useCreditsStore();
@@ -443,64 +453,26 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const [showExtractionEffect, setShowExtractionEffect] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
-  const wasWatchingLastMinute = useRef(false);
-  const hasTriggeredExtraction = useRef(false);
-
-  const {countdown, isExpired, isLastMinute} = useCountdown(currentDraw?.scheduledAt);
-
-  // Track if user was watching during last minute
-  useEffect(() => {
-    if (isLastMinute) {
-      wasWatchingLastMinute.current = true;
-    }
-  }, [isLastMinute]);
 
   // Get active prizes
   const activePrizes = prizes.filter(p => p.isActive);
   const currentPrize = activePrizes[currentPrizeIndex];
 
-  // Handle timer reaching zero - only show extraction if user was watching
-  useEffect(() => {
-    if (isExpired && wasWatchingLastMinute.current && !hasTriggeredExtraction.current) {
-      // Timer just expired while user was watching - show extraction effect
-      hasTriggeredExtraction.current = true;
-      setShowExtractionEffect(true);
-    }
-  }, [isExpired]);
+  // Usa il timer del premio corrente (ogni premio ha il suo timer)
+  const {countdown, isExpired, isLastMinute} = usePrizeCountdown(
+    currentPrize?.id,
+    currentPrize?.scheduledAt,
+  );
 
-  // Handle extraction animation complete - simulate win/lose
+  // Verifica se il premio corrente ha un timer attivo
+  const hasActiveTimer = currentPrize?.timerStatus === 'countdown';
+
+  // Extraction is now handled globally in AppNavigator
+  // This ensures extraction shows on ANY screen, not just Home
+
+  // Handle extraction animation complete - only for local debug buttons
   const handleExtractionComplete = () => {
     setShowExtractionEffect(false);
-
-    // Get current prize and simulate extraction
-    const prize = activePrizes[currentPrizeIndex];
-    if (prize) {
-      // Get user's tickets before extraction
-      const userTickets = getTicketsForPrize(prize.id);
-
-      const result = simulateExtraction(prize.id, prize.name, prize.imageUrl);
-      setExtractionResult(result);
-      setShowResultModal(true);
-
-      // If user won, add to wins list
-      if (result.isWinner && currentDraw && userTickets.length > 0 && user) {
-        // Find the winning ticket by matching the winning number
-        const winningTicket = userTickets.find(t => t.ticketNumber === result.winningNumber);
-        if (winningTicket) {
-          addWin(prize.id, currentDraw.id, winningTicket.id, user.id);
-        }
-      }
-
-      // Reset debug countdown so timer uses the new draw's date
-      resetDebugCountdown();
-
-      // Move to next draw immediately so timer restarts
-      moveToNextDraw();
-
-      // Reset extraction state
-      wasWatchingLastMinute.current = false;
-      hasTriggeredExtraction.current = false;
-    }
   };
 
   // Create infinite carousel data with clones at start and end
@@ -616,6 +588,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     setShowAdOrCreditsModal(true);
   };
 
+  // Genera un drawId per il premio (basato sul prizeId + timestamp del timer)
+  const getDrawIdForPrize = (prizeId: string, timerStartedAt?: string) => {
+    const timestamp = timerStartedAt || new Date().toISOString();
+    return `draw_${prizeId}_${timestamp.replace(/[^0-9]/g, '').slice(0, 14)}`;
+  };
+
   // Handle watching ad (called from modal)
   const handleWatchAd = async () => {
     if (!currentPrize) return;
@@ -624,36 +602,37 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     setIsWatchingAd(true);
     await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
 
-    // Increment ads for current prize
+    // Increment ads for current prize (questo può avviare il timer automaticamente)
     incrementAdsForPrize(currentPrize.id);
     incrementAdsWatched();
 
     // Add XP for watching ad
     addXP(XP_REWARDS.WATCH_AD);
 
-    if (currentDraw) {
-      // Add new ticket and get the assigned number
-      const newTicket = addTicket('ad', currentDraw.id, currentPrize.id);
+    // Genera drawId per questo premio
+    const drawId = getDrawIdForPrize(currentPrize.id, currentPrize.timerStartedAt);
 
-      // Get all user's numbers for this prize (including the new one)
-      const userNumbers = getTicketNumbersForPrize(currentPrize.id);
-      const totalPool = getTotalPoolTickets(currentPrize.id);
+    // Add new ticket and get the assigned number
+    const newTicket = addTicket('ad', drawId, currentPrize.id);
 
-      setNewTicketInfo({
-        ticketNumber: newTicket.ticketNumber,
-        prizeName: currentPrize.name,
-        userNumbers,
-        totalPoolTickets: totalPool,
-      });
-      setShowTicketModal(true);
-    }
+    // Get all user's numbers for this prize (including the new one)
+    const userNumbers = getTicketNumbersForPrize(currentPrize.id);
+    const totalPool = getTotalPoolTickets(currentPrize.id);
+
+    setNewTicketInfo({
+      ticketNumber: newTicket.ticketNumber,
+      prizeName: currentPrize.name,
+      userNumbers,
+      totalPoolTickets: totalPool,
+    });
+    setShowTicketModal(true);
 
     setIsWatchingAd(false);
   };
 
   // Handle using credits (called from modal)
   const handleUseCredits = async () => {
-    if (!currentPrize || !currentDraw) return;
+    if (!currentPrize) return;
 
     setShowAdOrCreditsModal(false);
 
@@ -666,8 +645,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     // Increment ads for current prize (counts as participation)
     incrementAdsForPrize(currentPrize.id);
 
+    // Genera drawId per questo premio
+    const drawId = getDrawIdForPrize(currentPrize.id, currentPrize.timerStartedAt);
+
     // Add new ticket and get the assigned number
-    const newTicket = addTicket('credits', currentDraw.id, currentPrize.id);
+    const newTicket = addTicket('credits', drawId, currentPrize.id);
 
     // Get all user's numbers for this prize (including the new one)
     const userNumbers = getTicketNumbersForPrize(currentPrize.id);
@@ -722,17 +704,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
           <View style={styles.liveIndicator}>
             <PulsingDot />
             <Text style={styles.liveText}>
-              {isExpired ? 'ESTRAZIONE LIVE' : 'PROSSIMA ESTRAZIONE'}
+              {!hasActiveTimer
+                ? 'IN ATTESA DI BIGLIETTI'
+                : isExpired
+                  ? 'ESTRAZIONE LIVE'
+                  : 'PROSSIMA ESTRAZIONE'}
             </Text>
           </View>
 
-          {!isExpired && (
+          {hasActiveTimer && !isExpired && (
             <View style={styles.timerContainer}>
               <TimerUnit value={padNumber(countdown.hours)} label="ORE" />
               <TimerSeparator />
               <TimerUnit value={padNumber(countdown.minutes)} label="MIN" />
               <TimerSeparator />
               <TimerUnit value={padNumber(countdown.seconds)} label="SEC" />
+            </View>
+          )}
+
+          {/* Mostra info se il premio è in attesa */}
+          {!hasActiveTimer && currentPrize && (
+            <View style={styles.waitingInfo}>
+              <Text style={styles.waitingText}>
+                Mancano {currentPrize.goalAds - currentPrize.currentAds} biglietti
+              </Text>
             </View>
           )}
         </View>
@@ -862,38 +857,57 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         <View style={styles.debugContainer}>
           <TouchableOpacity
             style={styles.debugButton}
-            onPress={() => setDebugCountdown(65)}>
+            onPress={() => {
+              if (currentPrize && currentPrize.timerStatus === 'waiting') {
+                // Avvia il timer con durata di 65 secondi
+                startTimerForPrize(currentPrize.id, 65);
+              }
+            }}>
             <Text style={styles.debugButtonText}>1:05</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.debugButton}
-            onPress={() => setDebugCountdown(3)}>
+            onPress={() => {
+              if (currentPrize && currentPrize.timerStatus === 'waiting') {
+                // Avvia il timer con durata di 3 secondi
+                startTimerForPrize(currentPrize.id, 3);
+              }
+            }}>
             <Text style={styles.debugButtonText}>0:03</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.debugButton, {backgroundColor: 'rgba(0, 200, 0, 0.8)'}]}
             onPress={() => {
               const prize = currentPrize;
-              if (prize && currentDraw && user) {
+              if (prize && user) {
                 // Get user's tickets before forcing win
                 const userTickets = getTicketsForPrize(prize.id);
 
                 if (userTickets.length === 0) {
-                  return; // No tickets to win with
+                  Alert.alert('Nessun biglietto', 'Devi prima ottenere un biglietto per questo premio!');
+                  return;
                 }
+
+                // Genera drawId per questo premio
+                const drawId = getDrawIdForPrize(prize.id, prize.timerStartedAt);
 
                 // Force win extraction - this properly marks the ticket as winner
                 const result = forceWinExtraction(prize.id, prize.name, prize.imageUrl);
 
                 // Add to wins list using the first ticket
-                addWin(prize.id, currentDraw.id, userTickets[0].id, user.id);
+                addWin(prize.id, drawId, userTickets[0].id, user.id);
 
-                setExtractionResult(result);
+                setExtractionResult({
+                  ...result,
+                  prizeImage: prize.imageUrl,
+                });
                 setShowResultModal(true);
 
-                // Reset and move to next draw
-                resetDebugCountdown();
-                moveToNextDraw();
+                // Completa l'estrazione e resetta il premio per il prossimo round
+                completePrizeExtraction(prize.id);
+                setTimeout(() => {
+                  resetPrizeForNextRound(prize.id);
+                }, 1000);
               }
             }}>
             <Text style={styles.debugButtonText}>Vinto</Text>
@@ -912,6 +926,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               setShowResultModal(true);
             }}>
             <Text style={styles.debugButtonText}>Perso</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.debugButton, {backgroundColor: 'rgba(255, 140, 0, 0.8)'}]}
+            onPress={() => {
+              if (currentPrize) {
+                // Auto-fill to 100% (reach goalAds)
+                const remaining = currentPrize.goalAds - currentPrize.currentAds;
+                for (let i = 0; i < remaining; i++) {
+                  incrementAdsForPrize(currentPrize.id);
+                }
+              }
+            }}>
+            <Text style={styles.debugButtonText}>Fill 100%</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1045,6 +1072,19 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.primary,
     letterSpacing: 1.5,
+  },
+  waitingInfo: {
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    backgroundColor: 'rgba(255, 107, 0, 0.15)',
+    borderRadius: RADIUS.lg,
+  },
+  waitingText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.medium,
+    color: COLORS.primary,
+    textAlign: 'center',
   },
   timerContainer: {
     flexDirection: 'row',
@@ -1257,6 +1297,9 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textAlign: 'center',
     marginBottom: SPACING.sm,
+    includeFontPadding: false,
+    alignSelf: 'center',
+    width: '100%',
   },
   modalTicketPrize: {
     fontSize: FONT_SIZE.md,
@@ -1378,12 +1421,13 @@ const styles = StyleSheet.create({
   // Debug Controls
   debugContainer: {
     position: 'absolute',
-    bottom: 170,
+    bottom: 130,
     left: 0,
     right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
+    paddingBottom: 15,
     zIndex: 9998,
   },
   debugButton: {

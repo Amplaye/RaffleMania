@@ -1,5 +1,5 @@
 import React, {useEffect, useRef} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Animated, Easing} from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Animated, Easing, Image} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer, Card} from '../../components/common';
@@ -177,7 +177,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
   const {user} = useAuthStore();
   const {pastTickets} = useTicketsStore();
   const {theme, toggleTheme} = useThemeStore();
-  const {getSelectedAvatar, getSelectedFrame} = useAvatarStore();
+  const {getSelectedAvatar, getSelectedFrame, customPhotoUri} = useAvatarStore();
 
   // Get current avatar and frame
   const currentAvatar = getSelectedAvatar();
@@ -193,6 +193,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
       title: 'I Miei Crediti',
       subtitle: `${user?.credits || 0} crediti disponibili`,
       onPress: () => navigation.navigate('Credits'),
+    },
+    {
+      id: 'leaderboard',
+      iconName: 'podium',
+      title: 'Classifica',
+      subtitle: 'Top 100 giocatori',
+      onPress: () => navigation.navigate('Leaderboard'),
     },
     {
       id: 'wins',
@@ -262,9 +269,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
                 end={{x: 1, y: 1}}
                 style={styles.avatarFrame}>
                 <View style={[styles.avatarInner, {backgroundColor: colors.card, margin: currentFrame.borderWidth}]}>
-                  <View style={[styles.avatarIcon, {backgroundColor: currentAvatar.color + '20'}]}>
-                    <Ionicons name={currentAvatar.icon as any} size={32} color={currentAvatar.color} />
-                  </View>
+                  {/* Mostra foto custom o icona avatar */}
+                  {customPhotoUri ? (
+                    <Image
+                      source={{uri: customPhotoUri}}
+                      style={styles.avatarPhoto}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={[styles.avatarIcon, {backgroundColor: currentAvatar.color + '20'}]}>
+                      <Ionicons name={currentAvatar.icon as any} size={32} color={currentAvatar.color} />
+                    </View>
+                  )}
                 </View>
               </LinearGradient>
             </View>
@@ -390,6 +406,11 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarPhoto: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
   profileInfoContainer: {
     flex: 1,

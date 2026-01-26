@@ -7,7 +7,8 @@ import {
   statusCodes,
 } from '@react-native-google-signin/google-signin';
 import {User} from '../types';
-import {mockCurrentUser} from '../services/mock';
+import {API_CONFIG} from '../utils/constants';
+import apiClient, {tokenManager, getErrorMessage} from '../services/apiClient';
 
 // Configure Google Sign-In
 GoogleSignin.configure({
@@ -28,11 +29,33 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginWithApple: () => Promise<void>;
-  register: (email: string, password: string, displayName: string) => Promise<void>;
-  logout: () => void;
+  register: (email: string, password: string, username: string) => Promise<void>;
+  logout: () => Promise<void>;
   updateUser: (userData: Partial<User>) => void;
   setLoading: (loading: boolean) => void;
+  checkAuth: () => Promise<void>;
+  refreshUserData: () => Promise<void>;
 }
+
+// Helper to map API user to app User type
+const mapApiUserToUser = (apiUser: any): User => ({
+  id: String(apiUser.id),
+  email: apiUser.email,
+  displayName: apiUser.username,
+  avatarColor: apiUser.avatar_color || '#FF6B00',
+  avatarUrl: apiUser.avatar_url || undefined,
+  credits: apiUser.credits || 0,
+  xp: apiUser.xp || 0,
+  level: apiUser.level || 1,
+  totalTickets: apiUser.total_tickets || 0,
+  watchedAdsCount: apiUser.watched_ads || 0,
+  currentStreak: apiUser.current_streak || 0,
+  lastStreakDate: apiUser.last_streak_date || undefined,
+  referralCode: apiUser.referral_code || '',
+  referredBy: apiUser.referred_by || undefined,
+  createdAt: apiUser.created_at,
+  shippingAddress: apiUser.shipping_address || undefined,
+});
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
@@ -40,23 +63,50 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isLoading: false,
 
-  login: async (email: string, _password: string) => {
+  login: async (email: string, password: string) => {
     set({isLoading: true});
 
-    // Simulate API call
-    await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
+    try {
+      if (API_CONFIG.USE_MOCK_DATA) {
+        // Mock login for testing
+        await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
+        const mockUser: User = {
+          id: '1',
+          email,
+          displayName: email.split('@')[0],
+          avatarColor: '#FF6B00',
+          credits: 100,
+          xp: 500,
+          level: 3,
+          totalTickets: 10,
+          watchedAdsCount: 25,
+          currentStreak: 5,
+          referralCode: 'TEST123',
+          createdAt: new Date().toISOString(),
+        };
+        set({
+          user: mockUser,
+          token: 'mock_token',
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        return;
+      }
 
-    // Mock login - in production this would call the WordPress API
-    if (email) {
+      const response = await apiClient.post('/auth/login', {email, password});
+      const {user, tokens} = response.data.data;
+
+      await tokenManager.setTokens(tokens.access_token, tokens.refresh_token);
+
       set({
-        user: mockCurrentUser,
-        token: 'mock_jwt_token_123',
+        user: mapApiUserToUser(user),
+        token: tokens.access_token,
         isAuthenticated: true,
         isLoading: false,
       });
-    } else {
+    } catch (error) {
       set({isLoading: false});
-      throw new Error('Credenziali non valide');
+      throw new Error(getErrorMessage(error));
     }
   },
 
@@ -64,29 +114,52 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({isLoading: true});
 
     try {
-      // Check if Google Play Services are available (Android only)
       await GoogleSignin.hasPlayServices();
-
-      // Initiate Google Sign-In
       const response = await GoogleSignin.signIn();
 
       if (isSuccessResponse(response)) {
         const {data} = response;
         const googleUser = data.user;
 
-        // Create user from Google data
-        const newUser: User = {
-          ...mockCurrentUser,
-          id: `google_${googleUser.id}`,
+        if (API_CONFIG.USE_MOCK_DATA) {
+          const mockUser: User = {
+            id: `google_${googleUser.id}`,
+            email: googleUser.email,
+            displayName: googleUser.name || googleUser.email.split('@')[0],
+            avatarUrl: googleUser.photo || undefined,
+            avatarColor: '#FF6B00',
+            credits: 0,
+            xp: 0,
+            level: 1,
+            totalTickets: 0,
+            watchedAdsCount: 0,
+            currentStreak: 0,
+            referralCode: 'GOOGLE' + Date.now().toString(36).toUpperCase(),
+            createdAt: new Date().toISOString(),
+          };
+          set({
+            user: mockUser,
+            token: data.idToken || 'google_token',
+            isAuthenticated: true,
+            isLoading: false,
+          });
+          return;
+        }
+
+        // Send Google token to backend for verification/registration
+        const apiResponse = await apiClient.post('/auth/google', {
+          id_token: data.idToken,
           email: googleUser.email,
-          displayName: googleUser.name || googleUser.email.split('@')[0],
-          avatarUrl: googleUser.photo || undefined,
-          createdAt: new Date().toISOString(),
-        };
+          name: googleUser.name,
+          photo: googleUser.photo,
+        });
+
+        const {user, tokens} = apiResponse.data.data;
+        await tokenManager.setTokens(tokens.access_token, tokens.refresh_token);
 
         set({
-          user: newUser,
-          token: data.idToken || 'google_token',
+          user: mapApiUserToUser(user),
+          token: tokens.access_token,
           isAuthenticated: true,
           isLoading: false,
         });
@@ -100,14 +173,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (isErrorWithCode(error)) {
         switch (error.code) {
           case statusCodes.IN_PROGRESS:
-            throw new Error('Login già in corso');
+            throw new Error('Login gia in corso');
           case statusCodes.PLAY_SERVICES_NOT_AVAILABLE:
             throw new Error('Google Play Services non disponibile');
           default:
             throw new Error('Errore durante il login con Google');
         }
       }
-      throw error;
+      throw new Error(getErrorMessage(error));
     }
   },
 
@@ -115,29 +188,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({isLoading: true});
 
     try {
-      // Apple Sign-In is only available on iOS
       if (Platform.OS !== 'ios') {
         set({isLoading: false});
         throw new Error('Apple Sign-In disponibile solo su iOS');
       }
 
-      // For Apple Sign-In, we need to use @invertase/react-native-apple-authentication
-      // For now, we'll use a mock implementation
-      // In production, install: npm install @invertase/react-native-apple-authentication
-
-      // Simulate Apple Sign-In
+      // TODO: Implement Apple Sign-In with @invertase/react-native-apple-authentication
       await new Promise<void>(resolve => setTimeout(() => resolve(), 1500));
 
-      const newUser: User = {
-        ...mockCurrentUser,
+      const mockUser: User = {
         id: `apple_${Date.now()}`,
         email: 'apple.user@privaterelay.appleid.com',
         displayName: 'Utente Apple',
+        avatarColor: '#FF6B00',
+        credits: 0,
+        xp: 0,
+        level: 1,
+        totalTickets: 0,
+        watchedAdsCount: 0,
+        currentStreak: 0,
+        referralCode: 'APPLE' + Date.now().toString(36).toUpperCase(),
         createdAt: new Date().toISOString(),
       };
 
       set({
-        user: newUser,
+        user: mockUser,
         token: 'apple_token_' + Date.now(),
         isAuthenticated: true,
         isLoading: false,
@@ -148,40 +223,112 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  register: async (email: string, _password: string, displayName: string) => {
+  register: async (email: string, password: string, username: string) => {
     set({isLoading: true});
 
-    // Simulate API call
-    await new Promise<void>(resolve => setTimeout(() => resolve(), 1500));
+    try {
+      if (API_CONFIG.USE_MOCK_DATA) {
+        await new Promise<void>(resolve => setTimeout(() => resolve(), 1500));
+        const mockUser: User = {
+          id: `user_${Date.now()}`,
+          email,
+          displayName: username,
+          avatarColor: '#FF6B00',
+          credits: 0,
+          xp: 0,
+          level: 1,
+          totalTickets: 0,
+          watchedAdsCount: 0,
+          currentStreak: 0,
+          referralCode: username.substring(0, 4).toUpperCase() + Date.now().toString(36).toUpperCase().substring(0, 4),
+          createdAt: new Date().toISOString(),
+        };
+        set({
+          user: mockUser,
+          token: 'mock_jwt_token_new',
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        return;
+      }
 
-    // Mock registration
-    const newUser: User = {
-      ...mockCurrentUser,
-      id: `user_${Date.now()}`,
-      email,
-      displayName,
-      credits: 0,
-      totalTickets: 0,
-      watchedAdsCount: 0,
-      referralCode: `RAF${Date.now().toString(36).toUpperCase()}`,
-      createdAt: new Date().toISOString(),
-      shippingAddress: undefined,
-    };
+      const response = await apiClient.post('/auth/register', {
+        email,
+        password,
+        username,
+      });
 
-    set({
-      user: newUser,
-      token: 'mock_jwt_token_new',
-      isAuthenticated: true,
-      isLoading: false,
-    });
+      const {user, tokens} = response.data.data;
+      await tokenManager.setTokens(tokens.access_token, tokens.refresh_token);
+
+      set({
+        user: mapApiUserToUser(user),
+        token: tokens.access_token,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({isLoading: false});
+      throw new Error(getErrorMessage(error));
+    }
   },
 
-  logout: () => {
-    set({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-    });
+  logout: async () => {
+    try {
+      if (!API_CONFIG.USE_MOCK_DATA) {
+        await apiClient.post('/auth/logout').catch(() => {});
+      }
+      await tokenManager.clearTokens();
+      await GoogleSignin.signOut().catch(() => {});
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      set({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+      });
+    }
+  },
+
+  checkAuth: async () => {
+    try {
+      const token = await tokenManager.getAccessToken();
+      if (!token) {
+        set({isAuthenticated: false, user: null, token: null});
+        return;
+      }
+
+      if (API_CONFIG.USE_MOCK_DATA) {
+        set({isAuthenticated: true, token});
+        return;
+      }
+
+      const response = await apiClient.get('/auth/verify');
+      if (response.data.success) {
+        set({
+          user: mapApiUserToUser(response.data.data.user),
+          token,
+          isAuthenticated: true,
+        });
+      }
+    } catch (error) {
+      await tokenManager.clearTokens();
+      set({isAuthenticated: false, user: null, token: null});
+    }
+  },
+
+  refreshUserData: async () => {
+    try {
+      if (API_CONFIG.USE_MOCK_DATA) return;
+
+      const response = await apiClient.get('/users/me');
+      if (response.data.success) {
+        set({user: mapApiUserToUser(response.data.data.user)});
+      }
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+    }
   },
 
   updateUser: (userData: Partial<User>) => {

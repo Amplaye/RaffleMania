@@ -49,28 +49,41 @@ export const FRAMES: Frame[] = [
 interface AvatarState {
   selectedAvatarId: string;
   selectedFrameId: string;
+  customPhotoUri: string | null;
 
   // Actions
   setAvatar: (avatarId: string) => void;
   setFrame: (frameId: string) => void;
+  setCustomPhoto: (uri: string | null) => void;
+  clearCustomPhoto: () => void;
   getSelectedAvatar: () => Avatar;
   getSelectedFrame: () => Frame;
   getUnlockedAvatars: (userLevel: number) => Avatar[];
   getUnlockedFrames: (userLevel: number) => Frame[];
   isAvatarUnlocked: (avatarId: string, userLevel: number) => boolean;
   isFrameUnlocked: (frameId: string, userLevel: number) => boolean;
+  isUsingCustomPhoto: () => boolean;
 }
 
 export const useAvatarStore = create<AvatarState>((set, get) => ({
   selectedAvatarId: 'avatar_1',
   selectedFrameId: 'frame_1',
+  customPhotoUri: null,
 
   setAvatar: (avatarId: string) => {
-    set({selectedAvatarId: avatarId});
+    set({selectedAvatarId: avatarId, customPhotoUri: null});
   },
 
   setFrame: (frameId: string) => {
     set({selectedFrameId: frameId});
+  },
+
+  setCustomPhoto: (uri: string | null) => {
+    set({customPhotoUri: uri});
+  },
+
+  clearCustomPhoto: () => {
+    set({customPhotoUri: null});
   },
 
   getSelectedAvatar: () => {
@@ -99,5 +112,10 @@ export const useAvatarStore = create<AvatarState>((set, get) => ({
   isFrameUnlocked: (frameId: string, userLevel: number) => {
     const frame = FRAMES.find(f => f.id === frameId);
     return frame ? frame.unlockLevel <= userLevel : false;
+  },
+
+  isUsingCustomPhoto: () => {
+    const {customPhotoUri} = get();
+    return customPhotoUri !== null;
   },
 }));

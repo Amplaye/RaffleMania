@@ -239,7 +239,7 @@ const ShimmerProgressBar: React.FC<{
 export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const {prizeId} = route.params;
   const {colors, gradientColors, isDark, neon} = useThemeColors();
-  const {prizes, incrementAdsForPrize, currentDraw} = usePrizesStore();
+  const {prizes, incrementAdsForPrize} = usePrizesStore();
   const {addTicket, incrementAdsWatched, getTicketsForPrize, getTicketNumbersForPrize} = useTicketsStore();
   const addXP = useLevelStore(state => state.addXP);
   const {useCreditsForTicket} = useCreditsStore();
@@ -293,29 +293,30 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
     // Simulate watching ad
     await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
 
-    // Increment ads for this prize
+    // Increment ads for this prize (questo può avviare il timer automaticamente)
     incrementAdsForPrize(prize.id);
     incrementAdsWatched();
 
     // Add XP for watching ad
     addXP(XP_REWARDS.WATCH_AD);
 
-    if (currentDraw) {
-      // Add new ticket and get the assigned number
-      const newTicket = addTicket('ad', currentDraw.id, prize.id);
+    // Genera drawId per questo premio
+    const drawId = `draw_${prize.id}_${(prize.timerStartedAt || new Date().toISOString()).replace(/[^0-9]/g, '').slice(0, 14)}`;
 
-      // Get all user's numbers for this prize (including the new one)
-      const userNumbers = getTicketNumbersForPrize(prize.id);
-      const totalPool = getTotalPoolTickets(prize.id);
+    // Add new ticket and get the assigned number
+    const newTicket = addTicket('ad', drawId, prize.id);
 
-      setNewTicketInfo({
-        ticketNumber: newTicket.ticketNumber,
-        prizeName: prize.name,
-        userNumbers,
-        totalPoolTickets: totalPool,
-      });
-      setShowTicketModal(true);
-    }
+    // Get all user's numbers for this prize (including the new one)
+    const userNumbers = getTicketNumbersForPrize(prize.id);
+    const totalPool = getTotalPoolTickets(prize.id);
+
+    setNewTicketInfo({
+      ticketNumber: newTicket.ticketNumber,
+      prizeName: prize.name,
+      userNumbers,
+      totalPoolTickets: totalPool,
+    });
+    setShowTicketModal(true);
 
     setIsWatchingAd(false);
   };
@@ -326,7 +327,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
   };
 
   const handleUseCredits = async () => {
-    if (!prize || !currentDraw) return;
+    if (!prize) return;
     setShowAdOrCreditsModal(false);
 
     const success = await useCreditsForTicket();
@@ -334,8 +335,11 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
       return;
     }
 
+    // Genera drawId per questo premio
+    const drawId = `draw_${prize.id}_${(prize.timerStartedAt || new Date().toISOString()).replace(/[^0-9]/g, '').slice(0, 14)}`;
+
     // Add new ticket and get the assigned number
-    const newTicket = addTicket('credits', currentDraw.id, prize.id);
+    const newTicket = addTicket('credits', drawId, prize.id);
 
     // Get all user's numbers for this prize (including the new one)
     const userNumbers = getTicketNumbersForPrize(prize.id);

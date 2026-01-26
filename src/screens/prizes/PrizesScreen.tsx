@@ -113,7 +113,6 @@ const TicketSuccessModal: React.FC<{
 
           {/* Title */}
           <Text style={styles.modalTitle}>Nuovo Numero Ottenuto!</Text>
-          <Text style={styles.modalSubtitle}>Hai un nuovo numero per l'estrazione</Text>
 
           {/* Ticket Number Card */}
           <Animated.View
@@ -127,16 +126,8 @@ const TicketSuccessModal: React.FC<{
               end={{x: 1, y: 1}}
               style={styles.modalTicketGradient}>
               <View style={styles.modalTicketContent}>
-                <View style={styles.modalTicketHeader}>
-                  <Ionicons name="ticket" size={20} color="rgba(255,255,255,0.8)" />
-                  <Text style={styles.modalTicketLabel}>IL TUO NUMERO</Text>
-                </View>
                 <Text style={styles.modalTicketCode}>#{ticketInfo.ticketNumber}</Text>
-                <View style={styles.modalTicketDivider} />
-                <View style={styles.modalTicketPrizeRow}>
-                  <Ionicons name="gift" size={16} color="rgba(255,255,255,0.8)" />
-                  <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
-                </View>
+                <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
               </View>
             </LinearGradient>
           </Animated.View>
@@ -359,7 +350,6 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
   const {prizes, fetchPrizes, incrementAdsForPrize} = usePrizesStore();
   const {addTicket, incrementAdsWatched, getTicketsForPrize, getTicketNumbersForPrize} = useTicketsStore();
-  const {currentDraw} = usePrizesStore();
   const addXP = useLevelStore(state => state.addXP);
   const {useCreditsForTicket} = useCreditsStore();
   const user = useAuthStore(state => state.user);
@@ -380,6 +370,12 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     setRefreshing(false);
   };
 
+  // Genera drawId per un premio
+  const getDrawIdForPrize = (prize: Prize) => {
+    const timestamp = prize.timerStartedAt || new Date().toISOString();
+    return `draw_${prize.id}_${timestamp.replace(/[^0-9]/g, '').slice(0, 14)}`;
+  };
+
   // Show the ad or credits choice modal
   const handleShowAdOrCreditsModal = (prize: Prize) => {
     setSelectedPrize(prize);
@@ -395,35 +391,36 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     // Simulate watching ad
     await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
 
-    // Increment ads for this prize
+    // Increment ads for this prize (può avviare il timer automaticamente)
     incrementAdsForPrize(selectedPrize.id);
     incrementAdsWatched();
 
     // Add XP for watching ad
     addXP(XP_REWARDS.WATCH_AD);
 
-    if (currentDraw) {
-      // Add new ticket and get the assigned number
-      const newTicket = addTicket('ad', currentDraw.id, selectedPrize.id);
+    // Genera drawId per questo premio
+    const drawId = getDrawIdForPrize(selectedPrize);
 
-      // Get all user's numbers for this prize (including the new one)
-      const userNumbers = getTicketNumbersForPrize(selectedPrize.id);
-      const totalPool = getTotalPoolTickets(selectedPrize.id);
+    // Add new ticket and get the assigned number
+    const newTicket = addTicket('ad', drawId, selectedPrize.id);
 
-      setNewTicketInfo({
-        ticketNumber: newTicket.ticketNumber,
-        prizeName: selectedPrize.name,
-        userNumbers,
-        totalPoolTickets: totalPool,
-      });
-      setShowTicketModal(true);
-    }
+    // Get all user's numbers for this prize (including the new one)
+    const userNumbers = getTicketNumbersForPrize(selectedPrize.id);
+    const totalPool = getTotalPoolTickets(selectedPrize.id);
+
+    setNewTicketInfo({
+      ticketNumber: newTicket.ticketNumber,
+      prizeName: selectedPrize.name,
+      userNumbers,
+      totalPoolTickets: totalPool,
+    });
+    setShowTicketModal(true);
 
     setIsWatchingAd(false);
   };
 
   const handleUseCredits = async () => {
-    if (!selectedPrize || !currentDraw) return;
+    if (!selectedPrize) return;
 
     setShowAdOrCreditsModal(false);
 
@@ -436,8 +433,11 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     // Increment ads for this prize (counts as participation)
     incrementAdsForPrize(selectedPrize.id);
 
+    // Genera drawId per questo premio
+    const drawId = getDrawIdForPrize(selectedPrize);
+
     // Add new ticket and get the assigned number
-    const newTicket = addTicket('credits', currentDraw.id, selectedPrize.id);
+    const newTicket = addTicket('credits', drawId, selectedPrize.id);
 
     // Get all user's numbers for this prize (including the new one)
     const userNumbers = getTicketNumbersForPrize(selectedPrize.id);
@@ -772,12 +772,6 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  modalSubtitle: {
-    fontSize: FONT_SIZE.md,
-    fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textMuted,
     marginBottom: SPACING.lg,
     textAlign: 'center',
   },
@@ -790,44 +784,29 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
   },
   modalTicketContent: {
-    padding: SPACING.lg,
-  },
-  modalTicketHeader: {
-    flexDirection: 'row',
+    paddingVertical: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
     alignItems: 'center',
-    gap: 8,
-    marginBottom: SPACING.sm,
-  },
-  modalTicketLabel: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: 'rgba(255, 255, 255, 0.8)',
-    letterSpacing: 1,
+    justifyContent: 'center',
   },
   modalTicketCode: {
-    fontSize: 28,
+    fontSize: 42,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.white,
     letterSpacing: 2,
-    marginBottom: SPACING.md,
-  },
-  modalTicketDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    marginBottom: SPACING.md,
-  },
-  modalTicketPrizeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    textAlign: 'center',
+    marginBottom: SPACING.sm,
+    includeFontPadding: false,
+    alignSelf: 'center',
+    width: '100%',
   },
   modalTicketPrize: {
     fontSize: FONT_SIZE.md,
     fontFamily: FONT_FAMILY.medium,
     fontWeight: FONT_WEIGHT.medium,
-    color: COLORS.white,
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
   },
   // Boost Modal Styles
   modalBoostCard: {

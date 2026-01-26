@@ -89,9 +89,14 @@ export const truncateText = (text: string, maxLength: number): string => {
   return `${text.slice(0, maxLength - 3)}...`;
 };
 
-// Generate referral code
-export const generateReferralCode = (userId: string): string => {
-  const prefix = 'RAF';
-  const suffix = userId.slice(0, 6).toUpperCase();
-  return `${prefix}${suffix}`;
+// Generate unique referral code
+// Format: RAF + 3 random chars + timestamp base36 (unique per millisecond)
+export const generateReferralCode = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No confusing chars (0, O, I, 1)
+  let randomPart = '';
+  for (let i = 0; i < 3; i++) {
+    randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  const timestampPart = Date.now().toString(36).toUpperCase().slice(-4);
+  return `RAF${randomPart}${timestampPart}`;
 };

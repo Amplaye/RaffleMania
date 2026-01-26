@@ -8,9 +8,12 @@ import {
   Animated,
   StatusBar,
   Dimensions,
+  Image,
+  Alert,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import {launchCamera, launchImageLibrary, ImagePickerResponse} from 'react-native-image-picker';
 import {AnimatedBackground} from '../../components/common';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
@@ -35,7 +38,8 @@ const AvatarPreview: React.FC<{
   avatar: Avatar;
   frame: Frame;
   colors: any;
-}> = ({avatar, frame, colors}) => {
+  customPhotoUri?: string | null;
+}> = ({avatar, frame, colors, customPhotoUri}) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -51,7 +55,7 @@ const AvatarPreview: React.FC<{
         useNativeDriver: true,
       }),
     ]).start();
-  }, [avatar.id, frame.id]);
+  }, [avatar.id, frame.id, customPhotoUri]);
 
   return (
     <Animated.View style={[styles.previewContainer, {transform: [{scale: scaleAnim}]}]}>
@@ -63,13 +67,23 @@ const AvatarPreview: React.FC<{
         style={[styles.previewFrame, {borderRadius: 70}]}>
         {/* Interno con sfondo card - la cornice è visibile come bordo */}
         <View style={[styles.previewInner, {backgroundColor: colors.card, margin: frame.borderWidth}]}>
-          {/* Avatar icon centrato */}
-          <View style={[styles.previewAvatar, {backgroundColor: avatar.color + '20'}]}>
-            <Ionicons name={avatar.icon as any} size={60} color={avatar.color} />
-          </View>
+          {/* Avatar icon o foto custom */}
+          {customPhotoUri ? (
+            <Image
+              source={{uri: customPhotoUri}}
+              style={styles.previewPhoto}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.previewAvatar, {backgroundColor: avatar.color + '20'}]}>
+              <Ionicons name={avatar.icon as any} size={60} color={avatar.color} />
+            </View>
+          )}
         </View>
       </LinearGradient>
-      <Text style={[styles.previewName, {color: colors.text}]}>{avatar.name}</Text>
+      <Text style={[styles.previewName, {color: colors.text}]}>
+        {customPhotoUri ? 'Foto Personale' : avatar.name}
+      </Text>
       <Text style={[styles.previewFrameName, {color: colors.textMuted}]}>Cornice: {frame.name}</Text>
     </Animated.View>
   );
@@ -185,16 +199,99 @@ export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
   const {
     selectedAvatarId,
     selectedFrameId,
+    customPhotoUri,
     setAvatar,
     setFrame,
+    setCustomPhoto,
     getSelectedAvatar,
     getSelectedFrame,
   } = useAvatarStore();
 
-  const [activeTab, setActiveTab] = useState<'avatars' | 'frames'>('avatars');
+  const [activeTab, setActiveTab] = useState<'avatars' | 'frames' | 'photo'>('avatars');
 
   const currentAvatar = getSelectedAvatar();
   const currentFrame = getSelectedFrame();
+
+  const handleImageResponse = (response: ImagePickerResponse) => {
+    console.log('Image picker response:', JSON.stringify(response, null, 2));
+
+    if (response.didCancel) {
+      console.log('User cancelled image picker');
+      return;
+    }
+
+    if (response.errorCode) {
+      console.log('Image picker error:', response.errorCode, response.errorMessage);
+      let errorMessage = response.errorMessage || 'Si è verificato un errore';
+
+      if (response.errorCode === 'camera_unavailable') {
+        errorMessage = 'Fotocamera non disponibile su questo dispositivo';
+      } else if (response.errorCode === 'permission') {
+        errorMessage = 'Permesso negato. Vai nelle impostazioni per abilitare l\'accesso.';
+      }
+
+      Alert.alert('Errore', errorMessage);
+      return;
+    }
+
+    if (response.assets && response.assets.length > 0 && response.assets[0]?.uri) {
+      console.log('Setting photo URI:', response.assets[0].uri);
+      setCustomPhoto(response.assets[0].uri);
+    } else {
+      console.log('No assets in response');
+    }
+  };
+
+  const openCamera = async () => {
+    try {
+      console.log('Opening camera...');
+      const result = await launchCamera({
+        mediaType: 'photo',
+        cameraType: 'front',
+        quality: 0.8,
+        maxWidth: 500,
+        maxHeight: 500,
+        saveToPhotos: false,
+      });
+      console.log('Camera result:', result);
+      handleImageResponse(result);
+    } catch (error: any) {
+      console.log('Camera error:', error);
+      console.log('Camera error message:', error?.message);
+      console.log('Camera error stack:', error?.stack);
+      Alert.alert(
+        'Errore Fotocamera',
+        `${error?.message || 'Impossibile aprire la fotocamera'}\n\nRicompila l'app da Xcode se il problema persiste.`,
+      );
+    }
+  };
+
+  const openGallery = async () => {
+    try {
+      console.log('Opening gallery...');
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        maxWidth: 500,
+        maxHeight: 500,
+        selectionLimit: 1,
+      });
+      console.log('Gallery result:', result);
+      handleImageResponse(result);
+    } catch (error: any) {
+      console.log('Gallery error:', error);
+      console.log('Gallery error message:', error?.message);
+      console.log('Gallery error stack:', error?.stack);
+      Alert.alert(
+        'Errore Galleria',
+        `${error?.message || 'Impossibile aprire la galleria'}\n\nRicompila l'app da Xcode se il problema persiste.`,
+      );
+    }
+  };
+
+  const removePhoto = () => {
+    setCustomPhoto(null);
+  };
 
   return (
     <LinearGradient
@@ -225,7 +322,12 @@ export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
 
         {/* Avatar Preview */}
         <View style={[styles.previewSection, {backgroundColor: colors.card}, neon.glowSubtle]}>
-          <AvatarPreview avatar={currentAvatar} frame={currentFrame} colors={colors} />
+          <AvatarPreview
+            avatar={currentAvatar}
+            frame={currentFrame}
+            colors={colors}
+            customPhotoUri={customPhotoUri}
+          />
         </View>
 
         {/* Tab Selector */}
@@ -235,7 +337,7 @@ export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
             onPress={() => setActiveTab('avatars')}>
             <Ionicons
               name="person"
-              size={20}
+              size={18}
               color={activeTab === 'avatars' ? COLORS.white : COLORS.textMuted}
             />
             <Text style={[styles.tabText, activeTab === 'avatars' && styles.tabTextActive]}>
@@ -247,37 +349,109 @@ export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
             onPress={() => setActiveTab('frames')}>
             <Ionicons
               name="ellipse-outline"
-              size={20}
+              size={18}
               color={activeTab === 'frames' ? COLORS.white : COLORS.textMuted}
             />
             <Text style={[styles.tabText, activeTab === 'frames' && styles.tabTextActive]}>
               Cornici
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'photo' && styles.tabActive]}
+            onPress={() => setActiveTab('photo')}>
+            <Ionicons
+              name="camera"
+              size={18}
+              color={activeTab === 'photo' ? COLORS.white : COLORS.textMuted}
+            />
+            <Text style={[styles.tabText, activeTab === 'photo' && styles.tabTextActive]}>
+              Foto
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Items Grid */}
-        <View style={styles.grid}>
-          {activeTab === 'avatars'
-            ? AVATARS.map(avatar => (
-                <AvatarItem
-                  key={avatar.id}
-                  avatar={avatar}
-                  isSelected={selectedAvatarId === avatar.id}
-                  isUnlocked={true}
-                  onSelect={() => setAvatar(avatar.id)}
+        {activeTab === 'avatars' && (
+          <View style={styles.grid}>
+            {AVATARS.map(avatar => (
+              <AvatarItem
+                key={avatar.id}
+                avatar={avatar}
+                isSelected={selectedAvatarId === avatar.id && !customPhotoUri}
+                isUnlocked={true}
+                onSelect={() => setAvatar(avatar.id)}
+              />
+            ))}
+          </View>
+        )}
+
+        {activeTab === 'frames' && (
+          <View style={styles.grid}>
+            {FRAMES.map(frame => (
+              <FrameItem
+                key={frame.id}
+                frame={frame}
+                isSelected={selectedFrameId === frame.id}
+                isUnlocked={true}
+                onSelect={() => setFrame(frame.id)}
+              />
+            ))}
+          </View>
+        )}
+
+        {activeTab === 'photo' && (
+          <View style={styles.photoSection}>
+            {/* Current Photo Preview */}
+            {customPhotoUri && (
+              <View style={[styles.currentPhotoContainer, {backgroundColor: colors.card}]}>
+                <Image
+                  source={{uri: customPhotoUri}}
+                  style={styles.currentPhotoImage}
+                  resizeMode="cover"
                 />
-              ))
-            : FRAMES.map(frame => (
-                <FrameItem
-                  key={frame.id}
-                  frame={frame}
-                  isSelected={selectedFrameId === frame.id}
-                  isUnlocked={true}
-                  onSelect={() => setFrame(frame.id)}
-                />
-              ))}
-        </View>
+                <TouchableOpacity
+                  style={styles.removePhotoButton}
+                  onPress={removePhoto}
+                  activeOpacity={0.7}>
+                  <Ionicons name="close-circle" size={28} color={COLORS.error} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Photo Action Buttons */}
+            <View style={styles.photoButtons}>
+              <TouchableOpacity
+                style={[styles.photoButton, {backgroundColor: colors.card}]}
+                onPress={openCamera}
+                activeOpacity={0.7}>
+                <View style={[styles.photoButtonIcon, {backgroundColor: COLORS.primary + '20'}]}>
+                  <Ionicons name="camera" size={32} color={COLORS.primary} />
+                </View>
+                <Text style={[styles.photoButtonText, {color: colors.text}]}>
+                  Scatta Foto
+                </Text>
+                <Text style={[styles.photoButtonSubtext, {color: colors.textMuted}]}>
+                  Usa la fotocamera
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.photoButton, {backgroundColor: colors.card}]}
+                onPress={openGallery}
+                activeOpacity={0.7}>
+                <View style={[styles.photoButtonIcon, {backgroundColor: COLORS.secondary + '20'}]}>
+                  <Ionicons name="images" size={32} color={COLORS.secondary} />
+                </View>
+                <Text style={[styles.photoButtonText, {color: colors.text}]}>
+                  Galleria
+                </Text>
+                <Text style={[styles.photoButtonSubtext, {color: colors.textMuted}]}>
+                  Scegli dalla libreria
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Info Card */}
         <View style={[styles.infoCard, {backgroundColor: colors.card}, neon.glowSubtle]}>
@@ -489,6 +663,64 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.regular,
     lineHeight: 20,
+  },
+
+  // Photo Section
+  photoSection: {
+    marginBottom: SPACING.lg,
+  },
+  currentPhotoContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.lg,
+    borderRadius: RADIUS.xl,
+    marginBottom: SPACING.md,
+    position: 'relative',
+  },
+  currentPhotoImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  removePhotoButton: {
+    position: 'absolute',
+    top: SPACING.md,
+    right: SPACING.md,
+  },
+  photoButtons: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+  },
+  photoButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: SPACING.xl,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.xl,
+  },
+  photoButtonIcon: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.sm,
+  },
+  photoButtonText: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.semibold,
+    fontWeight: FONT_WEIGHT.semibold,
+    marginBottom: 4,
+  },
+  photoButtonSubtext: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.regular,
+    textAlign: 'center',
+  },
+  previewPhoto: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
 });
 

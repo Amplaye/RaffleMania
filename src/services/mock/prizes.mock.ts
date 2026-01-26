@@ -11,6 +11,7 @@ export const mockPrizes: Prize[] = [
     isActive: true,
     currentAds: 347,
     goalAds: 1000,
+    timerStatus: 'waiting',
   },
   {
     id: 'prize_002',
@@ -22,6 +23,7 @@ export const mockPrizes: Prize[] = [
     isActive: true,
     currentAds: 892,
     goalAds: 2000,
+    timerStatus: 'waiting',
   },
   {
     id: 'prize_003',
@@ -33,6 +35,7 @@ export const mockPrizes: Prize[] = [
     isActive: true,
     currentAds: 156,
     goalAds: 800,
+    timerStatus: 'waiting',
   },
   {
     id: 'prize_004',
@@ -44,6 +47,7 @@ export const mockPrizes: Prize[] = [
     isActive: true,
     currentAds: 423,
     goalAds: 600,
+    timerStatus: 'waiting',
   },
   {
     id: 'prize_005',
@@ -55,6 +59,7 @@ export const mockPrizes: Prize[] = [
     isActive: true,
     currentAds: 78,
     goalAds: 500,
+    timerStatus: 'waiting',
   },
 ];
 

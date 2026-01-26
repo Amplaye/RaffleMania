@@ -35,6 +35,10 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string/>
+	<key>NSCameraUsageDescription</key>
+	<string>Vogliamo accedere alla fotocamera per scattare una foto per il tuo avatar.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Vogliamo accedere alla libreria foto per scegliere un'immagine per il tuo avatar.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

@@ -1,4 +1,6 @@
 import {create} from 'zustand';
+import {API_CONFIG} from '../utils/constants';
+import apiClient, {getErrorMessage} from '../services/apiClient';
 import {useAuthStore} from './useAuthStore';
 import {useLevelStore} from './useLevelStore';
 
@@ -25,7 +27,8 @@ interface StreakState {
   hasClaimedToday: boolean;
 
   // Actions
-  checkAndUpdateStreak: () => StreakReward | null;
+  checkAndUpdateStreak: () => Promise<StreakReward | null>;
+  fetchStreakInfo: () => Promise<void>;
   getNextMilestone: () => number;
   resetStreak: () => void;
 }
@@ -51,7 +54,27 @@ export const useStreakStore = create<StreakState>((set, get) => ({
   totalDaysLoggedIn: 0,
   hasClaimedToday: false,
 
-  checkAndUpdateStreak: () => {
+  fetchStreakInfo: async () => {
+    try {
+      if (API_CONFIG.USE_MOCK_DATA) {
+        return;
+      }
+
+      const response = await apiClient.get('/users/me/streak');
+      const data = response.data.data;
+
+      set({
+        currentStreak: data.current_streak || 0,
+        longestStreak: data.longest_streak || 0,
+        lastLoginDate: data.last_streak_date,
+        hasClaimedToday: data.claimed_today || false,
+      });
+    } catch (error) {
+      console.error('Error fetching streak info:', getErrorMessage(error));
+    }
+  },
+
+  checkAndUpdateStreak: async () => {
     const state = get();
     const today = formatDate(new Date());
 
@@ -60,69 +83,94 @@ export const useStreakStore = create<StreakState>((set, get) => ({
       return null;
     }
 
-    let newStreak = state.currentStreak;
-    let isNewDay = false;
+    try {
+      if (!API_CONFIG.USE_MOCK_DATA) {
+        // Call API to claim streak
+        const response = await apiClient.post('/users/me/streak/claim');
+        const data = response.data.data;
 
-    // Check if this is continuing a streak or starting fresh
-    if (state.lastLoginDate === null) {
-      // First ever login
-      newStreak = 1;
-      isNewDay = true;
-    } else if (isToday(state.lastLoginDate)) {
-      // Same day, don't increase streak but allow claiming if not claimed
-      if (state.hasClaimedToday) {
-        return null;
-      }
-      isNewDay = false;
-    } else if (isYesterday(state.lastLoginDate)) {
-      // Consecutive day - increase streak
-      newStreak = Math.min(state.currentStreak + 1, STREAK_REWARDS.MAX_STREAK);
-      isNewDay = true;
-    } else {
-      // Streak broken - reset to 1
-      newStreak = 1;
-      isNewDay = true;
-    }
+        const reward: StreakReward = {
+          xp: data.xp_earned || 0,
+          credits: data.credits_earned || 0,
+          isWeeklyBonus: data.is_weekly_bonus || false,
+          isMilestone: data.is_milestone || false,
+        };
 
-    // Calculate rewards based on day in week (1-7)
-    const dayInWeek = ((newStreak - 1) % 7) + 1;
-    const isDay7 = dayInWeek === 7;
-
-    const reward: StreakReward = {
-      xp: isDay7 ? STREAK_REWARDS.WEEKLY_XP : STREAK_REWARDS.DAILY_XP,
-      credits: isDay7 ? STREAK_REWARDS.WEEKLY_CREDITS : 0,
-      isWeeklyBonus: isDay7,
-      isMilestone: false,
-    };
-
-    // Apply rewards
-    const levelStore = useLevelStore.getState();
-    levelStore.addXP(reward.xp);
-
-    if (reward.credits > 0) {
-      const authStore = useAuthStore.getState();
-      if (authStore.user) {
-        authStore.updateUser({
-          credits: authStore.user.credits + reward.credits,
+        // Update local state
+        set({
+          currentStreak: data.current_streak,
+          longestStreak: Math.max(state.longestStreak, data.current_streak),
+          lastLoginDate: today,
+          hasClaimedToday: true,
         });
+
+        // Refresh user data to get updated XP/credits
+        const authStore = useAuthStore.getState();
+        await authStore.refreshUserData();
+
+        return reward;
       }
+
+      // Mock mode - local calculation
+      let newStreak = state.currentStreak;
+      let isNewDay = false;
+
+      if (state.lastLoginDate === null) {
+        newStreak = 1;
+        isNewDay = true;
+      } else if (isToday(state.lastLoginDate)) {
+        if (state.hasClaimedToday) {
+          return null;
+        }
+        isNewDay = false;
+      } else if (isYesterday(state.lastLoginDate)) {
+        newStreak = Math.min(state.currentStreak + 1, STREAK_REWARDS.MAX_STREAK);
+        isNewDay = true;
+      } else {
+        newStreak = 1;
+        isNewDay = true;
+      }
+
+      const dayInWeek = ((newStreak - 1) % 7) + 1;
+      const isDay7 = dayInWeek === 7;
+
+      const reward: StreakReward = {
+        xp: isDay7 ? STREAK_REWARDS.WEEKLY_XP : STREAK_REWARDS.DAILY_XP,
+        credits: isDay7 ? STREAK_REWARDS.WEEKLY_CREDITS : 0,
+        isWeeklyBonus: isDay7,
+        isMilestone: false,
+      };
+
+      // Apply rewards
+      const levelStore = useLevelStore.getState();
+      levelStore.addXP(reward.xp);
+
+      if (reward.credits > 0) {
+        const authStore = useAuthStore.getState();
+        if (authStore.user) {
+          authStore.updateUser({
+            credits: authStore.user.credits + reward.credits,
+          });
+        }
+      }
+
+      set({
+        currentStreak: newStreak,
+        longestStreak: Math.max(state.longestStreak, newStreak),
+        lastLoginDate: today,
+        totalDaysLoggedIn: isNewDay ? state.totalDaysLoggedIn + 1 : state.totalDaysLoggedIn,
+        hasClaimedToday: true,
+      });
+
+      return reward;
+    } catch (error) {
+      console.error('Error claiming streak:', getErrorMessage(error));
+      return null;
     }
-
-    // Update state
-    set({
-      currentStreak: newStreak,
-      longestStreak: Math.max(state.longestStreak, newStreak),
-      lastLoginDate: today,
-      totalDaysLoggedIn: isNewDay ? state.totalDaysLoggedIn + 1 : state.totalDaysLoggedIn,
-      hasClaimedToday: true,
-    });
-
-    return reward;
   },
 
   getNextMilestone: () => {
     const {currentStreak} = get();
-    // Next multiple of 7
     return Math.ceil((currentStreak + 1) / 7) * 7;
   },
 

@@ -176,9 +176,9 @@ export const ExtractionResultModal: React.FC<ExtractionResultModalProps> = ({
       <Animated.View style={[styles.overlay, {opacity: opacityAnim}]}>
         <Animated.View style={[styles.container, {transform: [{scale: scaleAnim}]}]}>
           {isWinner ? (
-            // Winner Modal
+            // Winner Modal - Gradient arancione intenso (simile allo sfondo app)
             <LinearGradient
-              colors={['#FFD700', '#FFA500', '#FF8C00']}
+              colors={['#FFB347', '#FF9636', '#FF7F24']}
               style={styles.winnerGradient}>
               <View style={styles.winnerContent}>
                 {/* Congratulations Text */}

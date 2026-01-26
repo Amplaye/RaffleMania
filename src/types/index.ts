@@ -36,6 +36,8 @@ export interface ShippingAddress {
 }
 
 // Prize Types
+export type PrizeTimerStatus = 'waiting' | 'countdown' | 'extracting' | 'completed';
+
 export interface Prize {
   id: string;
   name: string;
@@ -46,6 +48,11 @@ export interface Prize {
   isActive: boolean;
   currentAds: number;
   goalAds: number;
+  // Timer per premio individuale
+  timerStatus: PrizeTimerStatus;
+  scheduledAt?: string; // Data/ora dell'estrazione (impostata quando raggiunge goalAds)
+  timerStartedAt?: string; // Quando il timer è partito
+  extractedAt?: string; // Quando l'estrazione è avvenuta
 }
 
 // Ticket Types
@@ -153,4 +160,18 @@ export interface ReferralStats {
     displayName: string;
     joinedAt: string;
   }[];
+}
+
+// Leaderboard Types
+export type LeaderboardType = 'ads' | 'wins';
+
+export interface LeaderboardEntry {
+  id: string;
+  rank: number;
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+  level: number;
+  value: number; // adsWatched or winsCount depending on type
+  isCurrentUser?: boolean;
 }
