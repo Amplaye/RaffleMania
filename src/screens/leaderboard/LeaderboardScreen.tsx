@@ -1,4 +1,4 @@
-import React, {useEffect, useRef} from 'react';
+import React, {useEffect, useRef, useMemo, useCallback, memo} from 'react';
 import {
   View,
   Text,
@@ -42,7 +42,7 @@ const AnimatedTab: React.FC<{
       tension: 50,
       useNativeDriver: true,
     }).start();
-  }, [activeTab]);
+  }, [activeTab, slideAnim]);
 
   const translateX = slideAnim.interpolate({
     inputRange: [0, 1],
@@ -107,32 +107,13 @@ interface LeaderboardScreenProps {
   navigation: any;
 }
 
-// Podium component for top 3
-const Podium: React.FC<{
+// Podium component for top 3 - memoized for smooth tab switching
+const Podium = memo<{
   entries: LeaderboardEntry[];
   type: LeaderboardType;
   colors: any;
   isDark: boolean;
-}> = ({entries, type, colors, isDark}) => {
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [scaleAnim, opacityAnim]);
-
+}>(({entries, type, colors, isDark: _isDark}) => {
   const first = entries[0];
   const second = entries[1];
   const third = entries[2];
@@ -224,62 +205,26 @@ const Podium: React.FC<{
   };
 
   return (
-    <Animated.View
-      style={[
-        styles.podiumContainer,
-        {
-          opacity: opacityAnim,
-          transform: [{scale: scaleAnim}],
-        },
-      ]}>
+    <View style={styles.podiumContainer}>
       <PodiumItem entry={second} rank={2} height={60} />
       <PodiumItem entry={first} rank={1} height={80} />
       <PodiumItem entry={third} rank={3} height={40} />
-    </Animated.View>
+    </View>
   );
-};
+});
 
-// Leaderboard entry row
-const LeaderboardRow: React.FC<{
+// Leaderboard entry row - memoized for smooth tab switching
+const LeaderboardRow = memo<{
   entry: LeaderboardEntry;
   type: LeaderboardType;
   index: number;
   colors: any;
   isDark: boolean;
-}> = ({entry, type, index, colors, isDark}) => {
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.sequence([
-      Animated.delay(Math.min(index, 10) * 50),
-      Animated.parallel([
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 8,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
-  }, [index, scaleAnim, opacityAnim]);
-
+}>(({entry, type, index: _index, colors, isDark}) => {
   const isCurrentUser = entry.isCurrentUser;
 
   return (
-    <Animated.View
-      style={[
-        styles.rowContainer,
-        {
-          opacity: opacityAnim,
-          transform: [{scale: scaleAnim}],
-        },
-      ]}>
+    <View style={styles.rowContainer}>
       <View
         style={[
           styles.row,
@@ -341,9 +286,9 @@ const LeaderboardRow: React.FC<{
           </Text>
         </View>
       </View>
-    </Animated.View>
+    </View>
   );
-};
+});
 
 export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({navigation}) => {
   const {colors, isDark} = useThemeColors();
@@ -395,15 +340,24 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({navigation}
     return () => {
       stopMidnightCheck();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, userAdsCount, userWinsCount, level, user?.displayName, userAvatarUrl]);
 
-  const currentLeaderboard = activeTab === 'ads' ? adsLeaderboard : winsLeaderboard;
+  // Memoize leaderboard data to prevent unnecessary re-renders
+  const currentLeaderboard = useMemo(() =>
+    activeTab === 'ads' ? adsLeaderboard : winsLeaderboard,
+    [activeTab, adsLeaderboard, winsLeaderboard]
+  );
   const currentUserRank = activeTab === 'ads' ? currentUserAdsRank : currentUserWinsRank;
 
-  // Entries for list (excluding top 3)
-  const listEntries = currentLeaderboard.slice(3);
+  // Memoize list entries
+  const listEntries = useMemo(() => currentLeaderboard.slice(3), [currentLeaderboard]);
 
-  const renderItem = ({item, index}: {item: LeaderboardEntry; index: number}) => (
+  // Memoize top 3 entries
+  const top3Entries = useMemo(() => currentLeaderboard.slice(0, 3), [currentLeaderboard]);
+
+  // Memoized render item
+  const renderItem = useCallback(({item, index}: {item: LeaderboardEntry; index: number}) => (
     <LeaderboardRow
       entry={item}
       type={activeTab}
@@ -411,14 +365,18 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({navigation}
       colors={colors}
       isDark={isDark}
     />
-  );
+  ), [activeTab, colors, isDark]);
 
-  const renderHeader = () => (
+  // Memoized key extractor
+  const keyExtractor = useCallback((item: LeaderboardEntry) => item.id, []);
+
+  // Memoized header component
+  const renderHeader = useCallback(() => (
     <View>
       {/* Podium */}
-      {currentLeaderboard.length >= 3 && (
+      {top3Entries.length >= 3 && (
         <Podium
-          entries={currentLeaderboard.slice(0, 3)}
+          entries={top3Entries}
           type={activeTab}
           colors={colors}
           isDark={isDark}
@@ -432,7 +390,7 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({navigation}
         </Text>
       </View>
     </View>
-  );
+  ), [top3Entries, activeTab, colors, isDark]);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -532,16 +490,25 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({navigation}
         />
       </View>
 
-      {/* Leaderboard list */}
+      {/* Leaderboard list - optimized for smooth tab switching */}
       <FlatList
         data={listEntries}
         renderItem={renderItem}
-        keyExtractor={item => item.id}
+        keyExtractor={keyExtractor}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={!isLoading ? renderEmpty : null}
         ListFooterComponent={renderFooter}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={15}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={true}
+        getItemLayout={(data, index) => ({
+          length: 64,
+          offset: 64 * index,
+          index,
+        })}
       />
     </ScreenContainer>
   );

@@ -6,9 +6,6 @@ import {
   injectCurrentUser,
 } from '../services/mock';
 
-// Costante per la data dell'ultimo aggiornamento della classifica
-const LEADERBOARD_UPDATE_HOUR = 0; // Mezzanotte (00:00)
-
 // Calcola il timestamp della prossima mezzanotte
 const getNextMidnight = (): number => {
   const now = new Date();

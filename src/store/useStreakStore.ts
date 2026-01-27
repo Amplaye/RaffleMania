@@ -1,6 +1,6 @@
 import {create} from 'zustand';
-import {API_CONFIG} from '../utils/constants';
-import apiClient, {getErrorMessage} from '../services/apiClient';
+import {persist, createJSONStorage} from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useAuthStore} from './useAuthStore';
 import {useLevelStore} from './useLevelStore';
 
@@ -47,7 +47,9 @@ const isToday = (dateStr: string): boolean => {
   return formatDate(new Date()) === dateStr;
 };
 
-export const useStreakStore = create<StreakState>((set, get) => ({
+export const useStreakStore = create<StreakState>()(
+  persist(
+    (set, get) => ({
   currentStreak: 0,
   longestStreak: 0,
   lastLoginDate: null,
@@ -55,14 +57,15 @@ export const useStreakStore = create<StreakState>((set, get) => ({
   hasClaimedToday: false,
 
   fetchStreakInfo: async () => {
+    // Streak API not available yet - using local state only
+    // When API is ready, uncomment the block below
+    /*
     try {
       if (API_CONFIG.USE_MOCK_DATA) {
         return;
       }
-
       const response = await apiClient.get('/users/me/streak');
       const data = response.data.data;
-
       set({
         currentStreak: data.current_streak || 0,
         longestStreak: data.longest_streak || 0,
@@ -70,8 +73,9 @@ export const useStreakStore = create<StreakState>((set, get) => ({
         hasClaimedToday: data.claimed_today || false,
       });
     } catch (error) {
-      console.error('Error fetching streak info:', getErrorMessage(error));
+      console.log('Streak API not available');
     }
+    */
   },
 
   checkAndUpdateStreak: async () => {
@@ -83,35 +87,36 @@ export const useStreakStore = create<StreakState>((set, get) => ({
       return null;
     }
 
+    // Always use local calculation (API endpoint not available yet)
+    // When API is ready, uncomment the block below
+    /*
     try {
       if (!API_CONFIG.USE_MOCK_DATA) {
-        // Call API to claim streak
         const response = await apiClient.post('/users/me/streak/claim');
         const data = response.data.data;
-
         const reward: StreakReward = {
           xp: data.xp_earned || 0,
           credits: data.credits_earned || 0,
           isWeeklyBonus: data.is_weekly_bonus || false,
           isMilestone: data.is_milestone || false,
         };
-
-        // Update local state
         set({
           currentStreak: data.current_streak,
           longestStreak: Math.max(state.longestStreak, data.current_streak),
           lastLoginDate: today,
           hasClaimedToday: true,
         });
-
-        // Refresh user data to get updated XP/credits
         const authStore = useAuthStore.getState();
         await authStore.refreshUserData();
-
         return reward;
       }
+    } catch (error) {
+      console.log('Streak API not available, using local calculation');
+    }
+    */
 
-      // Mock mode - local calculation
+    try {
+      // Local calculation
       let newStreak = state.currentStreak;
       let isNewDay = false;
 
@@ -163,8 +168,8 @@ export const useStreakStore = create<StreakState>((set, get) => ({
       });
 
       return reward;
-    } catch (error) {
-      console.error('Error claiming streak:', getErrorMessage(error));
+    } catch {
+      console.log('Streak calculation error, returning null');
       return null;
     }
   },
@@ -183,4 +188,17 @@ export const useStreakStore = create<StreakState>((set, get) => ({
       hasClaimedToday: false,
     });
   },
-}));
+}),
+    {
+      name: 'rafflemania-streak-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        currentStreak: state.currentStreak,
+        longestStreak: state.longestStreak,
+        lastLoginDate: state.lastLoginDate,
+        totalDaysLoggedIn: state.totalDaysLoggedIn,
+        hasClaimedToday: state.hasClaimedToday,
+      }),
+    }
+  )
+);

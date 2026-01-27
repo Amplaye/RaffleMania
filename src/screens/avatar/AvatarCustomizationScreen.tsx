@@ -55,7 +55,7 @@ const AvatarPreview: React.FC<{
         useNativeDriver: true,
       }),
     ]).start();
-  }, [avatar.id, frame.id, customPhotoUri]);
+  }, [avatar.id, frame.id, customPhotoUri, scaleAnim]);
 
   return (
     <Animated.View style={[styles.previewContainer, {transform: [{scale: scaleAnim}]}]}>

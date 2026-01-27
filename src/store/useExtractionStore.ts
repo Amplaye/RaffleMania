@@ -15,7 +15,7 @@ interface ExtractionState {
   reset: () => void;
 }
 
-export const useExtractionStore = create<ExtractionState>((set, get) => ({
+export const useExtractionStore = create<ExtractionState>((set, _get) => ({
   showExtractionEffect: false,
   showResultModal: false,
   extractionResult: null,

@@ -14,7 +14,6 @@ import {
   NativeScrollEvent,
   Easing,
   Modal,
-  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -31,7 +30,7 @@ import {
   FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
-import {padNumber, formatTicketNumber} from '../../utils/formatters';
+import {padNumber} from '../../utils/formatters';
 
 const {width, height} = Dimensions.get('window');
 
@@ -70,7 +69,7 @@ const TimerCard: React.FC<TimerCardProps> = ({value}) => {
 
       prevValue.current = value;
     }
-  }, [value]);
+  }, [value, flipAnim]);
 
   const rotateX = flipAnim.interpolate({
     inputRange: [0, 1],
@@ -140,7 +139,7 @@ const TimerSeparator: React.FC = () => {
         }),
       ]),
     ).start();
-  }, []);
+  }, [pulseAnim]);
 
   return (
     <Animated.View style={[styles.timerSeparator, {opacity: pulseAnim}]}>
@@ -180,7 +179,7 @@ const PrizeProgressBar: React.FC<PrizeProgressBarProps> = ({current, goal, prize
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [progress, prizeId]);
+  }, [progress, prizeId, progressAnim]);
 
   useEffect(() => {
     Animated.loop(
@@ -191,7 +190,7 @@ const PrizeProgressBar: React.FC<PrizeProgressBarProps> = ({current, goal, prize
         useNativeDriver: true,
       }),
     ).start();
-  }, []);
+  }, [shimmerPosition]);
 
   const animatedWidth = progressAnim.interpolate({
     inputRange: [0, 1],
@@ -255,7 +254,7 @@ const PulsingDot: React.FC = () => {
         }),
       ]),
     ).start();
-  }, []);
+  }, [pulseAnim]);
 
   return <Animated.View style={[styles.pulsingDot, neon.glowStrong, {opacity: pulseAnim}]} />;
 };
@@ -314,7 +313,7 @@ const TicketSuccessModal: React.FC<{
         ]).start();
       });
     }
-  }, [visible]);
+  }, [visible, scaleAnim, opacityAnim, ticketScaleAnim]);
 
   if (!ticketInfo) return null;
 
@@ -424,22 +423,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     getTicketNumbersForPrize,
     simulateExtraction,
     forceWinExtraction,
+    syncExtractionToBackend,
   } = useTicketsStore();
   const {
     prizes,
     fetchPrizes,
     fetchDraws,
     incrementAdsForPrize,
+    fillPrizeToGoal,
     startTimerForPrize,
-    markPrizeAsExtracting,
     completePrizeExtraction,
     resetPrizeForNextRound,
     addWin,
   } = usePrizesStore();
   const addXP = useLevelStore(state => state.addXP);
   const {currentStreak, checkAndUpdateStreak, getNextMilestone, hasClaimedToday} = useStreakStore();
-  const {useCreditsForTicket} = useCreditsStore();
+  const {useCreditsForTicket: spendCreditsForTicket} = useCreditsStore();
   const user = useAuthStore(state => state.user);
+  const refreshUserData = useAuthStore(state => state.refreshUserData);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [currentPrizeIndex, setCurrentPrizeIndex] = useState(0);
   const [showTicketModal, setShowTicketModal] = useState(false);
@@ -453,13 +454,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const [showExtractionEffect, setShowExtractionEffect] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
+  // Store the selected prize when user clicks to prevent slider change issues
+  const selectedPrizeRef = useRef<typeof activePrizes[0] | null>(null);
 
   // Get active prizes
   const activePrizes = prizes.filter(p => p.isActive);
   const currentPrize = activePrizes[currentPrizeIndex];
 
   // Usa il timer del premio corrente (ogni premio ha il suo timer)
-  const {countdown, isExpired, isLastMinute} = usePrizeCountdown(
+  const {countdown, isExpired} = usePrizeCountdown(
     currentPrize?.id,
     currentPrize?.scheduledAt,
   );
@@ -489,15 +492,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     fetchDraws();
 
     // Check and show streak modal if not claimed today
-    if (!hasClaimedToday) {
-      const reward = checkAndUpdateStreak();
-      if (reward) {
-        setStreakReward(reward);
-        setTimeout(() => {
-          setShowStreakModal(true);
-        }, 500);
+    const checkStreak = async () => {
+      if (!hasClaimedToday) {
+        const reward = await checkAndUpdateStreak();
+        if (reward) {
+          setStreakReward(reward);
+          setTimeout(() => {
+            setShowStreakModal(true);
+          }, 500);
+        }
       }
-    }
+    };
+    checkStreak();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Initialize scroll position to first real item (index 1 in infiniteData)
@@ -508,15 +515,25 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         scrollViewRef.current?.scrollTo({x: slideWidth, animated: false});
       }, 50);
     }
-  }, [activePrizes.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePrizes.length, slideWidth]);
 
-  // Auto-scroll with infinite loop
+  // Auto-scroll with infinite loop - stops when modal is open
   useEffect(() => {
     if (activePrizes.length === 0) return;
 
+    // Don't auto-scroll when modal is open
+    if (showAdOrCreditsModal) {
+      if (autoScrollTimer.current) {
+        clearInterval(autoScrollTimer.current);
+        autoScrollTimer.current = null;
+      }
+      return;
+    }
+
     const startAutoScroll = () => {
       autoScrollTimer.current = setInterval(() => {
-        if (!isManualScroll.current && scrollViewRef.current) {
+        if (!isManualScroll.current && scrollViewRef.current && !showAdOrCreditsModal) {
           // Calculate next position in infiniteData (offset by 1 for the clone)
           const nextInfiniteIndex = currentPrizeIndex + 2; // +1 for clone, +1 for next
           scrollViewRef.current.scrollTo({
@@ -524,7 +541,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
             animated: true,
           });
         }
-      }, 5000);
+      }, 10000);
     };
 
     startAutoScroll();
@@ -534,7 +551,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         clearInterval(autoScrollTimer.current);
       }
     };
-  }, [currentPrizeIndex, activePrizes.length]);
+  }, [currentPrizeIndex, activePrizes.length, showAdOrCreditsModal, slideWidth]);
 
   const handleScrollBegin = () => {
     isManualScroll.current = true;
@@ -585,6 +602,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   // Show the ad or credits choice modal
   const handleShowAdOrCreditsModal = () => {
     if (!currentPrize) return;
+    // Capture the selected prize NOW before slider might change
+    selectedPrizeRef.current = currentPrize;
     setShowAdOrCreditsModal(true);
   };
 
@@ -596,72 +615,91 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
 
   // Handle watching ad (called from modal)
   const handleWatchAd = async () => {
-    if (!currentPrize) return;
+    // Use the captured prize (at click time) instead of currentPrize (which may have changed)
+    const prize = selectedPrizeRef.current;
+    if (!prize) return;
 
     setShowAdOrCreditsModal(false);
     setIsWatchingAd(true);
     await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
 
-    // Increment ads for current prize (questo può avviare il timer automaticamente)
-    incrementAdsForPrize(currentPrize.id);
+    // Increment ads for selected prize (questo può avviare il timer automaticamente)
+    incrementAdsForPrize(prize.id);
     incrementAdsWatched();
 
     // Add XP for watching ad
     addXP(XP_REWARDS.WATCH_AD);
 
     // Genera drawId per questo premio
-    const drawId = getDrawIdForPrize(currentPrize.id, currentPrize.timerStartedAt);
+    const drawId = getDrawIdForPrize(prize.id, prize.timerStartedAt);
 
     // Add new ticket and get the assigned number
-    const newTicket = addTicket('ad', drawId, currentPrize.id);
+    const newTicket = await addTicket('ad', drawId, prize.id);
 
     // Get all user's numbers for this prize (including the new one)
-    const userNumbers = getTicketNumbersForPrize(currentPrize.id);
-    const totalPool = getTotalPoolTickets(currentPrize.id);
+    const userNumbers = getTicketNumbersForPrize(prize.id);
+    const totalPool = getTotalPoolTickets(prize.id);
 
     setNewTicketInfo({
       ticketNumber: newTicket.ticketNumber,
-      prizeName: currentPrize.name,
+      prizeName: prize.name,
       userNumbers,
       totalPoolTickets: totalPool,
     });
     setShowTicketModal(true);
 
     setIsWatchingAd(false);
+    selectedPrizeRef.current = null;
   };
 
   // Handle using credits (called from modal)
   const handleUseCredits = async () => {
-    if (!currentPrize) return;
+    // Use the captured prize (at click time) instead of currentPrize (which may have changed)
+    const prize = selectedPrizeRef.current;
+    if (!prize) return;
 
     setShowAdOrCreditsModal(false);
 
-    const success = await useCreditsForTicket();
+    // Check credits first (fast local check)
+    const success = await spendCreditsForTicket();
     if (!success) {
       Alert.alert('Errore', 'Crediti insufficienti');
+      selectedPrizeRef.current = null;
       return;
     }
 
-    // Increment ads for current prize (counts as participation)
-    incrementAdsForPrize(currentPrize.id);
+    // Increment ads for selected prize (counts as participation)
+    incrementAdsForPrize(prize.id);
 
     // Genera drawId per questo premio
-    const drawId = getDrawIdForPrize(currentPrize.id, currentPrize.timerStartedAt);
+    const drawId = getDrawIdForPrize(prize.id, prize.timerStartedAt);
 
     // Add new ticket and get the assigned number
-    const newTicket = addTicket('credits', drawId, currentPrize.id);
+    let newTicket;
+    try {
+      newTicket = await addTicket('credits', drawId, prize.id);
+    } catch (error: any) {
+      Alert.alert('Errore', error.message || 'Impossibile creare il biglietto');
+      selectedPrizeRef.current = null;
+      return;
+    }
 
-    // Get all user's numbers for this prize (including the new one)
-    const userNumbers = getTicketNumbersForPrize(currentPrize.id);
-    const totalPool = getTotalPoolTickets(currentPrize.id);
+    // Get all user's numbers for this prize (including the new one) - do this immediately
+    const userNumbers = getTicketNumbersForPrize(prize.id);
+    const totalPool = getTotalPoolTickets(prize.id);
 
+    // Show ticket modal IMMEDIATELY - don't wait for backend refresh
     setNewTicketInfo({
       ticketNumber: newTicket.ticketNumber,
-      prizeName: currentPrize.name,
+      prizeName: prize.name,
       userNumbers,
       totalPoolTickets: totalPool,
     });
     setShowTicketModal(true);
+    selectedPrizeRef.current = null;
+
+    // Refresh user data in background (don't await - no need to block UI)
+    refreshUserData().catch(() => {});
   };
 
   const handleCloseModal = () => {
@@ -852,8 +890,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         }}
       />
 
-      {/* Debug Controls - Only in DEV mode */}
-      {__DEV__ && (
+      {/* Debug Controls - Enabled for testing */}
+      {true && (
         <View style={styles.debugContainer}>
           <TouchableOpacity
             style={styles.debugButton}
@@ -877,7 +915,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.debugButton, {backgroundColor: 'rgba(0, 200, 0, 0.8)'}]}
-            onPress={() => {
+            onPress={async () => {
               const prize = currentPrize;
               if (prize && user) {
                 // Get user's tickets before forcing win
@@ -893,6 +931,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
 
                 // Force win extraction - this properly marks the ticket as winner
                 const result = forceWinExtraction(prize.id, prize.name, prize.imageUrl);
+
+                // Sync extraction to WordPress backend (creates draw + winner record)
+                if (result.winningNumber) {
+                  await syncExtractionToBackend(prize.id, result.winningNumber, userTickets[0].id);
+                }
 
                 // Add to wins list using the first ticket
                 addWin(prize.id, drawId, userTickets[0].id, user.id);
@@ -914,16 +957,33 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.debugButton, {backgroundColor: 'rgba(100, 100, 100, 0.8)'}]}
-            onPress={() => {
+            onPress={async () => {
               const prize = currentPrize;
-              const userNumbers = prize ? getTicketNumbersForPrize(prize.id) : [];
-              setExtractionResult({
-                isWinner: false,
-                winningNumber: 999,
-                userNumbers,
-                prizeName: prize?.name,
-              });
-              setShowResultModal(true);
+              if (prize) {
+                const userNumbers = getTicketNumbersForPrize(prize.id);
+                // Generate a random winning number that is NOT in user's numbers
+                const winningNumber = 999;
+
+                // Simulate extraction locally (moves tickets to past)
+                simulateExtraction(prize.id, prize.name, prize.imageUrl);
+
+                // Sync extraction to WordPress backend
+                await syncExtractionToBackend(prize.id, winningNumber);
+
+                setExtractionResult({
+                  isWinner: false,
+                  winningNumber,
+                  userNumbers,
+                  prizeName: prize.name,
+                });
+                setShowResultModal(true);
+
+                // Completa l'estrazione e resetta il premio per il prossimo round
+                completePrizeExtraction(prize.id);
+                setTimeout(() => {
+                  resetPrizeForNextRound(prize.id);
+                }, 1000);
+              }
             }}>
             <Text style={styles.debugButtonText}>Perso</Text>
           </TouchableOpacity>
@@ -931,11 +991,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
             style={[styles.debugButton, {backgroundColor: 'rgba(255, 140, 0, 0.8)'}]}
             onPress={() => {
               if (currentPrize) {
-                // Auto-fill to 100% (reach goalAds)
-                const remaining = currentPrize.goalAds - currentPrize.currentAds;
-                for (let i = 0; i < remaining; i++) {
-                  incrementAdsForPrize(currentPrize.id);
-                }
+                // Auto-fill to 100% in ONE state update (no UI freeze)
+                fillPrizeToGoal(currentPrize.id);
               }
             }}>
             <Text style={styles.debugButtonText}>Fill 100%</Text>

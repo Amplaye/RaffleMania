@@ -11,6 +11,7 @@ import {
   StatusBar,
   Modal,
   Easing,
+  Alert,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -20,7 +21,6 @@ import {RootStackParamList} from '../../navigation/AppNavigator';
 import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, useAuthStore, XP_REWARDS} from '../../store';
 import {getTotalPoolTickets} from '../../services/mock';
 import {useThemeColors} from '../../hooks/useThemeColors';
-import {Prize} from '../../types';
 import {
   COLORS,
   SPACING,
@@ -84,7 +84,7 @@ const TicketSuccessModal: React.FC<{
         ]).start();
       });
     }
-  }, [visible]);
+  }, [visible, scaleAnim, opacityAnim, ticketScaleAnim]);
 
   if (!ticketInfo) return null;
 
@@ -175,7 +175,7 @@ const ShimmerProgressBar: React.FC<{
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [progress]);
+  }, [progress, progressAnim]);
 
   useEffect(() => {
     Animated.loop(
@@ -186,7 +186,7 @@ const ShimmerProgressBar: React.FC<{
         useNativeDriver: true,
       }),
     ).start();
-  }, []);
+  }, [shimmerPosition]);
 
   const animatedWidth = progressAnim.interpolate({
     inputRange: [0, 1],
@@ -242,8 +242,8 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const {prizes, incrementAdsForPrize} = usePrizesStore();
   const {addTicket, incrementAdsWatched, getTicketsForPrize, getTicketNumbersForPrize} = useTicketsStore();
   const addXP = useLevelStore(state => state.addXP);
-  const {useCreditsForTicket} = useCreditsStore();
-  const {user} = useAuthStore();
+  const {useCreditsForTicket: spendCreditsForTicket} = useCreditsStore();
+  const {user, refreshUserData} = useAuthStore();
 
   // Get ticket stats for this prize
   const myTickets = getTicketsForPrize(prizeId);
@@ -283,7 +283,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim, imageScaleAnim]);
 
   const handleWatchAd = async () => {
     if (!prize) return;
@@ -304,7 +304,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
     const drawId = `draw_${prize.id}_${(prize.timerStartedAt || new Date().toISOString()).replace(/[^0-9]/g, '').slice(0, 14)}`;
 
     // Add new ticket and get the assigned number
-    const newTicket = addTicket('ad', drawId, prize.id);
+    const newTicket = await addTicket('ad', drawId, prize.id);
 
     // Get all user's numbers for this prize (including the new one)
     const userNumbers = getTicketNumbersForPrize(prize.id);
@@ -330,7 +330,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
     if (!prize) return;
     setShowAdOrCreditsModal(false);
 
-    const success = await useCreditsForTicket();
+    const success = await spendCreditsForTicket();
     if (!success) {
       return;
     }
@@ -339,7 +339,16 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
     const drawId = `draw_${prize.id}_${(prize.timerStartedAt || new Date().toISOString()).replace(/[^0-9]/g, '').slice(0, 14)}`;
 
     // Add new ticket and get the assigned number
-    const newTicket = addTicket('credits', drawId, prize.id);
+    let newTicket;
+    try {
+      newTicket = await addTicket('credits', drawId, prize.id);
+    } catch (error: any) {
+      Alert.alert('Errore', error.message || 'Impossibile creare il biglietto');
+      return;
+    }
+
+    // Refresh user data to sync credits from backend
+    await refreshUserData();
 
     // Get all user's numbers for this prize (including the new one)
     const userNumbers = getTicketNumbersForPrize(prize.id);
@@ -520,9 +529,6 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
               <Text style={[styles.myTicketCode, {color: colors.text}]}>
                 {myNumbers.map(n => `#${n}`).join(', ')}
               </Text>
-              <View style={styles.myTicketBadge}>
-                <Text style={styles.myTicketBadgeText}>Estrazione</Text>
-              </View>
             </View>
             <Text style={[styles.myTicketHint, {color: colors.textMuted}]}>
               Questi numeri parteciperanno all'estrazione

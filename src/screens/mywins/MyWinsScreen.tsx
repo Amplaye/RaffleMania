@@ -54,7 +54,7 @@ const WinningTicketCard: React.FC<{
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [index, scaleAnim, opacityAnim]);
 
   return (
     <Animated.View
@@ -98,13 +98,14 @@ const WinningTicketCard: React.FC<{
 };
 
 export const MyWinsScreen: React.FC<MyWinsScreenProps> = ({navigation}) => {
-  const {colors, isDark} = useThemeColors();
+  const {colors} = useThemeColors();
   const {pastTickets, fetchTickets} = useTicketsStore();
   const {prizes} = usePrizesStore();
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchTickets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Filter only winning tickets

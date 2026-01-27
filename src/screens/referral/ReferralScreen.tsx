@@ -8,7 +8,6 @@ import {
   Share,
   Alert,
   Animated,
-  Dimensions,
   Clipboard,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -24,8 +23,6 @@ import {
   FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
-
-const {width: SCREEN_WIDTH} = Dimensions.get('window');
 
 interface ReferralScreenProps {
   navigation: any;
@@ -59,6 +56,7 @@ const StepItem: React.FC<{
         useNativeDriver: true,
       }),
     ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

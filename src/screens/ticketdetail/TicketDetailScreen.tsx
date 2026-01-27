@@ -61,6 +61,7 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
         useNativeDriver: true,
       }),
     ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!ticket) {

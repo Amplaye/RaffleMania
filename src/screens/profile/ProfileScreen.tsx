@@ -1,5 +1,5 @@
-import React, {useEffect, useRef} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Animated, Easing, Image} from 'react-native';
+import React, {useEffect, useRef, useState} from 'react';
+import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Animated, Easing, Image, Modal, TextInput} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer, Card} from '../../components/common';
@@ -20,7 +20,7 @@ const AnimatedProgressBar: React.FC<{
   color: string;
   backgroundColor: string;
   height?: number;
-}> = ({progress, color, backgroundColor, height = 10}) => {
+}> = ({progress, color: _color, backgroundColor, height = 10}) => {
   const progressAnim = useRef(new Animated.Value(0)).current;
   const shimmerPosition = useRef(new Animated.Value(-1)).current;
 
@@ -31,7 +31,7 @@ const AnimatedProgressBar: React.FC<{
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [progress]);
+  }, [progress, progressAnim]);
 
   useEffect(() => {
     Animated.loop(
@@ -42,6 +42,7 @@ const AnimatedProgressBar: React.FC<{
         useNativeDriver: true,
       }),
     ).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const animatedWidth = progressAnim.interpolate({
@@ -77,7 +78,6 @@ const AnimatedProgressBar: React.FC<{
 // Level Card Component
 const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors, onPress}) => {
   const level = useLevelStore(state => state.level);
-  const totalXP = useLevelStore(state => state.totalXP);
   const getLevelInfo = useLevelStore(state => state.getLevelInfo);
   const getProgressToNextLevel = useLevelStore(state => state.getProgressToNextLevel);
   const getXPForNextLevel = useLevelStore(state => state.getXPForNextLevel);
@@ -172,12 +172,140 @@ interface MenuItem {
   badgeCount?: number;
 }
 
+// Name Edit Modal Component
+const NameEditModal: React.FC<{
+  visible: boolean;
+  currentName: string;
+  onSave: (name: string) => void;
+  onClose: () => void;
+  colors: any;
+}> = ({visible, currentName, onSave, onClose, colors}) => {
+  const [name, setName] = useState(currentName);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setName(currentName);
+    }
+  }, [visible, currentName]);
+
+  const handleSave = async () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      Alert.alert('Errore', 'Il nome non puo essere vuoto');
+      return;
+    }
+    if (trimmedName.length < 2) {
+      Alert.alert('Errore', 'Il nome deve avere almeno 2 caratteri');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await onSave(trimmedName);
+      onClose();
+    } catch (error: any) {
+      Alert.alert('Errore', error.message || 'Impossibile salvare il nome');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={nameModalStyles.overlay}>
+        <View style={[nameModalStyles.container, {backgroundColor: colors.card}]}>
+          <Text style={[nameModalStyles.title, {color: colors.text}]}>Modifica Nome</Text>
+          <TextInput
+            style={[nameModalStyles.input, {backgroundColor: colors.background, color: colors.text, borderColor: colors.border}]}
+            value={name}
+            onChangeText={setName}
+            placeholder="Il tuo nome"
+            placeholderTextColor={colors.textMuted}
+            maxLength={30}
+            autoFocus
+          />
+          <View style={nameModalStyles.buttons}>
+            <TouchableOpacity style={[nameModalStyles.button, nameModalStyles.cancelButton]} onPress={onClose}>
+              <Text style={[nameModalStyles.buttonText, {color: colors.textMuted}]}>Annulla</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[nameModalStyles.button, nameModalStyles.saveButton, isSaving && {opacity: 0.6}]}
+              onPress={handleSave}
+              disabled={isSaving}>
+              <Text style={nameModalStyles.saveButtonText}>{isSaving ? 'Salvataggio...' : 'Salva'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const nameModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  container: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+  },
+  title: {
+    fontSize: FONT_SIZE.xl,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+    marginBottom: SPACING.lg,
+  },
+  input: {
+    height: 50,
+    borderWidth: 1,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.regular,
+    marginBottom: SPACING.lg,
+  },
+  buttons: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: 'transparent',
+  },
+  saveButton: {
+    backgroundColor: COLORS.primary,
+  },
+  buttonText: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.medium,
+  },
+  saveButtonText: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.white,
+  },
+});
+
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
   const {colors, neon} = useThemeColors();
-  const {user} = useAuthStore();
+  const {user, updateDisplayName} = useAuthStore();
   const {pastTickets} = useTicketsStore();
   const {theme, toggleTheme} = useThemeStore();
   const {getSelectedAvatar, getSelectedFrame, customPhotoUri} = useAvatarStore();
+  const [showNameModal, setShowNameModal] = useState(false);
 
   // Get current avatar and frame
   const currentAvatar = getSelectedAvatar();
@@ -285,7 +413,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
               </LinearGradient>
             </View>
             <View style={styles.profileInfoContainer}>
-              <Text style={[styles.userName, {color: colors.text}]}>{user?.displayName || 'Utente'}</Text>
+              <View style={styles.nameRow}>
+                <Text style={[styles.userName, {color: colors.text}]}>{user?.displayName || 'Utente'}</Text>
+                <TouchableOpacity
+                  style={styles.nameEditButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    setShowNameModal(true);
+                  }}
+                  hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                  <Ionicons name="create-outline" size={18} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
               <Text style={[styles.userEmail, {color: colors.textSecondary}]}>{user?.email || ''}</Text>
             </View>
           </View>
@@ -359,6 +498,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
       </Card>
 
       <Text style={[styles.version, {color: colors.textLight}]}>RaffleMania v1.0.0</Text>
+
+      {/* Name Edit Modal */}
+      <NameEditModal
+        visible={showNameModal}
+        currentName={user?.displayName || ''}
+        onSave={updateDisplayName}
+        onClose={() => setShowNameModal(false)}
+        colors={colors}
+      />
     </ScreenContainer>
   );
 };
@@ -415,6 +563,14 @@ const styles = StyleSheet.create({
   profileInfoContainer: {
     flex: 1,
     justifyContent: 'center',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  nameEditButton: {
+    marginLeft: SPACING.xs,
+    padding: 4,
   },
   userName: {
     fontSize: FONT_SIZE.xl,

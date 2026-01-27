@@ -12,7 +12,6 @@ import {
   Modal,
   Alert,
   Easing,
-  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -86,7 +85,7 @@ const TicketSuccessModal: React.FC<{
         ]).start();
       });
     }
-  }, [visible]);
+  }, [visible, scaleAnim, opacityAnim, ticketScaleAnim]);
 
   if (!ticketInfo) return null;
 
@@ -175,7 +174,7 @@ const ShimmerProgressBar: React.FC<{
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [progress, prizeId]);
+  }, [progress, prizeId, progressAnim]);
 
   useEffect(() => {
     Animated.loop(
@@ -186,6 +185,7 @@ const ShimmerProgressBar: React.FC<{
         useNativeDriver: true,
       }),
     ).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const animatedWidth = progressAnim.interpolate({
@@ -257,6 +257,7 @@ const PrizeCard: React.FC<{
         useNativeDriver: true,
       }),
     ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleWatchAd = () => {
@@ -349,12 +350,13 @@ const PrizeCard: React.FC<{
 export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
   const {prizes, fetchPrizes, incrementAdsForPrize} = usePrizesStore();
-  const {addTicket, incrementAdsWatched, getTicketsForPrize, getTicketNumbersForPrize} = useTicketsStore();
+  const {addTicket, incrementAdsWatched, getTicketNumbersForPrize} = useTicketsStore();
   const addXP = useLevelStore(state => state.addXP);
-  const {useCreditsForTicket} = useCreditsStore();
+  const {useCreditsForTicket: spendCreditsForTicket} = useCreditsStore();
   const user = useAuthStore(state => state.user);
+  const refreshUserData = useAuthStore(state => state.refreshUserData);
   const [refreshing, setRefreshing] = useState(false);
-  const [isWatchingAd, setIsWatchingAd] = useState(false);
+  const [_isWatchingAd, setIsWatchingAd] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [newTicketInfo, setNewTicketInfo] = useState<TicketModalInfo | null>(null);
   const [showAdOrCreditsModal, setShowAdOrCreditsModal] = useState(false);
@@ -362,6 +364,7 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
 
   useEffect(() => {
     fetchPrizes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRefresh = async () => {
@@ -402,7 +405,7 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     const drawId = getDrawIdForPrize(selectedPrize);
 
     // Add new ticket and get the assigned number
-    const newTicket = addTicket('ad', drawId, selectedPrize.id);
+    const newTicket = await addTicket('ad', drawId, selectedPrize.id);
 
     // Get all user's numbers for this prize (including the new one)
     const userNumbers = getTicketNumbersForPrize(selectedPrize.id);
@@ -424,7 +427,7 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
 
     setShowAdOrCreditsModal(false);
 
-    const success = await useCreditsForTicket();
+    const success = await spendCreditsForTicket();
     if (!success) {
       Alert.alert('Errore', 'Crediti insufficienti');
       return;
@@ -437,7 +440,16 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     const drawId = getDrawIdForPrize(selectedPrize);
 
     // Add new ticket and get the assigned number
-    const newTicket = addTicket('credits', drawId, selectedPrize.id);
+    let newTicket;
+    try {
+      newTicket = await addTicket('credits', drawId, selectedPrize.id);
+    } catch (error: any) {
+      Alert.alert('Errore', error.message || 'Impossibile creare il biglietto');
+      return;
+    }
+
+    // Refresh user data to sync credits from backend
+    await refreshUserData();
 
     // Get all user's numbers for this prize (including the new one)
     const userNumbers = getTicketNumbersForPrize(selectedPrize.id);

@@ -8,21 +8,14 @@ import {
   Animated,
   StatusBar,
   Dimensions,
-  Platform,
   LayoutAnimation,
-  UIManager,
 } from 'react-native';
-
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {AnimatedBackground} from '../../components/common';
 import {useTicketsStore, usePrizesStore} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
-import {Ticket, Prize} from '../../types';
+import {Ticket} from '../../types';
 import {getTotalPoolTickets} from '../../services/mock';
 import {
   COLORS,
@@ -32,7 +25,7 @@ import {
   FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
-import {formatDate, formatTicketNumber} from '../../utils/formatters';
+import {formatDate} from '../../utils/formatters';
 
 const {width} = Dimensions.get('window');
 
@@ -77,7 +70,7 @@ const AnimatedTab: React.FC<{
         useNativeDriver: false,
       }),
     ]).start();
-  }, [activeTab]);
+  }, [activeTab, slideAnim, colorAnim]);
 
   const translateX = slideAnim.interpolate({
     inputRange: [0, 1],
@@ -143,13 +136,12 @@ const PrizeGroupCard: React.FC<{
   group: GroupedPrize;
   index: number;
   onPressTicket: (ticketId: string) => void;
-}> = ({group, index, onPressTicket}) => {
+}> = ({group, index, onPressTicket: _onPressTicket}) => {
   const {colors, neon} = useThemeColors();
   const [expanded, setExpanded] = useState(false);
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const expandAnim = useRef(new Animated.Value(0)).current;
-  const contentHeight = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -167,6 +159,7 @@ const PrizeGroupCard: React.FC<{
         useNativeDriver: true,
       }),
     ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleExpand = () => {
@@ -247,7 +240,6 @@ const WinningTicketCard: React.FC<{
   index: number;
   onPress: () => void;
 }> = ({ticket, prizeName, index, onPress}) => {
-  const {colors} = useThemeColors();
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -267,6 +259,7 @@ const WinningTicketCard: React.FC<{
         useNativeDriver: true,
       }),
     ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -313,13 +306,14 @@ const WinningTicketCard: React.FC<{
 export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
   const [activeTab, setActiveTab] = useState<TabType>('active');
-  const {activeTickets, pastTickets, fetchTickets, getTicketNumbersForPrize} = useTicketsStore();
+  const {activeTickets, pastTickets, fetchTickets} = useTicketsStore();
   const {prizes} = usePrizesStore();
   const [refreshing, setRefreshing] = useState(false);
   const contentOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     fetchTickets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleTabChange = (tab: TabType) => {
@@ -403,26 +397,6 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
       />
     );
   };
-
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <View style={styles.titleSection}>
-        <Text style={[styles.title, {color: colors.text}]}>I Miei Biglietti</Text>
-        <Text style={[styles.subtitle, {color: colors.textMuted}]}>
-          {activeTab === 'active'
-            ? `${uniquePrizesCount} ${uniquePrizesCount === 1 ? 'premio' : 'premi'} attivi con ${activeTickets.length} numeri totali`
-            : 'Le tue vincite passate'}
-        </Text>
-      </View>
-
-      <AnimatedTab
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        activeCount={uniquePrizesCount}
-        winsCount={winningTickets.length}
-      />
-    </View>
-  );
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -514,6 +488,11 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  header: {
+    paddingTop: SPACING.xl + 30,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
   },
   fixedHeader: {
     paddingTop: SPACING.xl + 30,

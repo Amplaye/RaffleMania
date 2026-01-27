@@ -1,4 +1,6 @@
 import {create} from 'zustand';
+import {persist, createJSONStorage} from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Ticket} from '../types';
 import {API_CONFIG} from '../utils/constants';
 import apiClient, {getErrorMessage} from '../services/apiClient';
@@ -21,16 +23,16 @@ export interface ExtractionResult {
 // Map API ticket to app Ticket type
 const mapApiTicketToTicket = (apiTicket: any): Ticket => ({
   id: String(apiTicket.id),
-  ticketNumber: apiTicket.ticket_number,
-  userId: String(apiTicket.user_id),
-  drawId: apiTicket.draw_id || '',
-  prizeId: String(apiTicket.prize_id),
+  ticketNumber: apiTicket.ticketNumber || apiTicket.ticket_number,
+  userId: String(apiTicket.userId || apiTicket.user_id || ''),
+  drawId: apiTicket.drawId || apiTicket.draw_id || '',
+  prizeId: String(apiTicket.prizeId || apiTicket.prize_id),
   source: apiTicket.source || 'ad',
-  isWinner: apiTicket.is_winner === 1 || apiTicket.is_winner === true,
-  createdAt: apiTicket.created_at,
-  prizeName: apiTicket.prize_name,
-  prizeImage: apiTicket.prize_image,
-  wonAt: apiTicket.won_at,
+  isWinner: apiTicket.isWinner === true || apiTicket.is_winner === 1 || apiTicket.is_winner === true,
+  createdAt: apiTicket.createdAt || apiTicket.created_at,
+  prizeName: apiTicket.prizeName || apiTicket.prize_name,
+  prizeImage: apiTicket.prizeImage || apiTicket.prize_image,
+  wonAt: apiTicket.wonAt || apiTicket.won_at,
 });
 
 interface TicketsState {
@@ -55,9 +57,12 @@ interface TicketsState {
   simulateExtraction: (prizeId: string, prizeName: string, prizeImage: string) => ExtractionResult;
   forceWinExtraction: (prizeId: string, prizeName: string, prizeImage: string) => ExtractionResult;
   checkDrawResult: (drawId: string, prizeId: string, prizeName: string, prizeImage: string) => Promise<ExtractionResult>;
+  syncExtractionToBackend: (prizeId: string, winningNumber: number, userTicketId?: string) => Promise<void>;
 }
 
-export const useTicketsStore = create<TicketsState>((set, get) => ({
+export const useTicketsStore = create<TicketsState>()(
+  persist(
+    (set, get) => ({
   activeTickets: [],
   pastTickets: [],
   isLoading: false,
@@ -97,37 +102,49 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
         isLoading: false,
         isInitialized: true,
       });
-    } catch (error) {
-      console.error('Error fetching tickets:', getErrorMessage(error));
-      set({isLoading: false, isInitialized: true});
+    } catch {
+      // Fallback to mock data if API fails
+      console.log('Tickets API not available, using local data');
+      set({
+        activeTickets: [],
+        pastTickets: [],
+        isLoading: false,
+        isInitialized: true,
+      });
     }
   },
 
   addTicket: async (source: 'ad' | 'credits', drawId: string, prizeId: string) => {
+    // Import auth store to check if user is guest
+    const {useAuthStore} = await import('./useAuthStore');
+    const token = useAuthStore.getState().token;
+    const isGuestUser = token?.startsWith('guest_token_');
+
+    // Use local mode for mock data OR guest users
+    if (API_CONFIG.USE_MOCK_DATA || isGuestUser) {
+      // Local: ottieni il prossimo numero globale per questo premio
+      const ticketNumber = getNextTicketNumber(prizeId);
+
+      const newTicket: Ticket = {
+        id: `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        ticketNumber,
+        userId: 'user_001',
+        drawId,
+        prizeId,
+        source,
+        isWinner: false,
+        createdAt: new Date().toISOString(),
+      };
+
+      set(state => ({
+        activeTickets: [newTicket, ...state.activeTickets],
+      }));
+
+      return newTicket;
+    }
+
     try {
-      if (API_CONFIG.USE_MOCK_DATA) {
-        // Mock: ottieni il prossimo numero globale per questo premio
-        const ticketNumber = getNextTicketNumber(prizeId);
-
-        const newTicket: Ticket = {
-          id: `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          ticketNumber,
-          userId: 'user_001',
-          drawId,
-          prizeId,
-          source,
-          isWinner: false,
-          createdAt: new Date().toISOString(),
-        };
-
-        set(state => ({
-          activeTickets: [newTicket, ...state.activeTickets],
-        }));
-
-        return newTicket;
-      }
-
-      // API call to create ticket
+      // API call to create ticket (only for authenticated users)
       const response = await apiClient.post('/tickets', {
         prize_id: prizeId,
         source,
@@ -140,9 +157,34 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
       }));
 
       return newTicket;
-    } catch (error) {
-      console.error('Error creating ticket:', getErrorMessage(error));
-      throw error;
+    } catch (error: any) {
+      const errorMessage = getErrorMessage(error);
+      console.error('Error creating ticket:', errorMessage);
+
+      // Don't fallback for credit-related errors - propagate them
+      if (errorMessage.toLowerCase().includes('crediti') ||
+          errorMessage.toLowerCase().includes('insufficient')) {
+        throw new Error(errorMessage);
+      }
+
+      // Fallback to local ticket creation only for network/server errors
+      const ticketNumber = getNextTicketNumber(prizeId);
+      const newTicket: Ticket = {
+        id: `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        ticketNumber,
+        userId: 'user_001',
+        drawId,
+        prizeId,
+        source,
+        isWinner: false,
+        createdAt: new Date().toISOString(),
+      };
+
+      set(state => ({
+        activeTickets: [newTicket, ...state.activeTickets],
+      }));
+
+      return newTicket;
     }
   },
 
@@ -312,4 +354,38 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
       prizeImage,
     };
   },
-}));
+
+  // Sync extraction to backend (for authenticated users)
+  syncExtractionToBackend: async (prizeId: string, winningNumber: number, userTicketId?: string) => {
+    // Import auth store to check if user is guest
+    const {useAuthStore} = await import('./useAuthStore');
+    const token = useAuthStore.getState().token;
+    const isGuestUser = token?.startsWith('guest_token_');
+
+    // Skip sync for guests or mock data mode
+    if (API_CONFIG.USE_MOCK_DATA || isGuestUser) {
+      return;
+    }
+
+    try {
+      await apiClient.post('/draws', {
+        prize_id: parseInt(prizeId, 10),
+        winning_number: winningNumber,
+        user_ticket_id: userTicketId,
+      });
+    } catch (error) {
+      console.log('Draw sync to backend failed (non-critical):', getErrorMessage(error));
+    }
+  },
+}),
+    {
+      name: 'rafflemania-tickets-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        activeTickets: state.activeTickets,
+        pastTickets: state.pastTickets,
+        todayAdsWatched: state.todayAdsWatched,
+      }),
+    }
+  )
+);

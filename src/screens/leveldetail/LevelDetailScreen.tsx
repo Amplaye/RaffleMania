@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
-  Easing,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -72,7 +71,7 @@ const LevelItem: React.FC<{
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [index, opacityAnim, scaleAnim]);
 
   return (
     <Animated.View

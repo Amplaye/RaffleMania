@@ -50,7 +50,7 @@ export const createNeonGlow = (color: string, intensity: 'subtle' | 'normal' | '
 
 // Platform-specific font family
 // Comic Sans MS may not be available on all devices, use system fonts as fallback
-export const getFontFamily = (weight: 'regular' | 'medium' | 'bold' = 'regular'): string => {
+export const getFontFamily = (_weight: 'regular' | 'medium' | 'bold' = 'regular'): string => {
   return Platform.select({
     ios: 'System',
     android: 'Roboto',
@@ -130,7 +130,7 @@ export const getBorderRadiusStyle = (radius: number, needsShadow: boolean = fals
 
 // Platform-specific gap polyfill for older React Native versions
 // For most cases, use marginRight/marginBottom instead of gap for better compatibility
-export const createFlexGap = (gap: number, direction: 'row' | 'column' = 'row'): ViewStyle => {
+export const createFlexGap = (gap: number, _direction: 'row' | 'column' = 'row'): ViewStyle => {
   // Modern RN supports gap, but for maximum compatibility:
   return {
     gap: gap,
