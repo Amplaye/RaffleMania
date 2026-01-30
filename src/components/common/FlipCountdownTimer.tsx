@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState, memo} from 'react';
-import {View, Text, StyleSheet, Animated} from 'react-native';
+import {View, Text, StyleSheet, Animated, Platform} from 'react-native';
 import {FONT_FAMILY, FONT_WEIGHT} from '../../utils/constants';
 
 interface FlipCountdownTimerProps {
@@ -240,20 +240,34 @@ const styles = StyleSheet.create({
   },
   digitCardLine: {
     position: 'absolute',
-    top: '50%',
+    top: CARD_HEIGHT / 2 - 0.5, // Centered line (half of card height)
     left: 0,
     right: 0,
     height: 1,
     backgroundColor: '#000000',
     zIndex: 10,
   },
-  digitText: {
-    fontSize: 28,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
+  digitText: Platform.select({
+    ios: {
+      fontSize: 28,
+      fontFamily: FONT_FAMILY.bold,
+      fontWeight: FONT_WEIGHT.bold as '700',
+      lineHeight: 34,
+    },
+    android: {
+      fontSize: 28,
+      fontFamily: FONT_FAMILY.bold,
+      fontWeight: FONT_WEIGHT.bold as '700',
+      includeFontPadding: false,
+      textAlignVertical: 'center' as const,
+    },
+    default: {
+      fontSize: 28,
+      fontFamily: FONT_FAMILY.bold,
+      fontWeight: FONT_WEIGHT.bold as '700',
+      lineHeight: 34,
+    },
+  }),
   oldDigitOverlay: {
     position: 'absolute',
     top: 0,

@@ -286,6 +286,7 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden', // Required for iOS borderRadius
     shadowColor: COLORS.primary,
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.4,
@@ -310,6 +311,8 @@ const styles = StyleSheet.create({
   ticketCard: {
     width: '100%',
     marginBottom: SPACING.md,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden', // Required for iOS borderRadius on children
   },
   ticketGradient: {
     borderRadius: RADIUS.lg,
