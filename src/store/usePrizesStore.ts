@@ -9,13 +9,35 @@ import {
   getMyWins,
 } from '../services/mock';
 
-// Durata del timer in secondi (24 ore)
-const TIMER_DURATION_SECONDS = 24 * 60 * 60; // 86400 secondi = 24 ore
+// Timer durations based on prize value
+// Premi ≤10€: 5 minuti, ≤25€: 5 minuti, >50€: 12 ore
+const getTimerDurationForPrize = (prizeValue: number): number => {
+  if (prizeValue <= 25) {
+    return 5 * 60; // 5 minuti in secondi
+  }
+  return 12 * 60 * 60; // 12 ore in secondi
+};
 
-// Helper per calcolare la data di estrazione
-const calculateExtractionDate = (): string => {
+// Get when timer becomes "urgent" (red) based on prize value
+// ≤25€: ultimo minuto, >50€: ultimi 5 minuti
+export const getUrgentThresholdForPrize = (prizeValue: number): number => {
+  if (prizeValue <= 25) {
+    return 60; // Ultimo minuto
+  }
+  return 5 * 60; // Ultimi 5 minuti
+};
+
+// Betting is locked in the last 30 seconds
+export const BETTING_LOCK_SECONDS = 30;
+
+// Default timer duration (5 minutes) - used as fallback when prize value unknown
+const TIMER_DURATION_SECONDS = 5 * 60;
+
+// Helper per calcolare la data di estrazione basata sul valore del premio
+const calculateExtractionDateForPrize = (prizeValue: number): string => {
+  const duration = getTimerDurationForPrize(prizeValue);
   const scheduledAt = new Date();
-  scheduledAt.setSeconds(scheduledAt.getSeconds() + TIMER_DURATION_SECONDS);
+  scheduledAt.setSeconds(scheduledAt.getSeconds() + duration);
   return scheduledAt.toISOString();
 };
 
@@ -117,9 +139,11 @@ interface PrizesState {
   fillPrizeToGoal: (prizeId: string) => void;
   startTimerForPrize: (prizeId: string, durationSeconds?: number) => void;
   markPrizeAsExtracting: (prizeId: string) => void;
-  completePrizeExtraction: (prizeId: string) => void;
+  completePrizeExtraction: (prizeId: string, winningNumber: number) => void;
+  resetPrizeAfterExtraction: (prizeId: string) => void;
   resetPrizeForNextRound: (prizeId: string) => void;
   addWin: (prizeId: string, drawId: string, ticketId: string, userId: string) => void;
+  syncTimerToBackend: (prizeId: string, timerStatus: string, timerStartedAt?: string, scheduledAt?: string, currentAds?: number) => Promise<void>;
 
   // Getters
   getPrizesWithActiveTimer: () => Prize[];
@@ -140,22 +164,14 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
     try {
       if (API_CONFIG.USE_MOCK_DATA) {
         await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
-        // Preserve local timer data when refreshing
-        const mergedPrizes = mockPrizes.map(newPrize => {
-          const existing = currentPrizes.find(p => p.id === newPrize.id);
-          if (existing && existing.timerStatus !== 'waiting') {
-            // Preserve timer data from existing prize
-            return {
-              ...newPrize,
-              currentAds: existing.currentAds,
-              timerStatus: existing.timerStatus,
-              timerStartedAt: existing.timerStartedAt,
-              scheduledAt: existing.scheduledAt,
-              extractedAt: existing.extractedAt,
-            };
-          }
-          return newPrize;
-        });
+        // Reset timer state on fresh load - don't auto-start extractions
+        const mergedPrizes = mockPrizes.map(newPrize => ({
+          ...newPrize,
+          timerStatus: 'waiting' as PrizeTimerStatus,
+          timerStartedAt: undefined,
+          scheduledAt: undefined,
+          extractedAt: undefined,
+        }));
         set({prizes: mergedPrizes, isLoading: false});
         return;
       }
@@ -164,42 +180,60 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
       const prizesData = response.data?.data?.prizes || response.data?.prizes || [];
       const apiPrizes = prizesData.map(mapApiPrizeToPrize);
 
-      // Preserve local timer data when refreshing - CRITICAL for timer persistence
-      const mergedPrizes = apiPrizes.map((newPrize: Prize) => {
-        const existing = currentPrizes.find(p => p.id === newPrize.id);
-        if (existing && existing.timerStatus !== 'waiting') {
-          // Preserve timer data from existing prize (local state takes priority)
-          return {
-            ...newPrize,
-            currentAds: existing.currentAds,
-            timerStatus: existing.timerStatus,
-            timerStartedAt: existing.timerStartedAt,
-            scheduledAt: existing.scheduledAt,
-            extractedAt: existing.extractedAt,
-          };
+      // Extract settings from API response and update settings store
+      const settingsData = response.data?.data?.settings;
+      if (settingsData) {
+        try {
+          const {useSettingsStore} = require('./useSettingsStore');
+          // Use setState to properly update the store
+          useSettingsStore.setState({
+            xpRewards: {
+              WATCH_AD: settingsData.xp?.watch_ad ?? 10,
+              SKIP_AD: settingsData.xp?.skip_ad ?? 20,
+              PURCHASE_CREDITS: settingsData.xp?.purchase_credits ?? 25,
+              WIN_PRIZE: settingsData.xp?.win_prize ?? 250,
+              REFERRAL: settingsData.xp?.referral ?? 50,
+              DAILY_STREAK: settingsData.xp?.daily_streak ?? 10,
+              CREDIT_TICKET: settingsData.xp?.credit_ticket ?? 5,
+            },
+            credits: {
+              PER_TICKET: settingsData.credits?.per_ticket ?? 5,
+              REFERRAL_BONUS: settingsData.credits?.referral_bonus ?? 10,
+            },
+            isLoaded: true,
+            lastFetched: Date.now(),
+          });
+          console.log('Settings loaded from prizes API:', settingsData.xp);
+        } catch (e) {
+          console.log('Could not update settings store:', e);
         }
-        return newPrize;
+      }
+
+      // Merge API prizes - DON'T preserve old timer state to avoid auto-extraction on login
+      // Timer state should only be active when user explicitly starts it in current session
+      const mergedPrizes = apiPrizes.map((newPrize: Prize) => {
+        // Always use fresh API data - reset any stale timer state
+        return {
+          ...newPrize,
+          timerStatus: 'waiting' as PrizeTimerStatus,
+          timerStartedAt: undefined,
+          scheduledAt: undefined,
+          extractedAt: undefined,
+        };
       });
 
       console.log('Loaded prizes from API:', mergedPrizes.length);
       set({prizes: mergedPrizes, isLoading: false});
     } catch (error) {
       console.log('Error fetching prizes, using mock data:', getErrorMessage(error));
-      // Fallback to mock data if API fails, preserving timer data
-      const mergedPrizes = mockPrizes.map(newPrize => {
-        const existing = currentPrizes.find(p => p.id === newPrize.id);
-        if (existing && existing.timerStatus !== 'waiting') {
-          return {
-            ...newPrize,
-            currentAds: existing.currentAds,
-            timerStatus: existing.timerStatus,
-            timerStartedAt: existing.timerStartedAt,
-            scheduledAt: existing.scheduledAt,
-            extractedAt: existing.extractedAt,
-          };
-        }
-        return newPrize;
-      });
+      // Fallback to mock data - reset timer state
+      const mergedPrizes = mockPrizes.map(newPrize => ({
+        ...newPrize,
+        timerStatus: 'waiting' as PrizeTimerStatus,
+        timerStartedAt: undefined,
+        scheduledAt: undefined,
+        extractedAt: undefined,
+      }));
       set({prizes: mergedPrizes, isLoading: false});
     }
   },
@@ -260,88 +294,121 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
 
   // Incrementa biglietti per un premio e avvia il timer se raggiunge il goal
   incrementAdsForPrize: async (prizeId: string) => {
-    // API increment endpoint not available yet - using local state only
-    // When API is ready, uncomment the block below
-    /*
-    try {
-      if (!API_CONFIG.USE_MOCK_DATA) {
-        await apiClient.post(`/prizes/${prizeId}/increment-ads`);
-      }
-    } catch (error) {
-      console.log('Increment ads API not available');
+    const prize = get().prizes.find(p => p.id === prizeId);
+    if (!prize) return;
+
+    const newCurrentAds = Math.min(prize.currentAds + 1, prize.goalAds);
+    const hasReachedGoal = newCurrentAds >= prize.goalAds;
+    const shouldStartTimer = hasReachedGoal && prize.timerStatus === 'waiting';
+
+    let timerStartedAt: string | undefined;
+    let scheduledAt: string | undefined;
+
+    if (shouldStartTimer) {
+      timerStartedAt = new Date().toISOString();
+      scheduledAt = calculateExtractionDateForPrize(prize.value);
     }
-    */
 
-    set(state => {
-      const updatedPrizes = state.prizes.map(prize => {
-        if (prize.id !== prizeId) return prize;
-
-        const newCurrentAds = Math.min(prize.currentAds + 1, prize.goalAds);
-        const hasReachedGoal = newCurrentAds >= prize.goalAds;
-        const shouldStartTimer = hasReachedGoal && prize.timerStatus === 'waiting';
+    set(state => ({
+      prizes: state.prizes.map(p => {
+        if (p.id !== prizeId) return p;
 
         if (shouldStartTimer) {
-          const now = new Date().toISOString();
           return {
-            ...prize,
+            ...p,
             currentAds: newCurrentAds,
             timerStatus: 'countdown' as PrizeTimerStatus,
-            timerStartedAt: now,
-            scheduledAt: calculateExtractionDate(),
+            timerStartedAt: timerStartedAt,
+            scheduledAt: scheduledAt,
           };
         }
 
-        return {...prize, currentAds: newCurrentAds};
-      });
+        return {...p, currentAds: newCurrentAds};
+      }),
+    }));
 
-      return {prizes: updatedPrizes};
-    });
+    // Sync to backend when timer starts
+    if (shouldStartTimer && timerStartedAt && scheduledAt) {
+      get().syncTimerToBackend(prizeId, 'countdown', timerStartedAt, scheduledAt, newCurrentAds);
+    }
   },
 
   // Fill prize to goal in ONE state update (for debug - avoids UI freeze)
   fillPrizeToGoal: (prizeId: string) => {
-    set(state => {
-      const updatedPrizes = state.prizes.map(prize => {
-        if (prize.id !== prizeId) return prize;
+    const prize = get().prizes.find(p => p.id === prizeId);
+    if (!prize) {
+      console.log('fillPrizeToGoal: Prize not found', prizeId);
+      return;
+    }
 
-        // Already at goal or timer already started
-        if (prize.currentAds >= prize.goalAds || prize.timerStatus !== 'waiting') {
-          return prize;
-        }
+    // Allow starting if timer is 'waiting' OR if already at goal (re-trigger)
+    // Also allow if timer was stuck in another state (force restart)
+    if (prize.timerStatus === 'countdown' || prize.timerStatus === 'extracting') {
+      console.log('fillPrizeToGoal: Timer already active, skipping', prize.timerStatus);
+      return;
+    }
 
-        // Fill to goal and start timer in one update
-        const now = new Date().toISOString();
+    const now = new Date().toISOString();
+    const scheduledAt = calculateExtractionDateForPrize(prize.value);
+    const goalAds = prize.goalAds;
+
+    console.log('fillPrizeToGoal: Starting timer for prize', prizeId, 'scheduledAt:', scheduledAt);
+
+    set(state => ({
+      prizes: state.prizes.map(p => {
+        if (p.id !== prizeId) return p;
         return {
-          ...prize,
-          currentAds: prize.goalAds,
+          ...p,
+          currentAds: goalAds,
           timerStatus: 'countdown' as PrizeTimerStatus,
           timerStartedAt: now,
-          scheduledAt: calculateExtractionDate(),
+          scheduledAt: scheduledAt,
+          extractedAt: undefined, // Clear any previous extraction
         };
-      });
+      }),
+    }));
 
-      return {prizes: updatedPrizes};
-    });
+    // Sync timer to backend
+    get().syncTimerToBackend(prizeId, 'countdown', now, scheduledAt, goalAds);
   },
 
   // Avvia manualmente il timer per un premio (per debug)
   startTimerForPrize: (prizeId: string, durationSeconds?: number) => {
+    const prize = get().prizes.find(p => p.id === prizeId);
+    if (!prize) {
+      console.log('startTimerForPrize: Prize not found', prizeId);
+      return;
+    }
+
+    // Don't start if already active
+    if (prize.timerStatus === 'countdown' || prize.timerStatus === 'extracting') {
+      console.log('startTimerForPrize: Timer already active, skipping', prize.timerStatus);
+      return;
+    }
+
+    const now = new Date();
+    const duration = durationSeconds ?? TIMER_DURATION_SECONDS;
+    const scheduledAt = new Date(now.getTime() + duration * 1000);
+    const nowIso = now.toISOString();
+    const scheduledAtIso = scheduledAt.toISOString();
+
+    console.log('startTimerForPrize: Starting timer for prize', prizeId, 'duration:', duration, 'scheduledAt:', scheduledAtIso);
+
     set(state => ({
-      prizes: state.prizes.map(prize => {
-        if (prize.id !== prizeId || prize.timerStatus !== 'waiting') return prize;
-
-        const now = new Date();
-        const duration = durationSeconds ?? TIMER_DURATION_SECONDS;
-        const scheduledAt = new Date(now.getTime() + duration * 1000);
-
+      prizes: state.prizes.map(p => {
+        if (p.id !== prizeId) return p;
         return {
-          ...prize,
+          ...p,
           timerStatus: 'countdown' as PrizeTimerStatus,
-          timerStartedAt: now.toISOString(),
-          scheduledAt: scheduledAt.toISOString(),
+          timerStartedAt: nowIso,
+          scheduledAt: scheduledAtIso,
+          extractedAt: undefined, // Clear any previous extraction
         };
       }),
     }));
+
+    // Sync timer to backend
+    get().syncTimerToBackend(prizeId, 'countdown', nowIso, scheduledAtIso, prize.currentAds);
   },
 
   // Segna un premio come "in estrazione"
@@ -355,8 +422,9 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
     }));
   },
 
-  // Completa l'estrazione per un premio
-  completePrizeExtraction: (prizeId: string) => {
+  // Completa l'estrazione per un premio (quando l'utente vince)
+  completePrizeExtraction: (prizeId: string, winningNumber: number) => {
+    console.log(`Prize ${prizeId} extraction completed. Winner: #${winningNumber}`);
     set(state => ({
       prizes: state.prizes.map(prize =>
         prize.id === prizeId
@@ -364,6 +432,25 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
               ...prize,
               timerStatus: 'completed' as PrizeTimerStatus,
               extractedAt: new Date().toISOString(),
+            }
+          : prize,
+      ),
+    }));
+  },
+
+  // Resetta un premio dopo l'estrazione (quando l'utente perde - pronto per nuovo round)
+  resetPrizeAfterExtraction: (prizeId: string) => {
+    console.log(`Prize ${prizeId} reset for new round after extraction`);
+    set(state => ({
+      prizes: state.prizes.map(prize =>
+        prize.id === prizeId
+          ? {
+              ...prize,
+              currentAds: 0,
+              timerStatus: 'waiting' as PrizeTimerStatus,
+              scheduledAt: undefined,
+              timerStartedAt: undefined,
+              extractedAt: undefined,
             }
           : prize,
       ),
@@ -408,6 +495,27 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
         recentWinners: [newWin, ...state.recentWinners],
       };
     });
+  },
+
+  // Sync timer status to backend (public endpoint - no auth needed)
+  syncTimerToBackend: async (prizeId: string, timerStatus: string, timerStartedAt?: string, scheduledAt?: string, currentAds?: number) => {
+    if (API_CONFIG.USE_MOCK_DATA) {
+      console.log('Mock mode - skipping timer sync');
+      return;
+    }
+
+    try {
+      const payload: any = {timer_status: timerStatus};
+      if (timerStartedAt) payload.timer_started_at = timerStartedAt;
+      if (scheduledAt) payload.scheduled_at = scheduledAt;
+      if (currentAds !== undefined) payload.current_ads = currentAds;
+
+      console.log(`Syncing timer to backend: prize ${prizeId}`, payload);
+      await apiClient.post(`/prizes/${prizeId}/sync-timer`, payload);
+      console.log('Timer synced successfully');
+    } catch (error) {
+      console.log('Timer sync failed (non-critical):', getErrorMessage(error));
+    }
   },
 
   // Getters

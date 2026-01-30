@@ -2,7 +2,7 @@ export {useAuthStore} from './useAuthStore';
 export {useTicketsStore, debugTicketsStorage, DAILY_LIMITS} from './useTicketsStore';
 export type {ExtractionResult} from './useTicketsStore';
 export {useCreditsStore} from './useCreditsStore';
-export {usePrizesStore} from './usePrizesStore';
+export {usePrizesStore, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS} from './usePrizesStore';
 export {useThemeStore} from './useThemeStore';
 export {useLevelStore, XP_REWARDS, LEVELS} from './useLevelStore';
 export {useStreakStore, STREAK_REWARDS} from './useStreakStore';

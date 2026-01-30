@@ -9,9 +9,13 @@ import apiClient, {getErrorMessage} from '../services/apiClient';
 import {
   mockUserTickets,
   mockPastTickets,
-  getNextTicketNumber,
   getTotalPoolTickets,
 } from '../services/mock';
+import {
+  requestTickets,
+  generateDrawId,
+  getTotalAssignedForDraw,
+} from '../services/ticketNumberService';
 
 export interface ExtractionResult {
   isWinner: boolean;
@@ -57,17 +61,27 @@ interface TicketsState {
   // Actions
   fetchTickets: () => Promise<void>;
   addTicket: (source: 'ad' | 'credits', drawId: string, prizeId: string) => Promise<Ticket>;
+  // NEW: Acquisto batch atomico con numeri univoci garantiti
+  addTicketsBatch: (
+    source: 'ad' | 'credits',
+    prizeId: string,
+    timerStartedAt: string | undefined,
+    quantity: number
+  ) => Promise<Ticket[]>;
   incrementAdsWatched: () => void;
   canWatchAd: () => boolean;
   canPurchaseTicket: () => boolean;
   getTicketsPurchasedToday: () => number;
   getAdCooldownRemaining: () => number; // Minuti rimanenti
   checkAndResetDaily: () => void;
+  resetDailyLimit: () => void; // Debug: reset limite giornaliero
 
   // Ticket system - numeri progressivi
   getTicketsForPrize: (prizeId: string) => Ticket[];
   getTicketNumbersForPrize: (prizeId: string) => number[];
   getTicketCountForPrize: (prizeId: string) => number;
+  // NEW: Ottiene il totale dei biglietti per un draw specifico
+  getTotalTicketsForDraw: (prizeId: string, timerStartedAt?: string) => number;
 
   // Extraction - sistema "pentolone"
   simulateExtraction: (prizeId: string, prizeName: string, prizeImage: string) => ExtractionResult;
@@ -121,7 +135,7 @@ export const useTicketsStore = create<TicketsState>()(
       const localWinners = localPastTickets.filter(t => t.isWinner);
       const mergedPastTickets = [
         ...localWinners,
-        ...apiPastTickets.filter(t => !localWinners.some(w => w.id === t.id || w.prizeId === t.prizeId)),
+        ...apiPastTickets.filter((t: Ticket) => !localWinners.some(w => w.id === t.id || w.prizeId === t.prizeId)),
       ];
 
       set({
@@ -142,104 +156,83 @@ export const useTicketsStore = create<TicketsState>()(
   },
 
   addTicket: async (source: 'ad' | 'credits', drawId: string, prizeId: string) => {
+    // Usa addTicketsBatch con quantity=1 per garantire unicità
+    // Estrai timerStartedAt dal drawId se possibile
+    const {usePrizesStore} = await import('./usePrizesStore');
+    const prize = usePrizesStore.getState().prizes.find(p => p.id === prizeId);
+    const timerStartedAt = prize?.timerStartedAt;
+
+    const tickets = await get().addTicketsBatch(source, prizeId, timerStartedAt, 1);
+    return tickets[0];
+  },
+
+  // NEW: Acquisto batch atomico con numeri univoci garantiti
+  addTicketsBatch: async (
+    source: 'ad' | 'credits',
+    prizeId: string,
+    timerStartedAt: string | undefined,
+    quantity: number
+  ) => {
     // Check daily reset first
     get().checkAndResetDaily();
 
     // Check if user can purchase more tickets today
-    if (!get().canPurchaseTicket()) {
+    const currentPurchased = get().todayTicketsPurchased;
+    const remainingToday = DAILY_LIMITS.MAX_TICKETS_PER_DAY - currentPurchased;
+
+    if (remainingToday <= 0) {
       throw new Error('Hai raggiunto il limite di 60 biglietti giornalieri. Riprova domani!');
     }
 
+    // Limita la quantità al numero rimanente
+    const actualQuantity = Math.min(quantity, remainingToday);
+
     // Import auth store to check if user is guest
     const {useAuthStore} = await import('./useAuthStore');
-    const token = useAuthStore.getState().token;
     const user = useAuthStore.getState().user;
     const updateUser = useAuthStore.getState().updateUser;
-    const isGuestUser = token?.startsWith('guest_token_');
+    const userId = user?.id || 'user_001';
 
-    // Use local mode for mock data OR guest users
-    if (API_CONFIG.USE_MOCK_DATA || isGuestUser) {
-      // Local: ottieni il prossimo numero globale per questo premio
-      const ticketNumber = getNextTicketNumber(prizeId);
+    console.log(`[TicketsStore] Requesting ${actualQuantity} tickets for prize ${prizeId}`);
 
-      const newTicket: Ticket = {
-        id: `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        ticketNumber,
-        userId: 'user_001',
-        drawId,
-        prizeId,
-        source,
-        isWinner: false,
-        createdAt: new Date().toISOString(),
-      };
+    // Usa il nuovo servizio per ottenere numeri univoci
+    const assignments = await requestTickets(
+      prizeId,
+      timerStartedAt,
+      actualQuantity,
+      source,
+      userId
+    );
 
-      set(state => ({
-        activeTickets: [newTicket, ...state.activeTickets],
-        todayTicketsPurchased: state.todayTicketsPurchased + 1,
-      }));
+    // Converti le assegnazioni in Ticket objects
+    const newTickets: Ticket[] = assignments.map(assignment => ({
+      id: assignment.ticketId,
+      ticketNumber: assignment.ticketNumber,
+      userId,
+      drawId: assignment.drawId,
+      prizeId: assignment.prizeId,
+      source: assignment.source,
+      isWinner: false,
+      createdAt: assignment.createdAt,
+    }));
 
-      // Update local user stats for guest/mock users
-      if (source === 'ad' && user) {
-        updateUser({
-          watchedAdsCount: (user.watchedAdsCount || 0) + 1,
-        });
-      }
+    // Aggiorna lo state in un'unica operazione atomica
+    set(state => ({
+      activeTickets: [...newTickets, ...state.activeTickets],
+      todayTicketsPurchased: state.todayTicketsPurchased + actualQuantity,
+    }));
 
-      return newTicket;
-    }
-
-    try {
-      // API call to create ticket (only for authenticated users)
-      const response = await apiClient.post('/tickets', {
-        prize_id: prizeId,
-        source,
+    // Update local user stats for ad-based tickets
+    if (source === 'ad' && user) {
+      updateUser({
+        watchedAdsCount: (user.watchedAdsCount || 0) + actualQuantity,
       });
-
-      const newTicket = mapApiTicketToTicket(response.data.data.ticket);
-
-      set(state => ({
-        activeTickets: [newTicket, ...state.activeTickets],
-        todayTicketsPurchased: state.todayTicketsPurchased + 1,
-      }));
-
-      return newTicket;
-    } catch (error: any) {
-      const errorMessage = getErrorMessage(error);
-      console.error('Error creating ticket:', errorMessage);
-
-      // Don't fallback for credit-related errors - propagate them
-      if (errorMessage.toLowerCase().includes('crediti') ||
-          errorMessage.toLowerCase().includes('insufficient')) {
-        throw new Error(errorMessage);
-      }
-
-      // Fallback to local ticket creation only for network/server errors
-      const ticketNumber = getNextTicketNumber(prizeId);
-      const newTicket: Ticket = {
-        id: `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        ticketNumber,
-        userId: 'user_001',
-        drawId,
-        prizeId,
-        source,
-        isWinner: false,
-        createdAt: new Date().toISOString(),
-      };
-
-      set(state => ({
-        activeTickets: [newTicket, ...state.activeTickets],
-        todayTicketsPurchased: state.todayTicketsPurchased + 1,
-      }));
-
-      // Update local user stats when API fails
-      if (source === 'ad' && user) {
-        updateUser({
-          watchedAdsCount: (user.watchedAdsCount || 0) + 1,
-        });
-      }
-
-      return newTicket;
     }
+
+    console.log(`[TicketsStore] Successfully created ${actualQuantity} tickets with numbers:`,
+      newTickets.map(t => t.ticketNumber));
+
+    return newTickets;
   },
 
   incrementAdsWatched: () => {
@@ -319,6 +312,16 @@ export const useTicketsStore = create<TicketsState>()(
     return remaining > 0 ? Math.ceil(remaining) : 0;
   },
 
+  // Debug: reset daily ticket limit
+  resetDailyLimit: () => {
+    set({
+      todayTicketsPurchased: 0,
+      todayAdsWatched: 0,
+      lastAdWatchedAt: null,
+    });
+    console.log('DEBUG: Daily limit reset');
+  },
+
   getTicketsForPrize: (prizeId: string) => {
     const {activeTickets} = get();
     return activeTickets.filter(ticket => ticket.prizeId === prizeId);
@@ -331,6 +334,12 @@ export const useTicketsStore = create<TicketsState>()(
 
   getTicketCountForPrize: (prizeId: string) => {
     return get().getTicketsForPrize(prizeId).length;
+  },
+
+  // Ottiene il totale dei biglietti assegnati per un draw specifico
+  getTotalTicketsForDraw: (prizeId: string, timerStartedAt?: string) => {
+    const drawId = generateDrawId(prizeId, timerStartedAt);
+    return getTotalAssignedForDraw(drawId);
   },
 
   checkDrawResult: async (drawId: string, prizeId: string, prizeName: string, prizeImage: string) => {
@@ -387,15 +396,38 @@ export const useTicketsStore = create<TicketsState>()(
     const userTickets = activeTickets.filter(t => t.prizeId === prizeId);
     const userNumbers = userTickets.map(t => t.ticketNumber);
 
-    if (userNumbers.length === 0) {
-      return {isWinner: false};
+    // Ottieni il drawId dai biglietti dell'utente (se esistono)
+    const drawId = userTickets.length > 0 ? userTickets[0].drawId : undefined;
+
+    // Ottieni il totale dei biglietti assegnati per questo draw
+    // Usa il nuovo sistema che traccia numeri univoci
+    let totalPoolTickets: number;
+    if (drawId) {
+      totalPoolTickets = getTotalAssignedForDraw(drawId);
+      // Se non ci sono biglietti tracciati, usa il fallback
+      if (totalPoolTickets === 0) {
+        totalPoolTickets = getTotalPoolTickets(prizeId);
+      }
+    } else {
+      totalPoolTickets = getTotalPoolTickets(prizeId);
     }
 
-    // Ottieni il totale dei biglietti nel "pentolone" per questo premio
-    const totalPoolTickets = getTotalPoolTickets(prizeId);
+    console.log(`[Extraction] Draw ${drawId}, total pool: ${totalPoolTickets}, user numbers:`, userNumbers);
 
     // Estrai un numero casuale dal pentolone (1 a totalPoolTickets)
     const winningNumber = Math.floor(Math.random() * totalPoolTickets) + 1;
+
+    if (userNumbers.length === 0) {
+      // L'utente non ha biglietti, perde automaticamente ma mostra comunque il numero vincente
+      return {
+        isWinner: false,
+        winningNumber,
+        userNumbers: [],
+        prizeId,
+        prizeName,
+        prizeImage,
+      };
+    }
 
     // Verifica se l'utente ha il numero vincente
     const isWinner = userNumbers.includes(winningNumber);

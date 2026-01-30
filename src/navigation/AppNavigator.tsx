@@ -1,9 +1,8 @@
 import React, {useEffect, useRef, useState, useCallback} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator, NativeStackScreenProps} from '@react-navigation/native-stack';
-import {View, Text, StyleSheet, StatusBar, Platform} from 'react-native';
+import {View, Text, StyleSheet} from 'react-native';
 import {useAuthStore, usePrizesStore, useExtractionStore, useTicketsStore} from '../store';
-import {useThemeColors} from '../hooks/useThemeColors';
 import {Prize} from '../types';
 import {AuthNavigator} from './AuthNavigator';
 import {TabNavigator} from './TabNavigator';
@@ -21,6 +20,7 @@ import {LevelDetailScreen} from '../screens/leveldetail';
 import {PrizeDetailScreen} from '../screens/prizedetail';
 import {AvatarCustomizationScreen} from '../screens/avatar';
 import {LeaderboardScreen} from '../screens/leaderboard';
+import {EmailVerificationScreen} from '../screens/auth';
 
 // Stack param list
 export type RootStackParamList = {
@@ -36,6 +36,7 @@ export type RootStackParamList = {
   LevelDetail: undefined;
   AvatarCustomization: undefined;
   Leaderboard: undefined;
+  EmailVerification: {email?: string};
 };
 
 type PlaceholderProps = NativeStackScreenProps<RootStackParamList, keyof RootStackParamList>;
@@ -85,11 +86,6 @@ const placeholderStyles = StyleSheet.create({
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const MainStack: React.FC = () => {
-  const {colors} = useThemeColors();
-
-  // Get status bar height for Android (the status bar is translucent in ScreenContainer)
-  const statusBarHeight = Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0;
-
   return (
     <Stack.Navigator
       screenOptions={{
@@ -155,6 +151,11 @@ const MainStack: React.FC = () => {
         component={LeaderboardScreen}
         options={{title: 'Classifica'}}
       />
+      <Stack.Screen
+        name="EmailVerification"
+        component={EmailVerificationScreen}
+        options={{title: 'Verifica Email'}}
+      />
     </Stack.Navigator>
   );
 };
@@ -168,7 +169,7 @@ export const AppNavigator: React.FC = () => {
     resetPrizeForNextRound,
     addWin,
   } = usePrizesStore();
-  const {simulateExtraction, getTicketsForPrize, getTicketNumbersForPrize} = useTicketsStore();
+  const {simulateExtraction, getTicketsForPrize, syncExtractionToBackend} = useTicketsStore();
   const {
     showExtractionEffect,
     showResultModal,
@@ -196,15 +197,19 @@ export const AppNavigator: React.FC = () => {
     startExtraction();
 
     // After effect, simulate the extraction
-    setTimeout(() => {
+    setTimeout(async () => {
       const result = simulateExtraction(prize.id, prize.name, prize.imageUrl);
 
       // Generate drawId for this prize
       const drawId = `draw_${prize.id}_${(prize.timerStartedAt || new Date().toISOString()).replace(/[^0-9]/g, '').slice(0, 14)}`;
 
+      // Sync extraction stats to backend
+      const userTickets = getTicketsForPrize(prize.id);
+      const winningTicketId = result.isWinner && userTickets.length > 0 ? userTickets[0].id : undefined;
+      await syncExtractionToBackend(prize.id, result.winningNumber || 0, winningTicketId);
+
       // If winner, add to wins
       if (result.isWinner && user) {
-        const userTickets = getTicketsForPrize(prize.id);
         if (userTickets.length > 0) {
           addWin(prize.id, drawId, userTickets[0].id, user.id);
         }
@@ -216,7 +221,7 @@ export const AppNavigator: React.FC = () => {
       });
 
       // Complete extraction and reset for next round
-      completePrizeExtraction(prize.id);
+      completePrizeExtraction(prize.id, result.winningNumber || 0);
 
       // After a delay, reset the prize for a new round
       setTimeout(() => {
@@ -225,7 +230,7 @@ export const AppNavigator: React.FC = () => {
         extractedPrizeIds.current.delete(prize.id);
       }, 2000);
     }, 3000); // Duration of extraction effect
-  }, [user, markPrizeAsExtracting, startExtraction, simulateExtraction, getTicketsForPrize, addWin, showResult, completePrizeExtraction, resetPrizeForNextRound]);
+  }, [user, markPrizeAsExtracting, startExtraction, simulateExtraction, syncExtractionToBackend, getTicketsForPrize, addWin, showResult, completePrizeExtraction, resetPrizeForNextRound]);
 
   // Initialize
   useEffect(() => {
