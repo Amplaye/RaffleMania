@@ -1,26 +1,18 @@
-import React, {useEffect, useState, useRef} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   StatusBar,
-  Animated,
   Dimensions,
   Image,
   ScrollView,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
-  Easing,
-  Modal,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
-import {AnimatedBackground, StreakModal, AdOrCreditsModal, ExtractionStartEffect, ExtractionResultModal} from '../../components/common';
-import {useTicketsStore, usePrizesStore, useLevelStore, XP_REWARDS, useStreakStore, useCreditsStore, useAuthStore, ExtractionResult} from '../../store';
-import {getTotalPoolTickets} from '../../services/mock';
-import {usePrizeCountdown} from '../../hooks/useCountdown';
+import {AnimatedBackground, StreakModal, AdOrCreditsModal} from '../../components/common';
+import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, DAILY_LIMITS} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -30,698 +22,233 @@ import {
   FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
-import {padNumber} from '../../utils/formatters';
 
-const {width, height} = Dimensions.get('window');
-
-// Timer Card Component - Single digit card with flip animation
-interface TimerCardProps {
-  value: string;
-}
-
-const TimerCard: React.FC<TimerCardProps> = ({value}) => {
-  const {neon} = useThemeColors();
-  const flipAnim = useRef(new Animated.Value(0)).current;
-  const [displayValue, setDisplayValue] = useState(value);
-  const prevValue = useRef(value);
-
-  useEffect(() => {
-    if (prevValue.current !== value) {
-      flipAnim.setValue(0);
-      Animated.sequence([
-        Animated.timing(flipAnim, {
-          toValue: 1,
-          duration: 150,
-          easing: Easing.in(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(flipAnim, {
-          toValue: 0,
-          duration: 150,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      setTimeout(() => {
-        setDisplayValue(value);
-      }, 150);
-
-      prevValue.current = value;
-    }
-  }, [value, flipAnim]);
-
-  const rotateX = flipAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '-90deg'],
-  });
-
-  const scale = flipAnim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [1, 0.95, 0.9],
-  });
-
-  return (
-    <Animated.View
-      style={[
-        styles.timerCard,
-        neon.glow,
-        {
-          transform: [{perspective: 400}, {rotateX}, {scale}],
-        },
-      ]}>
-      <LinearGradient
-        colors={['#2A2A2A', '#1A1A1A', '#0F0F0F']}
-        style={styles.timerCardGradient}>
-        <Text style={[styles.timerCardText, neon.textShadow]}>{displayValue}</Text>
-        <View style={styles.timerCardLine} />
-      </LinearGradient>
-    </Animated.View>
-  );
-};
-
-// Timer Unit Component
-interface TimerUnitProps {
-  value: string;
-  label: string;
-}
-
-const TimerUnit: React.FC<TimerUnitProps> = ({value, label}) => {
-  const digits = value.split('');
-  return (
-    <View style={styles.timerUnit}>
-      <View style={styles.timerCards}>
-        <TimerCard value={digits[0] || '0'} />
-        <TimerCard value={digits[1] || '0'} />
-      </View>
-      <Text style={styles.timerLabel}>{label}</Text>
-    </View>
-  );
-};
-
-// Timer Separator
-const TimerSeparator: React.FC = () => {
-  const {neon} = useThemeColors();
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 0.3,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-  }, [pulseAnim]);
-
-  return (
-    <Animated.View style={[styles.timerSeparator, {opacity: pulseAnim}]}>
-      <View style={[styles.separatorDot, neon.glowSubtle]} />
-      <View style={[styles.separatorDot, neon.glowSubtle]} />
-    </Animated.View>
-  );
-};
-
-// Progress Bar Component for Prize
-interface PrizeProgressBarProps {
-  current: number;
-  goal: number;
-  prizeId: string;
-  colors: any;
-  neon: any;
-}
-
-const PrizeProgressBar: React.FC<PrizeProgressBarProps> = ({current, goal, prizeId, colors, neon}) => {
-  const progressAnim = useRef(new Animated.Value(0)).current;
-  const shimmerPosition = useRef(new Animated.Value(-1)).current;
-  const prevPrizeId = useRef(prizeId);
-
-  const progress = Math.min(current / goal, 1);
-  const percentage = Math.round(progress * 100);
-
-  useEffect(() => {
-    // Reset animation when prize changes
-    if (prevPrizeId.current !== prizeId) {
-      progressAnim.setValue(0);
-      prevPrizeId.current = prizeId;
-    }
-
-    Animated.timing(progressAnim, {
-      toValue: progress,
-      duration: 800,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [progress, prizeId, progressAnim]);
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(shimmerPosition, {
-        toValue: 2,
-        duration: 2500,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    ).start();
-  }, [shimmerPosition]);
-
-  const animatedWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
-
-  const shimmerTranslate = shimmerPosition.interpolate({
-    inputRange: [-1, 2],
-    outputRange: [-100, width + 100],
-  });
-
-  return (
-    <View style={[styles.prizeProgressSection, {backgroundColor: colors.card}, neon.glowSubtle]}>
-      <View style={styles.prizeProgressHeader}>
-        <View style={styles.prizeProgressLabelRow}>
-          <Ionicons name="trophy-outline" size={16} color={colors.primary} />
-          <Text style={[styles.prizeProgressTitle, {color: colors.textMuted}]}>Progresso Premio</Text>
-        </View>
-        <Text style={[styles.prizeProgressPercentage, neon.textShadow]}>{percentage}%</Text>
-      </View>
-
-      <View style={[styles.prizeProgressBarBg, {backgroundColor: `${colors.primary}15`}]}>
-        <Animated.View style={[styles.prizeProgressBarFill, {width: animatedWidth, backgroundColor: COLORS.primary}]}>
-          <Animated.View
-            style={[
-              styles.prizeProgressShimmer,
-              {transform: [{translateX: shimmerTranslate}]},
-            ]}
-          />
-        </Animated.View>
-      </View>
-
-      <View style={styles.prizeProgressFooter}>
-        <Text style={[styles.prizeProgressCount, {color: colors.textMuted}]}>
-          <Text style={{color: colors.primary, fontWeight: '700'}}>{current.toLocaleString()}</Text>
-          {' / '}
-          {goal.toLocaleString()} Biglietti
-        </Text>
-      </View>
-    </View>
-  );
-};
-
-// Pulsing Dot
-const PulsingDot: React.FC = () => {
-  const {neon} = useThemeColors();
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 0.3,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-  }, [pulseAnim]);
-
-  return <Animated.View style={[styles.pulsingDot, neon.glowStrong, {opacity: pulseAnim}]} />;
-};
+const {width} = Dimensions.get('window');
+const SLIDE_WIDTH = width * 0.7;
+const SLIDE_SPACING = SPACING.md;
 
 interface HomeScreenProps {
   navigation: any;
 }
 
-// Ticket Success Modal Component
-interface TicketModalInfo {
-  ticketNumber: number;
-  prizeName: string;
-  userNumbers: number[];
-  totalPoolTickets: number;
+// Tab Selector Component
+interface TabSelectorProps {
+  activeTab: 'in_corso' | 'futuri';
+  onTabChange: (tab: 'in_corso' | 'futuri') => void;
 }
 
-const TicketSuccessModal: React.FC<{
-  visible: boolean;
-  ticketInfo: TicketModalInfo | null;
-  onClose: () => void;
-}> = ({visible, ticketInfo, onClose}) => {
-  const scaleAnim = useRef(new Animated.Value(0.5)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-  const ticketScaleAnim = useRef(new Animated.Value(0.8)).current;
-
-  useEffect(() => {
-    if (visible) {
-      scaleAnim.setValue(0.5);
-      opacityAnim.setValue(0);
-      ticketScaleAnim.setValue(0.8);
-
-      Animated.parallel([
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 6,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        Animated.sequence([
-          Animated.spring(ticketScaleAnim, {
-            toValue: 1.1,
-            friction: 4,
-            useNativeDriver: true,
-          }),
-          Animated.spring(ticketScaleAnim, {
-            toValue: 1,
-            friction: 4,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      });
-    }
-  }, [visible, scaleAnim, opacityAnim, ticketScaleAnim]);
-
-  if (!ticketInfo) return null;
+const TabSelector: React.FC<TabSelectorProps> = ({activeTab, onTabChange}) => {
+  const {colors} = useThemeColors();
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}>
-      <Animated.View style={[styles.modalOverlay, {opacity: opacityAnim}]}>
-        <Animated.View
-          style={[
-            styles.modalContent,
-            {transform: [{scale: scaleAnim}]},
-          ]}>
-          {/* Success Icon */}
-          <View style={styles.modalIconContainer}>
-            <LinearGradient
-              colors={[COLORS.primary, '#FF8500']}
-              style={styles.modalIconGradient}>
-              <Ionicons
-                name="ticket"
-                size={40}
-                color={COLORS.white}
-              />
-            </LinearGradient>
-          </View>
-
-          {/* Title */}
-          <Text style={styles.modalTitle}>Nuovo Numero Ottenuto!</Text>
-
-          {/* Ticket Number Card */}
-          <Animated.View
-            style={[
-              styles.modalTicketCard,
-              {transform: [{scale: ticketScaleAnim}]},
-            ]}>
-            <LinearGradient
-              colors={[COLORS.primary, '#FF6B00']}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 1}}
-              style={styles.modalTicketGradient}>
-              <View style={styles.modalTicketContent}>
-                <Text style={styles.modalTicketCode}>#{ticketInfo.ticketNumber}</Text>
-                <Text style={styles.modalTicketPrize}>{ticketInfo.prizeName}</Text>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-
-          {/* Good Luck Message */}
-          <View style={styles.modalLuckContainer}>
-            <Ionicons name="star" size={16} color="#FFD700" />
-            <Text style={styles.modalLuckText}>Buona fortuna!</Text>
-            <Ionicons name="star" size={16} color="#FFD700" />
-          </View>
-
-          {/* Close Button */}
-          <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
-            <Text style={styles.modalCloseButtonText}>Continua</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </Animated.View>
-    </Modal>
-  );
-};
-
-// Animated Step Indicator Component - pill style
-interface StepIndicatorProps {
-  currentIndex: number;
-  totalCount: number;
-}
-
-const StepIndicator: React.FC<StepIndicatorProps> = ({currentIndex, totalCount}) => {
-  return (
-    <View style={styles.stepIndicatorContainer}>
-      {Array.from({length: totalCount}).map((_, index) => {
-        const isActive = index === currentIndex;
-        return (
-          <View
-            key={index}
-            style={[
-              styles.stepPill,
-              isActive && styles.stepPillActive,
-            ]}>
-            {isActive && (
-              <LinearGradient
-                colors={[COLORS.primary, '#FF8500']}
-                start={{x: 0, y: 0}}
-                end={{x: 1, y: 0}}
-                style={styles.stepPillGradient}
-              />
-            )}
-          </View>
-        );
-      })}
+    <View style={styles.tabSelectorContainer}>
+      <TouchableOpacity
+        style={[
+          styles.tabButton,
+          activeTab === 'in_corso' && styles.tabButtonActive,
+        ]}
+        onPress={() => onTabChange('in_corso')}
+        activeOpacity={0.8}>
+        <Text style={[
+          styles.tabButtonText,
+          {color: activeTab === 'in_corso' ? COLORS.white : colors.textMuted},
+        ]}>
+          RAFFLE IN CORSO
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.tabButton,
+          activeTab === 'futuri' && styles.tabButtonActive,
+        ]}
+        onPress={() => onTabChange('futuri')}
+        activeOpacity={0.8}>
+        <Text style={[
+          styles.tabButtonText,
+          {color: activeTab === 'futuri' ? COLORS.white : colors.textMuted},
+        ]}>
+          RAFFLE FUTURI
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 };
 
+// Prize Slide Component (horizontal carousel)
+interface PrizeSlideProps {
+  prize: {
+    id: string;
+    name: string;
+    imageUrl: string;
+    currentAds: number;
+    goalAds: number;
+    timerStatus: string;
+  };
+  onPress: () => void;
+}
+
+const PrizeSlide: React.FC<PrizeSlideProps> = ({prize, onPress}) => {
+  const {colors} = useThemeColors();
+  const progress = Math.min(prize.currentAds / prize.goalAds, 1);
+  const percentage = Math.round(progress * 100);
+
+  return (
+    <TouchableOpacity
+      style={[styles.prizeSlide, {backgroundColor: colors.card}]}
+      onPress={onPress}
+      activeOpacity={0.9}>
+      <View style={styles.prizeSlideImageContainer}>
+        <Image source={{uri: prize.imageUrl}} style={styles.prizeSlideImage} resizeMode="contain" />
+      </View>
+      <View style={styles.prizeSlideInfo}>
+        <Text style={[styles.prizeSlideName, {color: colors.text}]} numberOfLines={2}>
+          {prize.name}
+        </Text>
+        <View style={styles.prizeSlideProgressContainer}>
+          <View style={[styles.prizeSlideProgressBg, {backgroundColor: `${COLORS.primary}20`}]}>
+            <View style={[styles.prizeSlideProgressFill, {width: `${percentage}%`}]} />
+          </View>
+          <Text style={styles.prizeSlideProgressText}>{percentage}%</Text>
+        </View>
+        <Text style={[styles.prizeSlideStatus, {color: colors.textMuted}]}>
+          {prize.timerStatus === 'countdown'
+            ? 'Estrazione in corso'
+            : `${prize.goalAds - prize.currentAds} biglietti mancanti`}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
-  const {colors, gradientColors, isDark, neon} = useThemeColors();
-  const {
-    fetchTickets,
-    addTicket,
-    incrementAdsWatched,
-    getTicketsForPrize,
-    getTicketNumbersForPrize,
-    simulateExtraction,
-    forceWinExtraction,
-    syncExtractionToBackend,
-  } = useTicketsStore();
-  const {
-    prizes,
-    fetchPrizes,
-    fetchDraws,
-    incrementAdsForPrize,
-    fillPrizeToGoal,
-    startTimerForPrize,
-    completePrizeExtraction,
-    resetPrizeForNextRound,
-    addWin,
-  } = usePrizesStore();
+  const {colors, gradientColors, isDark} = useThemeColors();
+  const {fetchTickets, addTicket, incrementAdsWatched, canWatchAd, canPurchaseTicket, getTicketsPurchasedToday, getAdCooldownRemaining, checkAndResetDaily} = useTicketsStore();
+  const {prizes, fetchPrizes, fetchDraws, incrementAdsForPrize} = usePrizesStore();
   const addXP = useLevelStore(state => state.addXP);
-  const {currentStreak, checkAndUpdateStreak, getNextMilestone, hasClaimedToday} = useStreakStore();
+  const {currentStreak, checkAndUpdateStreak, getNextMilestone, hasClaimedToday, _hasHydrated} = useStreakStore();
   const {useCreditsForTicket: spendCreditsForTicket} = useCreditsStore();
   const user = useAuthStore(state => state.user);
   const refreshUserData = useAuthStore(state => state.refreshUserData);
+  const {xpRewards, fetchSettings} = useSettingsStore();
+
+  const [activeTab, setActiveTab] = useState<'in_corso' | 'futuri'>('in_corso');
   const [isWatchingAd, setIsWatchingAd] = useState(false);
-  const [currentPrizeIndex, setCurrentPrizeIndex] = useState(0);
-  const [showTicketModal, setShowTicketModal] = useState(false);
-  const [newTicketInfo, setNewTicketInfo] = useState<TicketModalInfo | null>(null);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [streakReward, setStreakReward] = useState<{xp: number; credits: number; isWeeklyBonus: boolean; isMilestone: boolean; milestoneDay?: number} | null>(null);
   const [showAdOrCreditsModal, setShowAdOrCreditsModal] = useState(false);
-  const scrollViewRef = useRef<ScrollView>(null);
-  const isManualScroll = useRef(false);
-  const autoScrollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [showExtractionEffect, setShowExtractionEffect] = useState(false);
-  const [showResultModal, setShowResultModal] = useState(false);
-  const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
-  // Store the selected prize when user clicks to prevent slider change issues
-  const selectedPrizeRef = useRef<typeof activePrizes[0] | null>(null);
+  const [selectedPrize, setSelectedPrize] = useState<any>(null);
+  // Dati per UI - uso stato per evitare setState durante render
+  const [ticketsPurchasedToday, setTicketsPurchasedToday] = useState(0);
+  const [cooldownMinutes, setCooldownMinutes] = useState(0);
+  const [canBuyTicket, setCanBuyTicket] = useState(true);
 
-  // Get active prizes
+  // Get prizes based on active tab
   const activePrizes = prizes.filter(p => p.isActive);
-  const currentPrize = activePrizes[currentPrizeIndex];
-
-  // Usa il timer del premio corrente (ogni premio ha il suo timer)
-  const {countdown, isExpired} = usePrizeCountdown(
-    currentPrize?.id,
-    currentPrize?.scheduledAt,
-  );
-
-  // Verifica se il premio corrente ha un timer attivo
-  const hasActiveTimer = currentPrize?.timerStatus === 'countdown';
-
-  // Extraction is now handled globally in AppNavigator
-  // This ensures extraction shows on ANY screen, not just Home
-
-  // Handle extraction animation complete - only for local debug buttons
-  const handleExtractionComplete = () => {
-    setShowExtractionEffect(false);
-  };
-
-  // Create infinite carousel data with clones at start and end
-  // Pattern: [lastClone, item0, item1, ..., itemN, firstClone]
-  const infiniteData = activePrizes.length > 0
-    ? [activePrizes[activePrizes.length - 1], ...activePrizes, activePrizes[0]]
-    : [];
-
-  const slideWidth = width - 48;
+  const futurePrizes = prizes.filter(p => !p.isActive);
+  const displayedPrizes = activeTab === 'in_corso' ? activePrizes : futurePrizes;
 
   useEffect(() => {
+    checkAndResetDaily(); // Reset contatori se nuovo giorno
     fetchTickets();
     fetchPrizes();
     fetchDraws();
+    fetchSettings();
+  }, []);
 
-    // Check and show streak modal if not claimed today
+  // Check streak
+  useEffect(() => {
+    if (!_hasHydrated) return;
     const checkStreak = async () => {
       if (!hasClaimedToday) {
         const reward = await checkAndUpdateStreak();
         if (reward) {
           setStreakReward(reward);
-          setTimeout(() => {
-            setShowStreakModal(true);
-          }, 500);
+          setTimeout(() => setShowStreakModal(true), 500);
         }
       }
     };
     checkStreak();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_hasHydrated]);
+
+  // Aggiorna i dati UI dopo il mount (evita setState durante render)
+  useEffect(() => {
+    const updateTicketData = () => {
+      setTicketsPurchasedToday(getTicketsPurchasedToday());
+      setCooldownMinutes(getAdCooldownRemaining());
+      setCanBuyTicket(canPurchaseTicket());
+    };
+    updateTicketData();
+    // Aggiorna ogni minuto per il cooldown
+    const interval = setInterval(updateTicketData, 60000);
+    return () => clearInterval(interval);
   }, []);
 
-  // Initialize scroll position to first real item (index 1 in infiniteData)
-  useEffect(() => {
-    if (infiniteData.length > 2 && scrollViewRef.current) {
-      // Start at position 1 (first real item, after the clone)
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({x: slideWidth, animated: false});
-      }, 50);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePrizes.length, slideWidth]);
-
-  // Auto-scroll with infinite loop - stops when modal is open
-  useEffect(() => {
-    if (activePrizes.length === 0) return;
-
-    // Don't auto-scroll when modal is open
-    if (showAdOrCreditsModal) {
-      if (autoScrollTimer.current) {
-        clearInterval(autoScrollTimer.current);
-        autoScrollTimer.current = null;
-      }
-      return;
-    }
-
-    const startAutoScroll = () => {
-      autoScrollTimer.current = setInterval(() => {
-        if (!isManualScroll.current && scrollViewRef.current && !showAdOrCreditsModal) {
-          // Calculate next position in infiniteData (offset by 1 for the clone)
-          const nextInfiniteIndex = currentPrizeIndex + 2; // +1 for clone, +1 for next
-          scrollViewRef.current.scrollTo({
-            x: nextInfiniteIndex * slideWidth,
-            animated: true,
-          });
-        }
-      }, 10000);
-    };
-
-    startAutoScroll();
-
-    return () => {
-      if (autoScrollTimer.current) {
-        clearInterval(autoScrollTimer.current);
-      }
-    };
-  }, [currentPrizeIndex, activePrizes.length, showAdOrCreditsModal, slideWidth]);
-
-  const handleScrollBegin = () => {
-    isManualScroll.current = true;
-    if (autoScrollTimer.current) {
-      clearInterval(autoScrollTimer.current);
-    }
-  };
-
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const contentOffsetX = event.nativeEvent.contentOffset.x;
-    // infiniteData index (0 = lastClone, 1 = first real, ..., n = last real, n+1 = firstClone)
-    const infiniteIndex = Math.round(contentOffsetX / slideWidth);
-    // Convert to real index (subtract 1 for the leading clone)
-    const realIndex = infiniteIndex - 1;
-
-    if (realIndex >= 0 && realIndex < activePrizes.length && realIndex !== currentPrizeIndex) {
-      setCurrentPrizeIndex(realIndex);
-    }
-  };
-
-  const handleScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const contentOffsetX = event.nativeEvent.contentOffset.x;
-    const infiniteIndex = Math.round(contentOffsetX / slideWidth);
-    const lastRealIndex = activePrizes.length; // Position of last real item in infiniteData
-
-    // If we scrolled to the first clone (index 0), instantly jump to the last real item
-    if (infiniteIndex === 0) {
-      scrollViewRef.current?.scrollTo({x: lastRealIndex * slideWidth, animated: false});
-      setCurrentPrizeIndex(activePrizes.length - 1);
-    }
-    // If we scrolled to the last clone (after all real items), instantly jump to first real item
-    else if (infiniteIndex === infiniteData.length - 1) {
-      scrollViewRef.current?.scrollTo({x: slideWidth, animated: false});
-      setCurrentPrizeIndex(0);
-    }
-    // Normal case: update to real index
-    else {
-      const realIndex = infiniteIndex - 1;
-      if (realIndex >= 0 && realIndex < activePrizes.length) {
-        setCurrentPrizeIndex(realIndex);
-      }
-    }
-
-    // Resume auto-scroll after manual interaction
-    isManualScroll.current = false;
-  };
-
-  // Show the ad or credits choice modal
-  const handleShowAdOrCreditsModal = () => {
-    if (!currentPrize) return;
-    // Capture the selected prize NOW before slider might change
-    selectedPrizeRef.current = currentPrize;
-    setShowAdOrCreditsModal(true);
-  };
-
-  // Genera un drawId per il premio (basato sul prizeId + timestamp del timer)
   const getDrawIdForPrize = (prizeId: string, timerStartedAt?: string) => {
     const timestamp = timerStartedAt || new Date().toISOString();
     return `draw_${prizeId}_${timestamp.replace(/[^0-9]/g, '').slice(0, 14)}`;
   };
 
-  // Handle watching ad (called from modal)
+  const handlePrizePress = (prize: typeof activePrizes[0]) => {
+    navigation.navigate('PrizeDetail', {prizeId: prize.id});
+  };
+
+  const handleGetTicket = (prize: typeof activePrizes[0]) => {
+    setSelectedPrize(prize);
+    setShowAdOrCreditsModal(true);
+  };
+
   const handleWatchAd = async () => {
-    // Use the captured prize (at click time) instead of currentPrize (which may have changed)
-    const prize = selectedPrizeRef.current;
+    const prize = selectedPrize;
     if (!prize) return;
 
     setShowAdOrCreditsModal(false);
     setIsWatchingAd(true);
-    await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
+    await new Promise<void>(resolve => setTimeout(resolve, 2000));
 
-    // Increment ads for selected prize (questo può avviare il timer automaticamente)
     incrementAdsForPrize(prize.id);
     incrementAdsWatched();
+    addXP(xpRewards.WATCH_AD);
 
-    // Add XP for watching ad
-    addXP(XP_REWARDS.WATCH_AD);
-
-    // Genera drawId per questo premio
     const drawId = getDrawIdForPrize(prize.id, prize.timerStartedAt);
-
-    // Add new ticket and get the assigned number
-    const newTicket = await addTicket('ad', drawId, prize.id);
-
-    // Get all user's numbers for this prize (including the new one)
-    const userNumbers = getTicketNumbersForPrize(prize.id);
-    const totalPool = getTotalPoolTickets(prize.id);
-
-    setNewTicketInfo({
-      ticketNumber: newTicket.ticketNumber,
-      prizeName: prize.name,
-      userNumbers,
-      totalPoolTickets: totalPool,
-    });
-    setShowTicketModal(true);
+    await addTicket('ad', drawId, prize.id);
+    refreshUserData();
 
     setIsWatchingAd(false);
-    selectedPrizeRef.current = null;
+    setSelectedPrize(null);
   };
 
-  // Handle using credits (called from modal)
   const handleUseCredits = async () => {
-    // Use the captured prize (at click time) instead of currentPrize (which may have changed)
-    const prize = selectedPrizeRef.current;
+    const prize = selectedPrize;
     if (!prize) return;
 
     setShowAdOrCreditsModal(false);
 
-    // Check credits first (fast local check)
     const success = await spendCreditsForTicket();
     if (!success) {
-      Alert.alert('Errore', 'Crediti insufficienti');
-      selectedPrizeRef.current = null;
+      setSelectedPrize(null);
       return;
     }
 
-    // Increment ads for selected prize (counts as participation)
     incrementAdsForPrize(prize.id);
+    addXP(xpRewards.CREDIT_TICKET);
 
-    // Genera drawId per questo premio
     const drawId = getDrawIdForPrize(prize.id, prize.timerStartedAt);
-
-    // Add new ticket and get the assigned number
-    let newTicket;
     try {
-      newTicket = await addTicket('credits', drawId, prize.id);
-    } catch (error: any) {
-      Alert.alert('Errore', error.message || 'Impossibile creare il biglietto');
-      selectedPrizeRef.current = null;
+      await addTicket('credits', drawId, prize.id);
+    } catch {
+      setSelectedPrize(null);
       return;
     }
 
-    // Get all user's numbers for this prize (including the new one) - do this immediately
-    const userNumbers = getTicketNumbersForPrize(prize.id);
-    const totalPool = getTotalPoolTickets(prize.id);
-
-    // Show ticket modal IMMEDIATELY - don't wait for backend refresh
-    setNewTicketInfo({
-      ticketNumber: newTicket.ticketNumber,
-      prizeName: prize.name,
-      userNumbers,
-      totalPoolTickets: totalPool,
-    });
-    setShowTicketModal(true);
-    selectedPrizeRef.current = null;
-
-    // Refresh user data in background (don't await - no need to block UI)
+    setSelectedPrize(null);
     refreshUserData().catch(() => {});
   };
 
-  const handleCloseModal = () => {
-    setShowTicketModal(false);
-    setNewTicketInfo(null);
+  const handleWatchAdGeneric = () => {
+    if (activePrizes.length > 0 && canPurchaseTicket()) {
+      handleGetTicket(activePrizes[0]);
+    }
   };
-
-  if (activePrizes.length === 0) {
-    return (
-      <LinearGradient
-        colors={gradientColors as unknown as string[]}
-        locations={[0, 0.25, 0.5, 0.75, 1]}
-        start={{x: 0.5, y: 0}}
-        end={{x: 0.5, y: 1}}
-        style={styles.container}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
-        <View style={styles.loadingContainer}>
-          <Text style={[styles.loadingText, {color: colors.textMuted}]}>Caricamento premi...</Text>
-        </View>
-      </LinearGradient>
-    );
-  }
 
   return (
     <LinearGradient
@@ -733,134 +260,104 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
       <AnimatedBackground />
 
-      {/* Header - Removed logo and profile icon */}
-
-      {/* Main Content - Centered Layout */}
-      <View style={styles.mainContent}>
-        {/* Timer Section - Top */}
-        <View style={styles.timerSection}>
-          <View style={styles.liveIndicator}>
-            <PulsingDot />
-            <Text style={styles.liveText}>
-              {!hasActiveTimer
-                ? 'IN ATTESA DI BIGLIETTI'
-                : isExpired
-                  ? 'ESTRAZIONE LIVE'
-                  : 'PROSSIMA ESTRAZIONE'}
-            </Text>
-          </View>
-
-          {hasActiveTimer && !isExpired && (
-            <View style={styles.timerContainer}>
-              <TimerUnit value={padNumber(countdown.hours)} label="ORE" />
-              <TimerSeparator />
-              <TimerUnit value={padNumber(countdown.minutes)} label="MIN" />
-              <TimerSeparator />
-              <TimerUnit value={padNumber(countdown.seconds)} label="SEC" />
+      <View style={styles.content}>
+        {/* Banner Pubblicitario */}
+        <View style={[styles.bannerContainer, {backgroundColor: colors.card}]}>
+          <View style={styles.bannerContent}>
+            <View style={styles.bannerIcon}>
+              <Ionicons name="megaphone" size={20} color={COLORS.primary} />
             </View>
-          )}
+            <View style={styles.bannerTextContainer}>
+              <Text style={[styles.bannerTitle, {color: colors.text}]}>Il tuo brand qui!</Text>
+              <Text style={[styles.bannerSubtitle, {color: colors.textMuted}]}>Sponsorizza la tua azienda</Text>
+            </View>
+            <View style={styles.bannerBadge}>
+              <Text style={styles.bannerBadgeText}>AD</Text>
+            </View>
+          </View>
+        </View>
 
-          {/* Mostra info se il premio è in attesa */}
-          {!hasActiveTimer && currentPrize && (
-            <View style={styles.waitingInfo}>
-              <Text style={styles.waitingText}>
-                Mancano {currentPrize.goalAds - currentPrize.currentAds} biglietti
+        {/* Tab Selector */}
+        <TabSelector activeTab={activeTab} onTabChange={setActiveTab} />
+
+        {/* Horizontal Prize Slider */}
+        <View style={styles.sliderSection}>
+          {displayedPrizes.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.sliderContent}
+              decelerationRate="fast"
+              snapToInterval={SLIDE_WIDTH + SLIDE_SPACING}
+              snapToAlignment="start">
+              {displayedPrizes.map((prize) => (
+                <PrizeSlide
+                  key={prize.id}
+                  prize={prize}
+                  onPress={() => handlePrizePress(prize)}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="gift-outline" size={48} color={colors.border} />
+              <Text style={[styles.emptyText, {color: colors.textMuted}]}>
+                {activeTab === 'in_corso' ? 'Nessun raffle attivo' : 'Nessun raffle futuro'}
               </Text>
             </View>
           )}
         </View>
 
-        {/* Prize Carousel - Infinite Loop */}
-        <View style={styles.carouselContainer}>
-          <ScrollView
-            ref={scrollViewRef}
-            horizontal
-            pagingEnabled={false}
-            showsHorizontalScrollIndicator={false}
-            onScrollBeginDrag={handleScrollBegin}
-            onMomentumScrollEnd={handleScrollEnd}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-            contentContainerStyle={styles.carouselContent}
-            decelerationRate="fast"
-            snapToInterval={slideWidth}
-            snapToAlignment="start"
-            bounces={false}>
-            {infiniteData.map((prize, index) => (
-              <View key={`${prize.id}-${index}`} style={styles.prizeCard}>
-                <Image
-                  source={{uri: prize.imageUrl}}
-                  style={styles.prizeImage}
-                  resizeMode="contain"
-                />
-                <Text style={[styles.prizeName, {color: colors.text}]}>{prize.name}</Text>
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Step Indicator */}
-          <StepIndicator
-            currentIndex={currentPrizeIndex}
-            totalCount={activePrizes.length}
-          />
-        </View>
-
-        {/* Prize Progress Bar */}
-        {currentPrize && (
-          <PrizeProgressBar
-            current={currentPrize.currentAds}
-            goal={currentPrize.goalAds}
-            prizeId={currentPrize.id}
-            colors={colors}
-            neon={neon}
-          />
-        )}
-
-        {/* Watch Ad Button - Bottom Position */}
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={[
-              styles.watchButton,
-              neon.glowStrong,
-              isWatchingAd && styles.watchButtonDisabled,
-            ]}
-            onPress={handleShowAdOrCreditsModal}
-            disabled={isWatchingAd}
-            activeOpacity={0.8}>
-            <Ionicons
-              name={isWatchingAd ? 'hourglass' : 'play-circle'}
-              size={24}
-              color={COLORS.white}
-            />
-            <Text style={[styles.watchButtonText, neon.textShadow]}>
-              {isWatchingAd ? 'Guardando...' : 'Guarda Ads'}
+        {/* Bottom Watch Ad Button */}
+        <View style={styles.bottomButtonContainer}>
+          {/* Contatore biglietti */}
+          <View style={styles.ticketCounterRow}>
+            <Text style={[styles.ticketCounterText, {color: colors.textMuted}]}>
+              Biglietti oggi: <Text style={{color: COLORS.primary, fontWeight: 'bold'}}>{ticketsPurchasedToday}/{DAILY_LIMITS.MAX_TICKETS_PER_DAY}</Text>
             </Text>
+            {cooldownMinutes > 0 && (
+              <Text style={[styles.cooldownText, {color: colors.textMuted}]}>
+                Prossima ads tra {cooldownMinutes} min
+              </Text>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.watchAdButton, {backgroundColor: colors.card}, !canBuyTicket && styles.watchAdButtonDisabled]}
+            onPress={handleWatchAdGeneric}
+            disabled={isWatchingAd || activePrizes.length === 0 || !canBuyTicket}
+            activeOpacity={0.8}>
+            <LinearGradient
+              colors={canBuyTicket ? [COLORS.primary, '#FF8500'] : ['#666', '#555']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 0}}
+              style={styles.watchAdGradient}>
+              <Ionicons name="play-circle" size={24} color={COLORS.white} />
+              <Text style={styles.watchAdText}>
+                {isWatchingAd ? 'GUARDANDO...' : !canBuyTicket ? 'LIMITE GIORNALIERO RAGGIUNTO' : 'GUARDA PUBBLICITÀ E GUADAGNA UN CREDITO'}
+              </Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Ad or Credits Choice Modal */}
+      {/* Modals */}
       <AdOrCreditsModal
         visible={showAdOrCreditsModal}
         userCredits={user?.credits ?? 0}
-        prizeName={currentPrize?.name ?? ''}
+        prizeName={selectedPrize?.name ?? ''}
         onWatchAd={handleWatchAd}
         onUseCredits={handleUseCredits}
         onGoToShop={() => {
           setShowAdOrCreditsModal(false);
-          navigation.navigate('Credits');
+          navigation.navigate('Shop');
         }}
-        onClose={() => setShowAdOrCreditsModal(false)}
+        onClose={() => {
+          setShowAdOrCreditsModal(false);
+          setSelectedPrize(null);
+        }}
       />
 
-      {/* Ticket Success Modal */}
-      <TicketSuccessModal
-        visible={showTicketModal}
-        ticketInfo={newTicketInfo}
-        onClose={handleCloseModal}
-      />
-
-      {/* Streak Modal */}
       <StreakModal
         visible={showStreakModal}
         currentStreak={currentStreak}
@@ -869,136 +366,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         daysUntilWeeklyBonus={7 - (currentStreak % 7)}
         onClose={() => setShowStreakModal(false)}
       />
-
-      {/* Extraction Start Effect */}
-      <ExtractionStartEffect
-        visible={showExtractionEffect}
-        onAnimationComplete={handleExtractionComplete}
-      />
-
-      {/* Extraction Result Modal - Win/Lose */}
-      <ExtractionResultModal
-        visible={showResultModal}
-        isWinner={extractionResult?.isWinner || false}
-        prizeName={extractionResult?.prizeName}
-        prizeImage={extractionResult?.prizeImage}
-        winningNumber={extractionResult?.winningNumber}
-        userNumbers={extractionResult?.userNumbers}
-        onClose={() => {
-          setShowResultModal(false);
-          setExtractionResult(null);
-        }}
-      />
-
-      {/* Debug Controls - Enabled for testing */}
-      {true && (
-        <View style={styles.debugContainer}>
-          <TouchableOpacity
-            style={styles.debugButton}
-            onPress={() => {
-              if (currentPrize && currentPrize.timerStatus === 'waiting') {
-                // Avvia il timer con durata di 65 secondi
-                startTimerForPrize(currentPrize.id, 65);
-              }
-            }}>
-            <Text style={styles.debugButtonText}>1:05</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.debugButton}
-            onPress={() => {
-              if (currentPrize && currentPrize.timerStatus === 'waiting') {
-                // Avvia il timer con durata di 3 secondi
-                startTimerForPrize(currentPrize.id, 3);
-              }
-            }}>
-            <Text style={styles.debugButtonText}>0:03</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.debugButton, {backgroundColor: 'rgba(0, 200, 0, 0.8)'}]}
-            onPress={async () => {
-              const prize = currentPrize;
-              if (prize && user) {
-                // Get user's tickets before forcing win
-                const userTickets = getTicketsForPrize(prize.id);
-
-                if (userTickets.length === 0) {
-                  Alert.alert('Nessun biglietto', 'Devi prima ottenere un biglietto per questo premio!');
-                  return;
-                }
-
-                // Genera drawId per questo premio
-                const drawId = getDrawIdForPrize(prize.id, prize.timerStartedAt);
-
-                // Force win extraction - this properly marks the ticket as winner
-                const result = forceWinExtraction(prize.id, prize.name, prize.imageUrl);
-
-                // Sync extraction to WordPress backend (creates draw + winner record)
-                if (result.winningNumber) {
-                  await syncExtractionToBackend(prize.id, result.winningNumber, userTickets[0].id);
-                }
-
-                // Add to wins list using the first ticket
-                addWin(prize.id, drawId, userTickets[0].id, user.id);
-
-                setExtractionResult({
-                  ...result,
-                  prizeImage: prize.imageUrl,
-                });
-                setShowResultModal(true);
-
-                // Completa l'estrazione e resetta il premio per il prossimo round
-                completePrizeExtraction(prize.id);
-                setTimeout(() => {
-                  resetPrizeForNextRound(prize.id);
-                }, 1000);
-              }
-            }}>
-            <Text style={styles.debugButtonText}>Vinto</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.debugButton, {backgroundColor: 'rgba(100, 100, 100, 0.8)'}]}
-            onPress={async () => {
-              const prize = currentPrize;
-              if (prize) {
-                const userNumbers = getTicketNumbersForPrize(prize.id);
-                // Generate a random winning number that is NOT in user's numbers
-                const winningNumber = 999;
-
-                // Simulate extraction locally (moves tickets to past)
-                simulateExtraction(prize.id, prize.name, prize.imageUrl);
-
-                // Sync extraction to WordPress backend
-                await syncExtractionToBackend(prize.id, winningNumber);
-
-                setExtractionResult({
-                  isWinner: false,
-                  winningNumber,
-                  userNumbers,
-                  prizeName: prize.name,
-                });
-                setShowResultModal(true);
-
-                // Completa l'estrazione e resetta il premio per il prossimo round
-                completePrizeExtraction(prize.id);
-                setTimeout(() => {
-                  resetPrizeForNextRound(prize.id);
-                }, 1000);
-              }
-            }}>
-            <Text style={styles.debugButtonText}>Perso</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.debugButton, {backgroundColor: 'rgba(255, 140, 0, 0.8)'}]}
-            onPress={() => {
-              if (currentPrize) {
-                // Auto-fill to 100% in ONE state update (no UI freeze)
-                fillPrizeToGoal(currentPrize.id);
-              }
-            }}>
-            <Text style={styles.debugButtonText}>Fill 100%</Text>
-          </TouchableOpacity>
-        </View>
-      )}
     </LinearGradient>
   );
 };
@@ -1006,497 +373,190 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
-  loadingContainer: {
+  content: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingTop: 50,
   },
-  loadingText: {
-    fontSize: FONT_SIZE.md,
-    color: COLORS.textMuted,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: 24,
-    paddingBottom: SPACING.xs,
-  },
-  logoLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoTextRaffle: {
-    fontSize: FONT_SIZE.xxl,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
-  },
-  logoTextMania: {
-    fontSize: FONT_SIZE.xxl,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.primary,
-  },
-  profileButton: {
-    padding: 4,
-  },
-  mainContent: {
-    flex: 1,
-    justifyContent: 'flex-start',
-    paddingBottom: 110,
-    zIndex: 1,
-  },
-  // Carousel
-  carouselContainer: {
-    height: height * 0.38,
-    marginTop: 0,
-  },
-  carouselContent: {
-    paddingHorizontal: 24,
-  },
-  prizeCard: {
-    width: width - 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  prizeImage: {
-    width: width * 0.65,
-    height: height * 0.28,
-    marginBottom: 4,
-  },
-  prizeName: {
-    fontSize: FONT_SIZE.lg,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
-    textAlign: 'center',
-    marginTop: 0,
-    marginBottom: 0,
-  },
-  // Step Indicator - pill style
-  stepIndicatorContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: -10,
-  },
-  stepPill: {
-    width: 24,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.border,
-    overflow: 'hidden',
-  },
-  stepPillActive: {
-    width: 40,
-  },
-  stepPillGradient: {
-    flex: 1,
-  },
-  buttonContainer: {
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.sm,
-    marginBottom: 40,
-  },
-  // Timer
-  timerSection: {
-    alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: 60,
-    marginBottom: SPACING.sm,
-    zIndex: 1,
-  },
-  liveIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: SPACING.sm,
-  },
-  pulsingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-  },
-  liveText: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.primary,
-    letterSpacing: 1.5,
-  },
-  waitingInfo: {
-    marginTop: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    backgroundColor: 'rgba(255, 107, 0, 0.15)',
+  // Banner
+  bannerContainer: {
+    marginHorizontal: SPACING.md,
     borderRadius: RADIUS.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}30`,
   },
-  waitingText: {
-    fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.medium,
-    color: COLORS.primary,
-    textAlign: 'center',
-  },
-  timerContainer: {
+  bannerContent: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  timerUnit: {
     alignItems: 'center',
-  },
-  timerCards: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  timerCard: {
-    width: 42,
-    height: 54,
-    borderRadius: RADIUS.md,
-    overflow: 'hidden',
-  },
-  timerCardGradient: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  timerCardText: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: COLORS.white,
-    fontVariant: ['tabular-nums'],
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  timerCardLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: '50%',
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  timerLabel: {
-    fontSize: FONT_SIZE.xs,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.textMuted,
-    marginTop: 6,
-    letterSpacing: 1,
-  },
-  timerSeparator: {
-    height: 56,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 2,
-  },
-  separatorDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.primary,
-  },
-  // Prize Progress Bar
-  prizeProgressSection: {
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.md,
     padding: SPACING.md,
-    borderRadius: RADIUS.lg,
   },
-  prizeProgressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  bannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: `${COLORS.primary}15`,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.sm,
   },
-  prizeProgressLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  bannerTextContainer: {
+    flex: 1,
+    marginLeft: SPACING.sm,
   },
-  prizeProgressTitle: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.medium,
-    fontWeight: FONT_WEIGHT.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  prizeProgressPercentage: {
-    fontSize: FONT_SIZE.lg,
+  bannerTitle: {
+    fontSize: FONT_SIZE.md,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.primary,
   },
-  prizeProgressBarBg: {
-    height: 8,
+  bannerSubtitle: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.regular,
+  },
+  bannerBadge: {
+    backgroundColor: `${COLORS.primary}15`,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 4,
+  },
+  bannerBadgeText: {
+    color: COLORS.primary,
+    fontSize: 10,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  // Tab Selector
+  tabSelectorContainer: {
+    flexDirection: 'row',
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+  },
+  tabButtonActive: {
+    backgroundColor: COLORS.primary,
+  },
+  tabButtonText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  // Slider
+  sliderSection: {
+    marginBottom: SPACING.md,
+  },
+  sliderContent: {
+    paddingHorizontal: SPACING.md,
+    gap: SLIDE_SPACING,
+  },
+  prizeSlide: {
+    width: SLIDE_WIDTH,
+    borderRadius: RADIUS.lg,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}30`,
+  },
+  prizeSlideImageContainer: {
+    height: 140,
+    backgroundColor: '#FFF8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  prizeSlideImage: {
+    width: '80%',
+    height: '90%',
+  },
+  prizeSlideInfo: {
+    padding: SPACING.md,
+  },
+  prizeSlideName: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
     marginBottom: SPACING.xs,
   },
-  prizeProgressBarFill: {
-    height: '100%',
-    borderRadius: 4,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  prizeProgressGradientFill: {
-    flex: 1,
-    height: '100%',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  prizeProgressShimmer: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 60,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-    transform: [{skewX: '-25deg'}],
-  },
-  prizeProgressFooter: {
-    alignItems: 'center',
-  },
-  prizeProgressCount: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.medium,
-    fontWeight: FONT_WEIGHT.medium,
-  },
-  // Watch Button
-  watchButton: {
+  prizeSlideProgressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.xs,
+  },
+  prizeSlideProgressBg: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  prizeSlideProgressFill: {
+    height: '100%',
     backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    borderRadius: RADIUS.xl,
-    gap: 10,
-    minHeight: 52,
+    borderRadius: 3,
   },
-  watchButtonDisabled: {
-    backgroundColor: COLORS.border,
-  },
-  watchButtonText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZE.lg,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: SPACING.lg,
-  },
-  modalContent: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.xl,
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 340,
-  },
-  modalIconContainer: {
-    marginBottom: SPACING.lg,
-  },
-  modalIconGradient: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalTitle: {
-    fontSize: FONT_SIZE.xxl,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.lg,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  modalSubtitle: {
-    fontSize: FONT_SIZE.md,
-    fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textMuted,
-    marginBottom: SPACING.lg,
-    textAlign: 'center',
-  },
-  modalTicketCard: {
-    width: '100%',
-    marginBottom: SPACING.lg,
-  },
-  modalTicketGradient: {
-    borderRadius: RADIUS.lg,
-  },
-  modalTicketContent: {
-    paddingVertical: SPACING.xl,
-    paddingHorizontal: SPACING.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalTicketCode: {
-    fontSize: 42,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
-    letterSpacing: 2,
-    textAlign: 'center',
-    marginBottom: SPACING.sm,
-    includeFontPadding: false,
-    alignSelf: 'center',
-    width: '100%',
-  },
-  modalTicketPrize: {
-    fontSize: FONT_SIZE.md,
-    fontFamily: FONT_FAMILY.medium,
-    fontWeight: FONT_WEIGHT.medium,
-    color: 'rgba(255, 255, 255, 0.9)',
-    textAlign: 'center',
-  },
-  modalLuckContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: SPACING.lg,
-  },
-  modalLuckText: {
-    fontSize: FONT_SIZE.md,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: '#000000',
-  },
-  modalNumbersSummary: {
-    marginBottom: SPACING.md,
-    alignItems: 'center',
-  },
-  modalNumbersTitle: {
-    fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.medium,
-    fontWeight: FONT_WEIGHT.medium,
-    color: COLORS.textSecondary,
-    marginBottom: 4,
-  },
-  modalNumbersList: {
-    fontSize: FONT_SIZE.md,
+  prizeSlideProgressText: {
+    fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.primary,
+    minWidth: 35,
+    textAlign: 'right',
   },
-  modalPoolInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: SPACING.md,
-  },
-  modalPoolText: {
-    fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.regular,
-    color: COLORS.textMuted,
-  },
-  modalCloseButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 12,
-    paddingHorizontal: SPACING.xl,
-    borderRadius: RADIUS.lg,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  modalCloseButtonText: {
-    fontSize: FONT_SIZE.lg,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  // Boost Modal Styles - Same as PrizesScreen
-  modalBoostCard: {
-    width: '100%',
-    marginBottom: SPACING.lg,
-    borderRadius: RADIUS.xl,
-    overflow: 'hidden',
-  },
-  modalBoostGradient: {
-    borderRadius: RADIUS.xl,
-  },
-  modalBoostContent: {
-    padding: SPACING.lg,
-  },
-  modalBoostStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.md,
-  },
-  modalBoostStatItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  modalBoostStatNumber: {
-    fontSize: FONT_SIZE.xl,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
-  },
-  modalBoostStatText: {
+  prizeSlideStatus: {
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.regular,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
   },
-  modalBoostStatDivider: {
-    width: 1,
-    height: 36,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    marginHorizontal: SPACING.sm,
+  // Empty state
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SPACING.xxl,
   },
-  modalBoostPrizeRow: {
+  emptyText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.medium,
+    marginTop: SPACING.sm,
+  },
+  // Bottom Button Container
+  bottomButtonContainer: {
+    marginHorizontal: SPACING.md,
+    marginBottom: 100,
+  },
+  ticketCounterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+    paddingHorizontal: SPACING.xs,
+  },
+  ticketCounterText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.medium,
+  },
+  cooldownText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.regular,
+  },
+  // Watch Ad Button
+  watchAdButton: {
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+  },
+  watchAdButtonDisabled: {
+    opacity: 0.7,
+  },
+  watchAdGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    paddingVertical: SPACING.md,
+    gap: SPACING.sm,
   },
-  modalBoostPrizeName: {
-    fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.medium,
-    color: 'rgba(255, 255, 255, 0.85)',
-  },
-  // Debug Controls
-  debugContainer: {
-    position: 'absolute',
-    bottom: 130,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    paddingBottom: 15,
-    zIndex: 9998,
-  },
-  debugButton: {
-    backgroundColor: 'rgba(255, 0, 0, 0.8)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: RADIUS.md,
-  },
-  debugButtonReset: {
-    backgroundColor: 'rgba(0, 150, 0, 0.8)',
-  },
-  debugButtonText: {
+  watchAdText: {
     color: COLORS.white,
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.bold,

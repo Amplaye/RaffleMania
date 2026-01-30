@@ -309,6 +309,7 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
   const {activeTickets, pastTickets, fetchTickets} = useTicketsStore();
   const {prizes} = usePrizesStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [isWatchingAd, setIsWatchingAd] = useState(false);
   const contentOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -398,6 +399,14 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
     );
   };
 
+  const handleWatchAd = () => {
+    setIsWatchingAd(true);
+    setTimeout(() => {
+      setIsWatchingAd(false);
+      navigation.navigate('Home');
+    }, 500);
+  };
+
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <View style={[styles.emptyIconContainer, {backgroundColor: colors.card}]}>
@@ -436,15 +445,22 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
       <AnimatedBackground />
 
-      {/* Fixed Header with Tabs */}
+      {/* Fixed Header with Banner and Tabs */}
       <View style={styles.fixedHeader}>
-        <View style={styles.titleSection}>
-          <Text style={[styles.title, {color: colors.text}]}>I Miei Biglietti</Text>
-          <Text style={[styles.subtitle, {color: colors.textMuted}]}>
-            {activeTab === 'active'
-              ? `${uniquePrizesCount} ${uniquePrizesCount === 1 ? 'premio' : 'premi'} attivi con ${activeTickets.length} numeri totali`
-              : 'Le tue vincite passate'}
-          </Text>
+        {/* Banner Pubblicitario */}
+        <View style={[styles.bannerContainer, {backgroundColor: colors.card}]}>
+          <View style={styles.bannerContent}>
+            <View style={styles.bannerIcon}>
+              <Ionicons name="megaphone" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.bannerTextContainer}>
+              <Text style={[styles.bannerTitle, {color: colors.text}]}>Il tuo brand qui!</Text>
+              <Text style={[styles.bannerSubtitle, {color: colors.textMuted}]}>Sponsorizza la tua azienda</Text>
+            </View>
+            <View style={styles.bannerBadge}>
+              <Text style={styles.bannerBadgeText}>AD</Text>
+            </View>
+          </View>
         </View>
 
         <AnimatedTab
@@ -481,6 +497,26 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
           />
         )}
       </Animated.View>
+
+      {/* Bottom Watch Ad Button */}
+      <View style={styles.bottomSection}>
+        <TouchableOpacity
+          style={[styles.watchAdButton, {backgroundColor: colors.card}]}
+          onPress={handleWatchAd}
+          disabled={isWatchingAd}
+          activeOpacity={0.8}>
+          <LinearGradient
+            colors={[COLORS.primary, '#FF8500']}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 0}}
+            style={styles.watchAdGradient}>
+            <Ionicons name="play-circle" size={24} color={COLORS.white} />
+            <Text style={styles.watchAdText}>
+              {isWatchingAd ? 'GUARDANDO...' : 'GUARDA PUBBLICITÀ E GUADAGNA UN CREDITO'}
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
     </LinearGradient>
   );
 };
@@ -758,6 +794,77 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.semibold,
     color: COLORS.white,
+  },
+  // Banner
+  bannerContainer: {
+    borderRadius: RADIUS.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}30`,
+  },
+  bannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+  },
+  bannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: `${COLORS.primary}15`,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bannerTextContainer: {
+    flex: 1,
+    marginLeft: SPACING.sm,
+  },
+  bannerTitle: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  bannerSubtitle: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.regular,
+  },
+  bannerBadge: {
+    backgroundColor: `${COLORS.primary}15`,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  bannerBadgeText: {
+    color: COLORS.primary,
+    fontSize: 10,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  // Bottom Section
+  bottomSection: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: 100,
+  },
+  watchAdButton: {
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+  },
+  watchAdGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    gap: SPACING.sm,
+  },
+  watchAdText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
   },
 });
 
