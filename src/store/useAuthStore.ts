@@ -2,6 +2,8 @@ import {create} from 'zustand';
 import {persist, createJSONStorage} from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Platform} from 'react-native';
+
+console.log('useAuthStore: MODULE LOADED');
 import {
   GoogleSignin,
   isSuccessResponse,
@@ -57,7 +59,8 @@ const mapApiUserToUser = (apiUser: any): User => ({
   xp: apiUser.xp || 0,
   level: apiUser.level || 1,
   totalTickets: apiUser.total_tickets || apiUser.totalTickets || 0,
-  watchedAdsCount: apiUser.watched_ads || apiUser.watchedAdsCount || 0,
+  watchedAdsCount: apiUser.watched_ads || apiUser.watchedAds || apiUser.watchedAdsCount || 0,
+  winsCount: apiUser.wins_count || apiUser.winsCount || 0,
   currentStreak: apiUser.current_streak || apiUser.currentStreak || 0,
   lastStreakDate: apiUser.last_streak_date || apiUser.lastStreakDate || undefined,
   referralCode: apiUser.referral_code || apiUser.referralCode || '',
@@ -92,6 +95,7 @@ export const useAuthStore = create<AuthState>()(
         level: 1,
         totalTickets: 0,
         watchedAdsCount: 0,
+        winsCount: 0,
         currentStreak: 0,
         referralCode: 'GUEST' + Date.now().toString(36).toUpperCase().substring(0, 4),
         createdAt: new Date().toISOString(),
@@ -125,6 +129,7 @@ export const useAuthStore = create<AuthState>()(
           level: 3,
           totalTickets: 10,
           watchedAdsCount: 25,
+          winsCount: 0,
           currentStreak: 5,
           referralCode: 'TEST123',
           createdAt: new Date().toISOString(),
@@ -181,6 +186,7 @@ export const useAuthStore = create<AuthState>()(
             level: 1,
             totalTickets: 0,
             watchedAdsCount: 0,
+            winsCount: 0,
             currentStreak: 0,
             referralCode: 'GOOGLE' + Date.now().toString(36).toUpperCase(),
             createdAt: new Date().toISOString(),
@@ -257,6 +263,7 @@ export const useAuthStore = create<AuthState>()(
         level: 1,
         totalTickets: 0,
         watchedAdsCount: 0,
+        winsCount: 0,
         currentStreak: 0,
         referralCode: 'APPLE' + Date.now().toString(36).toUpperCase(),
         createdAt: new Date().toISOString(),
@@ -365,14 +372,30 @@ export const useAuthStore = create<AuthState>()(
 
   refreshUserData: async () => {
     try {
-      if (API_CONFIG.USE_MOCK_DATA) return;
+      if (API_CONFIG.USE_MOCK_DATA) {
+        console.log('refreshUserData: skipping (mock mode)');
+        return;
+      }
 
+      // Don't refresh from API for guest users - their data is local only
+      const token = get().token;
+      if (token?.startsWith('guest_token_')) {
+        console.log('refreshUserData: skipping (guest user)');
+        return;
+      }
+
+      console.log('refreshUserData: calling /users/me');
       const response = await apiClient.get('/users/me');
       if (response.data.success) {
+        const userData = response.data.data.user;
+        console.log('refreshUserData: got data', {
+          watchedAds: userData.watchedAds,
+          winsCount: userData.winsCount,
+        });
         set({user: mapApiUserToUser(response.data.data.user)});
       }
     } catch (error) {
-      console.error('Error refreshing user data:', error);
+      console.error('refreshUserData: Error', error);
     }
   },
 
@@ -480,15 +503,44 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'rafflemania-auth-storage',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: () => ({
-        // Don't persist user data or token - everything comes fresh from backend on login
-        // Credits and other user data must always be fetched from backend
-        // "Remember Me" functionality is handled separately via Keychain
-      }),
-      onRehydrateStorage: () => () => {
-        // Nothing to do - we don't persist auth state anymore
-        // User must always login manually
-        // Credits and user data always come fresh from backend
+      partialize: (state) => {
+        // Only persist data for guest users (their data is local-only)
+        const isGuestUser = state.token?.startsWith('guest_token_');
+        console.log('Auth persist: checking', {
+          isGuestUser,
+          hasUser: !!state.user,
+          token: state.token?.substring(0, 20),
+        });
+        if (isGuestUser && state.user) {
+          console.log('Auth persist: saving guest user data', {
+            watchedAdsCount: state.user.watchedAdsCount,
+            winsCount: state.user.winsCount,
+          });
+          return {
+            user: state.user,
+            token: state.token,
+            isAuthenticated: state.isAuthenticated,
+          };
+        }
+        // For authenticated users, don't persist - data comes fresh from backend on login
+        console.log('Auth persist: NOT saving (not guest or no user)');
+        return {};
+      },
+      onRehydrateStorage: () => {
+        console.log('Auth rehydrate: STARTING');
+        return (state) => {
+          console.log('Auth rehydrate: CALLBACK', {
+            hasState: !!state,
+            hasUser: !!state?.user,
+          });
+          if (state?.user) {
+            console.log('Auth rehydrate: loaded user data', {
+              watchedAdsCount: state.user.watchedAdsCount,
+              winsCount: state.user.winsCount,
+              isGuest: state.token?.startsWith('guest_token_'),
+            });
+          }
+        };
       },
     }
   )

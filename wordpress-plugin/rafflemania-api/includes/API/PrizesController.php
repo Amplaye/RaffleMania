@@ -1,4 +1,5 @@
 <?php
+// Force opcache refresh: 2026-01-27-v3
 namespace RaffleMania\API;
 
 use WP_REST_Controller;
@@ -7,7 +8,7 @@ use WP_REST_Response;
 use WP_Error;
 
 /**
- * Prizes API Controller
+ * Prizes API Controller - v1.3 with settings
  */
 class PrizesController extends WP_REST_Controller {
 
@@ -50,6 +51,43 @@ class PrizesController extends WP_REST_Controller {
                 'permission_callback' => '__return_true'
             ]
         ]);
+
+        // App settings (XP, credits config) - using prizes/settings path
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/settings', [
+            [
+                'methods' => 'GET',
+                'callback' => [$this, 'get_app_settings'],
+                'permission_callback' => '__return_true'
+            ]
+        ]);
+
+        // Sync timer status from app (public - for timer sync without full auth)
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/(?P<id>\d+)/sync-timer', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'sync_timer_status'],
+                'permission_callback' => '__return_true',
+                'args' => [
+                    'timer_status' => [
+                        'required' => true,
+                        'type' => 'string',
+                        'enum' => ['waiting', 'countdown', 'completed']
+                    ],
+                    'timer_started_at' => [
+                        'required' => false,
+                        'type' => 'string'
+                    ],
+                    'scheduled_at' => [
+                        'required' => false,
+                        'type' => 'string'
+                    ],
+                    'current_ads' => [
+                        'required' => false,
+                        'type' => 'integer'
+                    ]
+                ]
+            ]
+        ]);
     }
 
     public function get_prizes(WP_REST_Request $request) {
@@ -66,13 +104,58 @@ class PrizesController extends WP_REST_Controller {
 
         $formatted = array_map([$this, 'format_prize'], $prizes);
 
+        // Include app settings in prizes response for mobile app - v1.2
+        $xp_watch_ad = (int) get_option('rafflemania_xp_watch_ad', 10);
+        $xp_daily_streak = (int) get_option('rafflemania_xp_daily_streak', 10);
+        $xp_credit_ticket = (int) get_option('rafflemania_xp_credit_ticket', 5);
+        $credits_per_ticket = (int) get_option('rafflemania_credits_per_ticket', 5);
+        $referral_bonus = (int) get_option('rafflemania_referral_bonus', 10);
+
+        $settings = [
+            'xp' => [
+                'watch_ad' => $xp_watch_ad,
+                'daily_streak' => $xp_daily_streak,
+                'credit_ticket' => $xp_credit_ticket,
+                'skip_ad' => $xp_watch_ad * 2,
+                'purchase_credits' => 25,
+                'win_prize' => 250,
+                'referral' => 50,
+            ],
+            'credits' => [
+                'per_ticket' => $credits_per_ticket,
+                'referral_bonus' => $referral_bonus,
+            ],
+        ];
+
         return new WP_REST_Response([
             'success' => true,
             'data' => [
                 'prizes' => $formatted,
-                'total' => count($formatted)
+                'total' => count($formatted),
+                'settings' => $settings
             ]
         ]);
+    }
+
+    /**
+     * Get app settings data
+     */
+    private function get_settings_data() {
+        return [
+            'xp' => [
+                'watch_ad' => (int) get_option('rafflemania_xp_watch_ad', 10),
+                'daily_streak' => (int) get_option('rafflemania_xp_daily_streak', 10),
+                'credit_ticket' => (int) get_option('rafflemania_xp_credit_ticket', 5),
+                'skip_ad' => (int) get_option('rafflemania_xp_watch_ad', 10) * 2,
+                'purchase_credits' => 25,
+                'win_prize' => 250,
+                'referral' => 50,
+            ],
+            'credits' => [
+                'per_ticket' => (int) get_option('rafflemania_credits_per_ticket', 5),
+                'referral_bonus' => (int) get_option('rafflemania_referral_bonus', 10),
+            ],
+        ];
     }
 
     public function get_prize(WP_REST_Request $request) {
@@ -250,5 +333,114 @@ class PrizesController extends WP_REST_Controller {
             'extractedAt' => $prize->extracted_at,
             'createdAt' => $prize->created_at
         ];
+    }
+
+    /**
+     * Sync timer status from app (public endpoint for timer sync)
+     */
+    public function sync_timer_status(WP_REST_Request $request) {
+        global $wpdb;
+        $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
+
+        $prize_id = $request->get_param('id');
+        $timer_status = $request->get_param('timer_status');
+        $timer_started_at = $request->get_param('timer_started_at');
+        $scheduled_at = $request->get_param('scheduled_at');
+        $current_ads = $request->get_param('current_ads');
+
+        // Get prize
+        $prize = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_prizes} WHERE id = %d",
+            $prize_id
+        ));
+
+        if (!$prize) {
+            return new WP_Error('not_found', 'Premio non trovato', ['status' => 404]);
+        }
+
+        // Build update data
+        $update_data = ['timer_status' => $timer_status];
+
+        if ($timer_started_at) {
+            // Convert ISO format to MySQL format if needed
+            $ts = strtotime($timer_started_at);
+            $update_data['timer_started_at'] = date('Y-m-d H:i:s', $ts);
+        }
+
+        if ($scheduled_at) {
+            $ts = strtotime($scheduled_at);
+            $update_data['scheduled_at'] = date('Y-m-d H:i:s', $ts);
+        }
+
+        if ($current_ads !== null) {
+            $update_data['current_ads'] = (int) $current_ads;
+        }
+
+        // If starting countdown, ensure timer_started_at is set
+        if ($timer_status === 'countdown' && !isset($update_data['timer_started_at']) && !$prize->timer_started_at) {
+            $update_data['timer_started_at'] = current_time('mysql');
+        }
+
+        // If starting countdown without scheduled_at, calculate from timer_duration
+        if ($timer_status === 'countdown' && !isset($update_data['scheduled_at']) && !$prize->scheduled_at) {
+            $start_time = isset($update_data['timer_started_at'])
+                ? strtotime($update_data['timer_started_at'])
+                : time();
+            $update_data['scheduled_at'] = date('Y-m-d H:i:s', $start_time + $prize->timer_duration);
+        }
+
+        // If completing, set extracted_at
+        if ($timer_status === 'completed' && !$prize->extracted_at) {
+            $update_data['extracted_at'] = current_time('mysql');
+        }
+
+        $wpdb->update($table_prizes, $update_data, ['id' => $prize_id]);
+
+        // Get updated prize
+        $updated_prize = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_prizes} WHERE id = %d",
+            $prize_id
+        ));
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'Timer synced successfully',
+            'data' => [
+                'prize' => $this->format_prize($updated_prize)
+            ]
+        ]);
+    }
+
+    /**
+     * Get app settings (XP rewards, credits config)
+     */
+    public function get_app_settings(WP_REST_Request $request) {
+        // XP rewards from WordPress settings
+        $xp_watch_ad = (int) get_option('rafflemania_xp_watch_ad', 10);
+        $xp_daily_streak = (int) get_option('rafflemania_xp_daily_streak', 10);
+        $xp_credit_ticket = (int) get_option('rafflemania_xp_credit_ticket', 5);
+
+        // Credits settings
+        $credits_per_ticket = (int) get_option('rafflemania_credits_per_ticket', 5);
+        $referral_bonus = (int) get_option('rafflemania_referral_bonus', 10);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => [
+                'xp' => [
+                    'watch_ad' => $xp_watch_ad,
+                    'daily_streak' => $xp_daily_streak,
+                    'credit_ticket' => $xp_credit_ticket,
+                    'skip_ad' => $xp_watch_ad * 2,
+                    'purchase_credits' => 25,
+                    'win_prize' => 250,
+                    'referral' => 50,
+                ],
+                'credits' => [
+                    'per_ticket' => $credits_per_ticket,
+                    'referral_bonus' => $referral_bonus,
+                ],
+            ]
+        ], 200);
     }
 }

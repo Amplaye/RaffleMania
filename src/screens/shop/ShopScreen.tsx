@@ -82,6 +82,23 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation}) => {
   const {addCredits} = useCreditsStore();
   const [isWatchingAd, setIsWatchingAd] = useState(false);
 
+  const handleRemoveBanner = () => {
+    Alert.alert(
+      'Rimuovi Banner Pubblicitari',
+      'Acquistando questa opzione verrà rimossa solo la visualizzazione del banner pubblicitario in alto.\n\nPer ottenere crediti e biglietti gratuiti dovrai continuare a guardare le pubblicità video.',
+      [
+        {text: 'Annulla', style: 'cancel'},
+        {
+          text: 'Acquista (0.99€)',
+          onPress: () => {
+            // TODO: Implement actual purchase
+            Alert.alert('Successo!', 'I banner pubblicitari sono stati rimossi!');
+          },
+        },
+      ],
+    );
+  };
+
   const handlePurchase = (package_: typeof CREDIT_PACKAGES[0]) => {
     // TODO: Implement actual purchase with payment provider
     Alert.alert(
@@ -93,7 +110,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation}) => {
           text: 'Acquista',
           onPress: () => {
             // Mock purchase - in production this would go through payment provider
-            addCredits(package_.credits);
+            addCredits(package_.credits, 'purchase');
             Alert.alert('Successo!', `Hai acquistato ${package_.credits} crediti!`);
           },
         },
@@ -105,7 +122,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation}) => {
     setIsWatchingAd(true);
     // Simulate watching ad
     await new Promise<void>(resolve => setTimeout(resolve, 2000));
-    addCredits(1);
+    addCredits(1, 'other');
     setIsWatchingAd(false);
     Alert.alert('Credito Guadagnato!', 'Hai ricevuto 1 credito gratuito!');
   };
@@ -169,8 +186,20 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation}) => {
         </View>
       </ScrollView>
 
-      {/* Bottom Watch Ad Button */}
+      {/* Bottom Buttons */}
       <View style={styles.bottomSection}>
+        {/* Remove Banner Button */}
+        <TouchableOpacity
+          style={[styles.removeBannerButton, {backgroundColor: colors.card}]}
+          onPress={handleRemoveBanner}
+          activeOpacity={0.8}>
+          <Ionicons name="close-circle-outline" size={20} color={COLORS.primary} />
+          <Text style={[styles.removeBannerText, {color: colors.text}]}>
+            RIMUOVI BANNER PUBBLICITÀ
+          </Text>
+        </TouchableOpacity>
+
+        {/* Watch Ad Button */}
         <TouchableOpacity
           style={[styles.watchAdButton, {backgroundColor: colors.card}]}
           onPress={handleWatchAd}
@@ -355,6 +384,22 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: SPACING.md,
     paddingBottom: 100,
+    gap: SPACING.sm,
+  },
+  removeBannerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    gap: SPACING.xs,
+  },
+  removeBannerText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
   },
   watchAdButton: {
     borderRadius: RADIUS.lg,

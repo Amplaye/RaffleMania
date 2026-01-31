@@ -37,12 +37,16 @@ class Activator {
             referred_by varchar(20) DEFAULT NULL,
             push_token varchar(500) DEFAULT NULL,
             is_active tinyint(1) DEFAULT 1,
+            email_verified tinyint(1) DEFAULT 0,
+            verification_token varchar(64) DEFAULT NULL,
+            verification_token_expires datetime DEFAULT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             UNIQUE KEY email (email),
             UNIQUE KEY username (username),
-            KEY referral_code (referral_code)
+            KEY referral_code (referral_code),
+            KEY verification_token (verification_token)
         ) {$charset_collate};";
         dbDelta($sql_users);
 

@@ -2,21 +2,18 @@ import {create} from 'zustand';
 import {persist, createJSONStorage} from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useAuthStore} from './useAuthStore';
-import {useLevelStore} from './useLevelStore';
 
-// Streak rewards configuration secondo il documento
+// Streak rewards configuration
+// NOTA: XP si guadagna SOLO con pubblicità (3 XP) e biglietti (2 XP)
+// Lo streak dà solo CREDITI come premio
 export const STREAK_REWARDS = {
-  // Giorni 1-6: +5 XP
-  DAILY_XP: 5,
-  // Giorno 7: 1 Credito + 10 XP
-  DAY_7_XP: 10,
+  // Giorno 7: 1 Credito
   DAY_7_CREDITS: 1,
   // Reward extra settimanali (fine della settimana)
   WEEK_1_CREDITS: 1,
   WEEK_2_CREDITS: 2,
   WEEK_3_CREDITS: 3,
   WEEK_4_CREDITS: 5,
-  WEEK_4_BONUS_XP: 100,
   MAX_STREAK: 1000,
 };
 
@@ -149,13 +146,7 @@ export const useStreakStore = create<StreakState>()(
           const weekInCycle = Math.ceil(dayInCycle / 7);
           const isDay7 = dayInWeek === 7;
 
-          // Calcola XP
-          let xp = STREAK_REWARDS.DAILY_XP; // Default: 5 XP per giorni 1-6
-          if (isDay7) {
-            xp = STREAK_REWARDS.DAY_7_XP; // 10 XP per giorno 7
-          }
-
-          // Calcola crediti
+          // Calcola crediti (XP si guadagna solo con ads e biglietti, non con streak)
           let credits = 0;
           if (isDay7) {
             credits = STREAK_REWARDS.DAY_7_CREDITS; // 1 credito per giorno 7
@@ -173,13 +164,12 @@ export const useStreakStore = create<StreakState>()(
                 break;
               case 4:
                 credits += STREAK_REWARDS.WEEK_4_CREDITS; // +5 crediti
-                xp += STREAK_REWARDS.WEEK_4_BONUS_XP; // +100 XP bonus
                 break;
             }
           }
 
           const reward: StreakReward = {
-            xp,
+            xp: 0, // XP si guadagna solo con pubblicità e biglietti
             credits,
             isWeeklyBonus: isDay7,
             isMilestone: weekInCycle === 4 && isDay7,
@@ -187,10 +177,7 @@ export const useStreakStore = create<StreakState>()(
             weekNumber: weekInCycle,
           };
 
-          // Apply rewards
-          const levelStore = useLevelStore.getState();
-          levelStore.addXP(reward.xp);
-
+          // Apply credits reward
           if (reward.credits > 0) {
             const authStore = useAuthStore.getState();
             if (authStore.user) {

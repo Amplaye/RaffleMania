@@ -1,10 +1,8 @@
 import React, {useEffect, useRef} from 'react';
-import {View, Text, StyleSheet, Animated, Dimensions, Modal} from 'react-native';
+import {View, Text, StyleSheet, Animated, Modal} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {FONT_FAMILY, FONT_WEIGHT, FONT_SIZE, RADIUS} from '../../utils/constants';
-
-const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
 
 interface ExtractionStartEffectProps {
   visible: boolean;
@@ -132,7 +130,7 @@ export const ExtractionStartEffect: React.FC<ExtractionStartEffectProps> = ({
         setTimeout(onAnimationComplete, 5000);
       }
     }
-  }, [visible]);
+  }, [visible, onAnimationComplete, scaleAnim, opacityAnim, rotateAnim, pulseAnim, textOpacityAnim, ringScale1, ringScale2, ringScale3, ringOpacity1, ringOpacity2, ringOpacity3]);
 
   if (!visible) return null;
 

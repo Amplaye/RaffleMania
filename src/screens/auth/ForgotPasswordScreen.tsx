@@ -178,7 +178,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
     setIsLoading(true);
     try {
       // Simula invio email (sostituire con API reale)
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise<void>(resolve => setTimeout(resolve, 1500));
       setEmailSent(true);
     } catch (err: any) {
       Alert.alert('Errore', err.message || "Errore durante l'invio dell'email");
@@ -190,9 +190,9 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
   const handleResendEmail = async () => {
     setIsLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise<void>(resolve => setTimeout(resolve, 1500));
       Alert.alert('Fatto', 'Email inviata nuovamente!');
-    } catch (err: any) {
+    } catch {
       Alert.alert('Errore', "Errore durante l'invio dell'email");
     } finally {
       setIsLoading(false);

@@ -6,7 +6,6 @@ import {
   Modal,
   TouchableOpacity,
   Animated,
-  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';

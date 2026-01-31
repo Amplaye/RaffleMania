@@ -1,8 +1,9 @@
 <?php
+// Force opcache refresh: 2026-01-27-v3
 namespace RaffleMania;
 
 /**
- * Main Plugin Class
+ * Main Plugin Class - v1.3
  */
 class Plugin {
     private static $instance = null;
@@ -91,6 +92,11 @@ class Plugin {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/ShipmentsController.php';
         $shipments = new API\ShipmentsController();
         $shipments->register_routes();
+
+        // Settings endpoints (public app settings) - v1.1
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/SettingsController.php';
+        $settings = new API\SettingsController();
+        $settings->register_routes();
     }
 
     public function add_admin_menu() {
@@ -265,6 +271,9 @@ class Plugin {
             'status' => 'completed'
         ]);
 
+        // Track daily stats for cron extractions
+        $this->track_daily_stat('draws_made');
+
         // If there's a winner, record it
         if ($winner_ticket) {
             $wpdb->insert($table_winners, [
@@ -275,6 +284,9 @@ class Plugin {
                 'claimed' => 0,
                 'won_at' => current_time('mysql')
             ]);
+
+            // Track daily winner stat
+            $this->track_daily_stat('winners');
 
             // Mark winning ticket
             $wpdb->update(
@@ -305,6 +317,34 @@ class Plugin {
             ],
             ['id' => $prize->id]
         );
+    }
+
+    private function track_daily_stat($stat_name, $amount = 1) {
+        global $wpdb;
+        $table_daily_stats = $wpdb->prefix . 'rafflemania_daily_stats';
+
+        // Use Italian timezone
+        $italy_tz = new \DateTimeZone('Europe/Rome');
+        $today = (new \DateTime('now', $italy_tz))->format('Y-m-d');
+
+        // Try to insert or update
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$table_daily_stats} WHERE stat_date = %s",
+            $today
+        ));
+
+        if ($existing) {
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$table_daily_stats} SET {$stat_name} = {$stat_name} + %d WHERE stat_date = %s",
+                $amount,
+                $today
+            ));
+        } else {
+            $wpdb->insert($table_daily_stats, [
+                'stat_date' => $today,
+                $stat_name => $amount
+            ]);
+        }
     }
 
     private function send_winner_notification($user_id, $prize) {

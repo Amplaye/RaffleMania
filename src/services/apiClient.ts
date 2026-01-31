@@ -93,6 +93,15 @@ apiClient.interceptors.response.use(
 
     // If error is 401 and we haven't retried yet
     if (error.response?.status === 401 && !originalRequest._retry) {
+      // Check if user is a guest (guest tokens start with 'guest_token_')
+      const accessToken = await tokenManager.getAccessToken();
+      const isGuestUser = accessToken?.startsWith('guest_token_');
+
+      // Don't try to refresh for guest users - just reject silently
+      if (isGuestUser) {
+        return Promise.reject(error);
+      }
+
       if (isRefreshing) {
         // Wait for refresh to complete
         return new Promise((resolve, reject) => {
@@ -112,7 +121,8 @@ apiClient.interceptors.response.use(
       try {
         const refreshToken = await tokenManager.getRefreshToken();
         if (!refreshToken) {
-          throw new Error('No refresh token');
+          // No refresh token available - reject without logging error for guests
+          return Promise.reject(error);
         }
 
         const response = await axios.post(`${API_CONFIG.BASE_URL}/auth/refresh`, {

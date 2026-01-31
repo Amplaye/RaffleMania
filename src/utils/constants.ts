@@ -2,8 +2,8 @@ import {Platform} from 'react-native';
 
 // API Configuration
 export const API_CONFIG = {
-  BASE_URL: 'https://rafflemania.it/wp-json/rafflemania/v1',
-  USE_MOCK_DATA: false, // Set to true for testing with mock data
+  BASE_URL: 'https://www.craftytraders.com/wp-json/rafflemania/v1',
+  USE_MOCK_DATA: false, // API is live on craftytraders.com
   TIMEOUT: 15000,
 };
 

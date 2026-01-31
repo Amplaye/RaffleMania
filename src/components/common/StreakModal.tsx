@@ -5,16 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Dimensions,
   TouchableWithoutFeedback,
-  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useThemeColors} from '../../hooks/useThemeColors';
-import {SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY, RADIUS} from '../../utils/constants';
-
-const {width: SCREEN_WIDTH} = Dimensions.get('window');
+import {SPACING, FONT_WEIGHT, FONT_FAMILY, RADIUS} from '../../utils/constants';
 
 interface StreakReward {
   xp: number;
@@ -54,7 +50,7 @@ export const StreakModal: React.FC<StreakModalProps> = ({
   currentStreak,
   onClose,
 }) => {
-  const {colors, isDark} = useThemeColors();
+  const {isDark} = useThemeColors();
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
@@ -62,9 +58,6 @@ export const StreakModal: React.FC<StreakModalProps> = ({
 
   // Get rewards for current week
   const dayRewards = getDayRewards(currentStreak);
-
-  // Current week number (1-indexed for display)
-  const currentWeek = Math.floor((currentStreak - 1) / 7) + 1;
 
   const glowAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const dayAnimsRef = useRef<Animated.CompositeAnimation[]>([]);
@@ -82,7 +75,7 @@ export const StreakModal: React.FC<StreakModalProps> = ({
       glowAnimationRef.current = null;
     }
     dayAnimsRef.current.forEach(anim => {
-      try { anim.stop(); } catch (e) {}
+      try { anim.stop(); } catch { /* ignore */ }
     });
     dayAnimsRef.current = [];
 
@@ -161,7 +154,7 @@ export const StreakModal: React.FC<StreakModalProps> = ({
         dayAnim.start();
       });
     }
-  }, [visible]);
+  }, [visible, scaleAnim, opacityAnim, glowAnim, dayAnims]);
 
   const glowOpacity = glowAnim.interpolate({
     inputRange: [0, 1],

@@ -12,10 +12,17 @@ import {
   Animated,
   StatusBar,
   ScrollView,
+  Image,
+  Switch,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Keychain from 'react-native-keychain';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useAuthStore} from '../../store';
+
+// Logo image
+const logoImage = require('../../../assets/images/logo.png');
 
 const {width, height} = Dimensions.get('window');
 
@@ -46,9 +53,6 @@ const NEON_GLOW = Platform.select({
     elevation: 8,
   },
 }) as object;
-
-// Neon orange color
-const NEON_ORANGE = '#FF6B00';
 
 // Simple floating particle - bottom to top with slight blur
 interface ParticleProps {
@@ -104,7 +108,7 @@ const FloatingParticle: React.FC<ParticleProps> = ({
     };
 
     animate();
-  }, [delay]);
+  }, [delay, translateY, opacity]);
 
   return (
     <Animated.View
@@ -127,10 +131,15 @@ interface LoginScreenProps {
   navigation: any;
 }
 
+const REMEMBER_ME_KEY = '@rafflemania_remember_me';
+const SAVED_EMAIL_KEY = '@rafflemania_saved_email';
+const SAVED_PASSWORD_SERVICE = 'rafflemania_saved_password';
+
 export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [errors, setErrors] = useState<{email?: string; password?: string}>({});
 
   // Animations
@@ -138,8 +147,32 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const slideAnim = useRef(new Animated.Value(40)).current;
   const logoScale = useRef(new Animated.Value(0.8)).current;
 
-  const {login, loginWithGoogle, loginWithApple, isLoading} = useAuthStore();
+  const {login, loginAsGuest, loginWithGoogle, loginWithApple, resendVerificationEmail, isLoading} = useAuthStore();
   const [socialLoading, setSocialLoading] = useState<'google' | 'apple' | null>(null);
+
+  // Load saved credentials on mount
+  useEffect(() => {
+    const loadSavedCredentials = async () => {
+      try {
+        const savedRememberMe = await AsyncStorage.getItem(REMEMBER_ME_KEY);
+        if (savedRememberMe === 'true') {
+          setRememberMe(true);
+          const savedEmail = await AsyncStorage.getItem(SAVED_EMAIL_KEY);
+          if (savedEmail) {
+            setEmail(savedEmail);
+          }
+          // Load saved password from secure storage
+          const savedPassword = await Keychain.getGenericPassword({service: SAVED_PASSWORD_SERVICE});
+          if (savedPassword) {
+            setPassword(savedPassword.password);
+          }
+        }
+      } catch (error) {
+        console.log('Error loading saved credentials:', error);
+      }
+    };
+    loadSavedCredentials();
+  }, []);
 
   // Generate simple neon orange particles
   const particles = useRef(
@@ -171,7 +204,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim, logoScale]);
 
   const validate = () => {
     const newErrors: {email?: string; password?: string} = {};
@@ -189,12 +222,53 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleResendVerification = async () => {
+    try {
+      await resendVerificationEmail(email);
+      Alert.alert(
+        'Email Inviata',
+        'Ti abbiamo inviato un nuovo link di verifica. Controlla la tua casella di posta (anche spam).',
+        [{text: 'OK'}]
+      );
+    } catch (error: any) {
+      Alert.alert('Errore', error.message || 'Impossibile inviare l\'email');
+    }
+  };
+
   const handleLogin = async () => {
     if (!validate()) return;
     try {
       await login(email, password);
+
+      // Save or clear credentials based on rememberMe
+      if (rememberMe) {
+        await AsyncStorage.setItem(REMEMBER_ME_KEY, 'true');
+        await AsyncStorage.setItem(SAVED_EMAIL_KEY, email);
+        // Save password securely
+        await Keychain.setGenericPassword('password', password, {service: SAVED_PASSWORD_SERVICE});
+      } else {
+        await AsyncStorage.removeItem(REMEMBER_ME_KEY);
+        await AsyncStorage.removeItem(SAVED_EMAIL_KEY);
+        // Clear saved password
+        await Keychain.resetGenericPassword({service: SAVED_PASSWORD_SERVICE});
+      }
     } catch (error: any) {
-      Alert.alert('Errore', error.message || 'Errore durante il login');
+      const errorMessage = error.message || 'Errore durante il login';
+
+      // Check if error is about email verification
+      if (errorMessage.toLowerCase().includes('verifica') ||
+          errorMessage.toLowerCase().includes('email') && errorMessage.toLowerCase().includes('non')) {
+        Alert.alert(
+          'Email Non Verificata',
+          'Devi verificare la tua email prima di accedere. Vuoi che ti inviamo un nuovo link di verifica?',
+          [
+            {text: 'Annulla', style: 'cancel'},
+            {text: 'Reinvia Email', onPress: handleResendVerification}
+          ]
+        );
+      } else {
+        Alert.alert('Errore', errorMessage);
+      }
     }
   };
 
@@ -222,9 +296,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
   const handleGuestLogin = async () => {
     try {
-      await login('guest@rafflemania.com', 'guest123');
+      await loginAsGuest();
     } catch (error: any) {
-      Alert.alert('Errore', "Errore durante l'accesso come ospite");
+      Alert.alert('Errore', error.message || "Errore durante l'accesso come ospite");
     }
   };
 
@@ -268,17 +342,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                     transform: [{translateY: slideAnim}, {scale: logoScale}],
                   },
                 ]}>
-                <View style={styles.logoIconContainer}>
-                  <LinearGradient
-                    colors={[COLORS.orange, COLORS.orangeLight]}
-                    style={styles.logoIconGradient}>
-                    <Ionicons name="gift" size={32} color="#FFFFFF" />
-                  </LinearGradient>
-                </View>
-                <Text style={styles.logoText}>
-                  <Text style={styles.logoRaffle}>Raffle</Text>
-                  <Text style={styles.logoMania}>Mania</Text>
-                </Text>
+                <Image
+                  source={logoImage}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
                 <Text style={styles.tagline}>Guarda, gioca, vinci.</Text>
               </Animated.View>
 
@@ -361,12 +429,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                   )}
                 </View>
 
-                {/* Forgot Password */}
-                <TouchableOpacity
-                  style={styles.forgotPassword}
-                  onPress={() => navigation.navigate('ForgotPassword')}>
-                  <Text style={styles.forgotPasswordText}>Password dimenticata?</Text>
-                </TouchableOpacity>
+                {/* Remember Me & Forgot Password Row */}
+                <View style={styles.optionsRow}>
+                  <TouchableOpacity
+                    style={styles.rememberMeContainer}
+                    onPress={() => setRememberMe(!rememberMe)}
+                    activeOpacity={0.7}>
+                    <Switch
+                      value={rememberMe}
+                      onValueChange={setRememberMe}
+                      trackColor={{false: COLORS.border, true: COLORS.orange + '60'}}
+                      thumbColor={rememberMe ? COLORS.orange : '#f4f3f4'}
+                      style={styles.switch}
+                    />
+                    <Text style={styles.rememberMeText}>Ricordami</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('ForgotPassword')}>
+                    <Text style={styles.forgotPasswordText}>Password dimenticata?</Text>
+                  </TouchableOpacity>
+                </View>
 
                 {/* Login Button */}
                 <TouchableOpacity
@@ -488,30 +570,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  logoIconContainer: {
-    marginBottom: 16,
-  },
-  logoIconGradient: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: COLORS.orange,
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  logoText: {
-    fontSize: 38,
-    fontWeight: '700',
-  },
-  logoRaffle: {
-    color: COLORS.text,
-  },
-  logoMania: {
-    color: COLORS.orange,
+  logoImage: {
+    width: width * 0.7,
+    height: 120,
+    marginBottom: 8,
   },
   tagline: {
     fontSize: 16,
@@ -565,9 +627,23 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginLeft: 4,
   },
-  forgotPassword: {
-    alignSelf: 'flex-end',
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 20,
+  },
+  rememberMeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  switch: {
+    transform: [{scaleX: 0.8}, {scaleY: 0.8}],
+    marginRight: 4,
+  },
+  rememberMeText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
   },
   forgotPasswordText: {
     color: COLORS.orange,

@@ -168,8 +168,9 @@ class UsersController extends WP_REST_Controller {
     public function get_profile(WP_REST_Request $request) {
         global $wpdb;
         $table_users = $wpdb->prefix . 'rafflemania_users';
+        $table_winners = $wpdb->prefix . 'rafflemania_winners';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
 
         $user = $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM {$table_users} WHERE id = %d",
@@ -180,10 +181,19 @@ class UsersController extends WP_REST_Controller {
             return new WP_Error('not_found', 'Utente non trovato', ['status' => 404]);
         }
 
+        // Get wins count from winners table
+        $wins_count = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table_winners} WHERE user_id = %d",
+            $user_id
+        ));
+
+        $user_data = $this->format_user($user);
+        $user_data['winsCount'] = (int) $wins_count;
+
         return new WP_REST_Response([
             'success' => true,
             'data' => [
-                'user' => $this->format_user($user)
+                'user' => $user_data
             ]
         ]);
     }
@@ -192,7 +202,7 @@ class UsersController extends WP_REST_Controller {
         global $wpdb;
         $table_users = $wpdb->prefix . 'rafflemania_users';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $params = $request->get_params();
 
         $allowed_fields = ['username', 'avatar_url', 'avatar_color'];
@@ -240,20 +250,22 @@ class UsersController extends WP_REST_Controller {
         global $wpdb;
         $table_users = $wpdb->prefix . 'rafflemania_users';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
 
         $user = $wpdb->get_row($wpdb->prepare(
             "SELECT current_streak, last_streak_date FROM {$table_users} WHERE id = %d",
             $user_id
         ));
 
-        $today = date('Y-m-d');
+        // Use Italian timezone (Europe/Rome) for date calculations
+        $italy_tz = new \DateTimeZone('Europe/Rome');
+        $today = (new \DateTime('now', $italy_tz))->format('Y-m-d');
         $can_claim = $user->last_streak_date !== $today;
 
         // Check if streak is broken
         if ($user->last_streak_date) {
-            $last_date = new \DateTime($user->last_streak_date);
-            $current_date = new \DateTime($today);
+            $last_date = new \DateTime($user->last_streak_date, $italy_tz);
+            $current_date = new \DateTime($today, $italy_tz);
             $diff = $last_date->diff($current_date)->days;
 
             if ($diff > 1) {
@@ -290,14 +302,16 @@ class UsersController extends WP_REST_Controller {
         $table_users = $wpdb->prefix . 'rafflemania_users';
         $table_streaks = $wpdb->prefix . 'rafflemania_streaks';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
 
         $user = $wpdb->get_row($wpdb->prepare(
             "SELECT current_streak, last_streak_date FROM {$table_users} WHERE id = %d",
             $user_id
         ));
 
-        $today = date('Y-m-d');
+        // Use Italian timezone (Europe/Rome) for date calculations
+        $italy_tz = new \DateTimeZone('Europe/Rome');
+        $today = (new \DateTime('now', $italy_tz))->format('Y-m-d');
 
         // Check if already claimed today
         if ($user->last_streak_date === $today) {
@@ -307,16 +321,16 @@ class UsersController extends WP_REST_Controller {
         // Calculate new streak
         $new_streak = $user->current_streak + 1;
         if ($user->last_streak_date) {
-            $last_date = new \DateTime($user->last_streak_date);
-            $current_date = new \DateTime($today);
+            $last_date = new \DateTime($user->last_streak_date, $italy_tz);
+            $current_date = new \DateTime($today, $italy_tz);
             $diff = $last_date->diff($current_date)->days;
             if ($diff > 1) {
                 $new_streak = 1; // Reset if broken
             }
         }
 
-        // Calculate rewards
-        $base_xp = 10;
+        // Calculate rewards - get base XP from settings
+        $base_xp = get_option('rafflemania_xp_daily_streak', 10);
         $xp_reward = $base_xp + ($new_streak * 2);
         $credits_reward = 0;
         $is_milestone = false;
@@ -396,7 +410,7 @@ class UsersController extends WP_REST_Controller {
         global $wpdb;
         $table_users = $wpdb->prefix . 'rafflemania_users';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
 
         $user = $wpdb->get_row($wpdb->prepare(
             "SELECT xp, level FROM {$table_users} WHERE id = %d",
@@ -415,7 +429,7 @@ class UsersController extends WP_REST_Controller {
         global $wpdb;
         $table_users = $wpdb->prefix . 'rafflemania_users';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $amount = $request->get_param('amount');
 
         $user = $wpdb->get_row($wpdb->prepare(
@@ -448,7 +462,7 @@ class UsersController extends WP_REST_Controller {
         $table_users = $wpdb->prefix . 'rafflemania_users';
         $table_transactions = $wpdb->prefix . 'rafflemania_transactions';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
 
         $user = $wpdb->get_row($wpdb->prepare(
             "SELECT credits FROM {$table_users} WHERE id = %d",
@@ -486,16 +500,15 @@ class UsersController extends WP_REST_Controller {
         $table_users = $wpdb->prefix . 'rafflemania_users';
         $table_transactions = $wpdb->prefix . 'rafflemania_transactions';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $package_id = $request->get_param('package_id');
 
-        // Credit packages
+        // Credit packages - aligned with mobile app
         $packages = [
-            'credits_10' => ['credits' => 10, 'price' => 0.99],
-            'credits_50' => ['credits' => 50, 'price' => 3.99],
-            'credits_100' => ['credits' => 100, 'price' => 6.99],
-            'credits_250' => ['credits' => 250, 'price' => 14.99],
-            'credits_500' => ['credits' => 500, 'price' => 24.99]
+            'credits_100' => ['credits' => 100, 'price' => 0.99],
+            'credits_500' => ['credits' => 500, 'price' => 3.99],
+            'credits_1000' => ['credits' => 1000, 'price' => 6.99],
+            'credits_2500' => ['credits' => 2500, 'price' => 14.99],
         ];
 
         if (!isset($packages[$package_id])) {
@@ -541,7 +554,7 @@ class UsersController extends WP_REST_Controller {
         $table_users = $wpdb->prefix . 'rafflemania_users';
         $table_referrals = $wpdb->prefix . 'rafflemania_referrals';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
 
         $user = $wpdb->get_row($wpdb->prepare(
             "SELECT referral_code, referred_by FROM {$table_users} WHERE id = %d",
@@ -570,7 +583,7 @@ class UsersController extends WP_REST_Controller {
         $table_users = $wpdb->prefix . 'rafflemania_users';
         $table_referrals = $wpdb->prefix . 'rafflemania_referrals';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $code = strtoupper($request->get_param('code'));
 
         // Check if user already used a referral
@@ -634,7 +647,7 @@ class UsersController extends WP_REST_Controller {
         global $wpdb;
         $table_users = $wpdb->prefix . 'rafflemania_users';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $token = $request->get_param('token');
 
         $wpdb->update($table_users, ['push_token' => $token], ['id' => $user_id]);
@@ -650,7 +663,7 @@ class UsersController extends WP_REST_Controller {
         $table_winners = $wpdb->prefix . 'rafflemania_winners';
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
 
         $wins = $wpdb->get_results($wpdb->prepare(
             "SELECT w.*, p.name as prize_name, p.image_url as prize_image, p.value as prize_value
@@ -752,7 +765,7 @@ class UsersController extends WP_REST_Controller {
             return false;
         }
 
-        $request->set_attribute('user_id', $payload['user_id']);
+        $request->set_param('_auth_user_id', $payload['user_id']);
         return true;
     }
 
@@ -854,6 +867,7 @@ class UsersController extends WP_REST_Controller {
             'currentStreak' => (int) $user->current_streak,
             'lastStreakDate' => $user->last_streak_date,
             'referralCode' => $user->referral_code,
+            'watchedAds' => (int) ($user->watched_ads ?? 0),
             'createdAt' => $user->created_at
         ];
     }

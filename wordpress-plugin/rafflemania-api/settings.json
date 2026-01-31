@@ -1,0 +1,20 @@
+{
+  "success": true,
+  "data": {
+    "xp": {
+      "watch_ad": 10,
+      "daily_streak": 10,
+      "credit_ticket": 20,
+      "skip_ad": 20,
+      "purchase_credits": 25,
+      "win_prize": 250,
+      "referral": 50
+    },
+    "credits": {
+      "per_ticket": 5,
+      "referral_bonus": 10
+    },
+    "source": "static-json",
+    "timestamp": 1737993600
+  }
+}

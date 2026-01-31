@@ -3,7 +3,7 @@ import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Animated, Easin
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer, Card} from '../../components/common';
-import {useAuthStore, useTicketsStore, useThemeStore, useLevelStore, LEVELS, useAvatarStore} from '../../store';
+import {useAuthStore, useTicketsStore, useThemeStore, useLevelStore, LEVELS, useAvatarStore, debugTicketsStorage} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -301,18 +301,41 @@ const nameModalStyles = StyleSheet.create({
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
   const {colors, neon} = useThemeColors();
-  const {user, updateDisplayName} = useAuthStore();
-  const {pastTickets} = useTicketsStore();
+  const {user, updateDisplayName, refreshUserData} = useAuthStore();
+  const {pastTickets, activeTickets} = useTicketsStore();
   const {theme, toggleTheme} = useThemeStore();
   const {getSelectedAvatar, getSelectedFrame, customPhotoUri} = useAvatarStore();
   const [showNameModal, setShowNameModal] = useState(false);
+
+  console.log('ProfileScreen: mounted, pastTickets=', pastTickets.length, 'winners=', pastTickets.filter(t => t.isWinner).length);
+
+  // Refresh user data on mount to get latest wins count
+  useEffect(() => {
+    refreshUserData();
+    // Debug: check AsyncStorage contents
+    debugTicketsStorage();
+  }, [refreshUserData]);
 
   // Get current avatar and frame
   const currentAvatar = getSelectedAvatar();
   const currentFrame = getSelectedFrame();
 
-  // Count winning tickets
-  const winsCount = pastTickets.filter(t => t.isWinner).length;
+  // Use the higher value between backend wins count and local count
+  // This ensures local wins are shown even if backend hasn't synced
+  const localWinsCount = pastTickets.filter(t => t.isWinner).length;
+  const backendWinsCount = user?.winsCount || 0;
+  const winsCount = Math.max(localWinsCount, backendWinsCount);
+
+  // Count ads watched from tickets (all tickets with source='ad')
+  const allTickets = [...activeTickets, ...pastTickets];
+  const localAdsWatched = allTickets.filter(t => t.source === 'ad').length;
+  const backendAdsWatched = user?.watchedAdsCount || 0;
+  const adsWatched = Math.max(localAdsWatched, backendAdsWatched);
+
+  console.log('ProfileScreen: stats', {
+    localWinsCount, backendWinsCount, winsCount,
+    localAdsWatched, backendAdsWatched, adsWatched,
+  });
 
   const menuItems: MenuItem[] = [
     {
@@ -436,7 +459,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
             </View>
             <View style={[styles.statDivider, {backgroundColor: COLORS.primary}]} />
             <View style={styles.statItem}>
-              <Text style={[styles.statValue, {color: colors.primary}]}>{user?.watchedAdsCount || 0}</Text>
+              <Text style={[styles.statValue, {color: colors.primary}]}>{adsWatched}</Text>
               <Text style={[styles.statLabel, {color: colors.textSecondary}]}>Ads Viste</Text>
             </View>
             <View style={[styles.statDivider, {backgroundColor: COLORS.primary}]} />

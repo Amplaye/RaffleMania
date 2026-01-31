@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   ViewStyle,
   TextStyle,
-  Platform,
 } from 'react-native';
 import {COLORS, RADIUS, SPACING, FONT_SIZE, FONT_WEIGHT} from '../../utils/constants';
 import {useThemeColors} from '../../hooks/useThemeColors';

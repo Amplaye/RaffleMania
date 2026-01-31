@@ -7,7 +7,6 @@ import {
   ScrollView,
   Alert,
   Modal,
-  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -15,6 +14,7 @@ import {ScreenContainer} from '../../components/common';
 import {useAuthStore} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {CreditPackage} from '../../types';
+import apiClient from '../../services/apiClient';
 import {
   COLORS,
   SPACING,
@@ -74,8 +74,8 @@ const PackageCard: React.FC<{
 
 export const CreditsScreen: React.FC<CreditsScreenProps> = ({navigation}) => {
   const {colors, neon} = useThemeColors();
-  const {user, updateUser} = useAuthStore();
-  const [isLoading, setIsLoading] = useState(false);
+  const {user, refreshUserData} = useAuthStore();
+  const [, setIsLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
 
@@ -90,22 +90,34 @@ export const CreditsScreen: React.FC<CreditsScreenProps> = ({navigation}) => {
     setShowPaymentModal(false);
     setIsLoading(true);
 
-    // Simulate payment processing
-    await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
+    try {
+      // Call backend API to add credits
+      // In production, this would include payment verification (Stripe/PayPal receipt)
+      const response = await apiClient.post('/users/me/credits/purchase', {
+        package_id: selectedPackage.productId,
+        payment_method: method,
+        // In production: receipt, transaction_id, etc.
+      });
 
-    // Update user credits
-    if (user) {
-      updateUser({credits: user.credits + selectedPackage.credits});
+      if (response.data.success) {
+        // Refresh user data from backend to get updated credits
+        await refreshUserData();
+
+        Alert.alert(
+          'Acquisto completato!',
+          `Hai ricevuto ${selectedPackage.credits} crediti tramite ${method === 'stripe' ? 'Carta' : 'PayPal'}.`,
+          [{text: 'OK'}],
+        );
+      } else {
+        Alert.alert('Errore', 'Acquisto non riuscito. Riprova.');
+      }
+    } catch (error: any) {
+      console.error('Error purchasing credits:', error);
+      Alert.alert('Errore', error.response?.data?.message || 'Errore durante l\'acquisto. Riprova.');
+    } finally {
+      setIsLoading(false);
+      setSelectedPackage(null);
     }
-
-    setIsLoading(false);
-    setSelectedPackage(null);
-
-    Alert.alert(
-      'Acquisto completato!',
-      `Hai ricevuto ${selectedPackage.credits} crediti tramite ${method === 'stripe' ? 'Carta' : 'PayPal'}.`,
-      [{text: 'OK'}],
-    );
   };
 
   return (

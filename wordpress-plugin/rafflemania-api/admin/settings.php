@@ -15,9 +15,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_settings_
         // XP rewards
         update_option('rafflemania_xp_watch_ad', intval($_POST['xp_watch_ad']));
         update_option('rafflemania_xp_daily_streak', intval($_POST['xp_daily_streak']));
+        update_option('rafflemania_xp_credit_ticket', intval($_POST['xp_credit_ticket']));
 
-        // Push notifications
-        update_option('rafflemania_fcm_server_key', sanitize_text_field($_POST['fcm_server_key']));
+        // Push notifications (OneSignal - Free)
+        update_option('rafflemania_onesignal_app_id', sanitize_text_field($_POST['onesignal_app_id']));
+        update_option('rafflemania_onesignal_api_key', sanitize_text_field($_POST['onesignal_api_key']));
 
         // Contact email
         update_option('rafflemania_contact_email', sanitize_email($_POST['contact_email']));
@@ -31,7 +33,7 @@ $credits_per_ticket = get_option('rafflemania_credits_per_ticket', 5);
 $referral_bonus = get_option('rafflemania_referral_bonus', 10);
 $xp_watch_ad = get_option('rafflemania_xp_watch_ad', 10);
 $xp_daily_streak = get_option('rafflemania_xp_daily_streak', 10);
-$fcm_server_key = get_option('rafflemania_fcm_server_key', '');
+$xp_credit_ticket = get_option('rafflemania_xp_credit_ticket', 5);
 $contact_email = get_option('rafflemania_contact_email', get_option('admin_email'));
 $jwt_secret = get_option('rafflemania_jwt_secret', '');
 ?>
@@ -148,16 +150,33 @@ $jwt_secret = get_option('rafflemania_jwt_secret', '');
                     <input type="number" name="xp_daily_streak" min="0" value="<?php echo esc_attr($xp_daily_streak); ?>">
                     <small>XP base, aumenta con i giorni consecutivi</small>
                 </div>
+
+                <div class="rafflemania-form-row">
+                    <label>XP per Biglietto con Crediti</label>
+                    <input type="number" name="xp_credit_ticket" min="0" value="<?php echo esc_attr($xp_credit_ticket); ?>">
+                    <small>XP guadagnati quando si acquista un biglietto con crediti</small>
+                </div>
             </div>
 
             <!-- Notifications -->
             <div class="rafflemania-settings-card">
-                <h2><span class="dashicons dashicons-bell"></span> Notifiche Push</h2>
+                <h2><span class="dashicons dashicons-bell"></span> Notifiche Push (OneSignal - Gratuito)</h2>
+
+                <div class="rafflemania-info-box" style="background: #e8f5e9; border-color: #4caf50;">
+                    <strong>💡 OneSignal è gratuito!</strong><br>
+                    Registrati su <a href="https://onesignal.com" target="_blank">onesignal.com</a> per ottenere App ID e API Key gratuiti.
+                </div>
 
                 <div class="rafflemania-form-row">
-                    <label>Firebase Server Key</label>
-                    <input type="password" name="fcm_server_key" value="<?php echo esc_attr($fcm_server_key); ?>">
-                    <small>Per inviare notifiche push tramite Firebase Cloud Messaging</small>
+                    <label>OneSignal App ID</label>
+                    <input type="text" name="onesignal_app_id" value="<?php echo esc_attr(get_option('rafflemania_onesignal_app_id', '')); ?>">
+                    <small>Il tuo OneSignal App ID (gratuito)</small>
+                </div>
+
+                <div class="rafflemania-form-row">
+                    <label>OneSignal REST API Key</label>
+                    <input type="password" name="onesignal_api_key" value="<?php echo esc_attr(get_option('rafflemania_onesignal_api_key', '')); ?>">
+                    <small>La tua REST API Key di OneSignal</small>
                 </div>
             </div>
 

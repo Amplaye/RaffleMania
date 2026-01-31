@@ -21,7 +21,6 @@ const ConfettiPiece: React.FC<ConfettiPieceProps> = ({index, animValue}) => {
   const size = useMemo(() => 8 + Math.random() * 8, []);
   const rotation = useMemo(() => Math.random() * 360, []);
   const swayAmount = useMemo(() => 30 + Math.random() * 40, []);
-  const delay = useMemo(() => Math.random() * 0.3, []);
   const isCircle = useMemo(() => Math.random() > 0.5, []);
 
   const translateY = animValue.interpolate({
@@ -90,7 +89,7 @@ const Confetti: React.FC<ConfettiProps> = ({isActive}) => {
     } else {
       confettiAnims.forEach(anim => anim.stopAnimation());
     }
-  }, [isActive]);
+  }, [isActive, confettiAnims]);
 
   if (!isActive) return null;
 
@@ -164,7 +163,7 @@ export const ExtractionResultModal: React.FC<ExtractionResultModalProps> = ({
         }
       });
     }
-  }, [visible, isWinner]);
+  }, [visible, isWinner, scaleAnim, opacityAnim, iconScaleAnim, confettiAnim]);
 
   if (!visible) return null;
 

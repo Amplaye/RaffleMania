@@ -3,17 +3,22 @@ export interface User {
   id: string;
   email: string;
   displayName: string;
+  avatarColor?: string;
+  avatarUrl?: string;
   credits: number;
+  xp: number;
+  level: number;
   totalTickets: number;
   watchedAdsCount: number;
+  winsCount: number;
+  currentStreak: number;
+  lastStreakDate?: string;
   referralCode: string;
   referredBy?: string;
   shippingAddress?: ShippingAddress;
   createdAt: string;
-  // Leveling system
-  level: number;
-  currentXP: number;
-  totalXP: number;
+  // Email verification
+  emailVerified?: boolean;
 }
 
 // Leveling Types
@@ -24,6 +29,7 @@ export interface LevelInfo {
   maxXP: number;
   icon: string;
   color: string;
+  creditReward: number; // Crediti premio al raggiungimento del livello
 }
 
 export interface ShippingAddress {
@@ -50,6 +56,7 @@ export interface Prize {
   goalAds: number;
   // Timer per premio individuale
   timerStatus: PrizeTimerStatus;
+  timerDuration?: number; // Duration in seconds
   scheduledAt?: string; // Data/ora dell'estrazione (impostata quando raggiunge goalAds)
   timerStartedAt?: string; // Quando il timer è partito
   extractedAt?: string; // Quando l'estrazione è avvenuta
@@ -78,13 +85,18 @@ export type DrawStatus = 'scheduled' | 'completed' | 'cancelled';
 
 export interface Draw {
   id: string;
+  drawId?: string;
   prizeId: string;
   prize?: Prize;
-  scheduledAt: string;
+  scheduledAt?: string;
   executedAt?: string;
+  extractedAt?: string;
   status: DrawStatus;
   winningTicketId?: string;
+  winnerTicketId?: string;
   winnerId?: string;
+  winnerUserId?: string;
+  winningNumber?: number;
   totalTickets: number;
 }
 
@@ -100,13 +112,15 @@ export interface Winner {
   prize?: Prize;
   user?: User;
   shippingStatus: ShippingStatus;
+  shippingAddress?: ShippingAddress;
   shippingDate?: string;
   trackingNumber?: string;
+  claimedAt?: string;
   createdAt: string;
 }
 
 // Transaction Types
-export type TransactionType = 'purchase' | 'spend';
+export type TransactionType = 'purchase' | 'spend' | 'bonus';
 
 export interface Transaction {
   id: string;
@@ -114,6 +128,7 @@ export interface Transaction {
   type: TransactionType;
   credits: number;
   amount?: number;
+  description?: string;
   createdAt: string;
 }
 

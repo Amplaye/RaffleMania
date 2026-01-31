@@ -1,4 +1,6 @@
 import {create} from 'zustand';
+import {persist, createJSONStorage} from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Avatar definitions - unlocked by level
 export interface Avatar {
@@ -65,7 +67,9 @@ interface AvatarState {
   isUsingCustomPhoto: () => boolean;
 }
 
-export const useAvatarStore = create<AvatarState>((set, get) => ({
+export const useAvatarStore = create<AvatarState>()(
+  persist(
+    (set, get) => ({
   selectedAvatarId: 'avatar_1',
   selectedFrameId: 'frame_1',
   customPhotoUri: null,
@@ -118,4 +122,15 @@ export const useAvatarStore = create<AvatarState>((set, get) => ({
     const {customPhotoUri} = get();
     return customPhotoUri !== null;
   },
-}));
+}),
+    {
+      name: 'rafflemania-avatar-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        selectedAvatarId: state.selectedAvatarId,
+        selectedFrameId: state.selectedFrameId,
+        customPhotoUri: state.customPhotoUri,
+      }),
+    }
+  )
+);

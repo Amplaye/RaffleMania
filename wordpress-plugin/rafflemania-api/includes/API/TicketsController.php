@@ -78,7 +78,7 @@ class TicketsController extends WP_REST_Controller {
         $table_tickets = $wpdb->prefix . 'rafflemania_tickets';
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $status = $request->get_param('status');
 
         $where = "t.user_id = %d";
@@ -123,7 +123,7 @@ class TicketsController extends WP_REST_Controller {
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
         $table_users = $wpdb->prefix . 'rafflemania_users';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $prize_id = $request->get_param('prize_id');
         $source = $request->get_param('source') ?: 'ad';
 
@@ -140,19 +140,27 @@ class TicketsController extends WP_REST_Controller {
         // If using credits, check and deduct
         if ($source === 'credits') {
             $user = $wpdb->get_row($wpdb->prepare(
-                "SELECT credits FROM {$table_users} WHERE id = %d",
+                "SELECT credits, xp, level FROM {$table_users} WHERE id = %d",
                 $user_id
             ));
 
-            $credit_cost = 5; // Cost per ticket in credits
+            $credit_cost = get_option('rafflemania_credits_per_ticket', 5);
             if ($user->credits < $credit_cost) {
                 return new WP_Error('insufficient_credits', 'Crediti insufficienti', ['status' => 400]);
             }
 
-            // Deduct credits
+            // Get XP reward from settings
+            $xp_reward = get_option('rafflemania_xp_credit_ticket', 5);
+
+            // Deduct credits and add XP
+            $new_xp = $user->xp + $xp_reward;
+            $new_level = $this->calculate_level($new_xp);
+
             $wpdb->query($wpdb->prepare(
-                "UPDATE {$table_users} SET credits = credits - %d WHERE id = %d",
+                "UPDATE {$table_users} SET credits = credits - %d, xp = %d, level = %d WHERE id = %d",
                 $credit_cost,
+                $new_xp,
+                $new_level,
                 $user_id
             ));
 
@@ -165,6 +173,34 @@ class TicketsController extends WP_REST_Controller {
                 'description' => 'Biglietto per ' . $prize->name,
                 'reference_id' => 'prize_' . $prize_id
             ]);
+
+            // Track daily credits spent
+            $this->track_daily_stat('credits_spent', $credit_cost);
+        }
+
+        // Track daily ads watched and add XP (only for 'ad' source)
+        if ($source === 'ad') {
+            $this->track_daily_stat('ads_watched');
+
+            // Get XP reward from settings
+            $xp_reward = get_option('rafflemania_xp_watch_ad', 10);
+
+            // Get current user XP and level
+            $user = $wpdb->get_row($wpdb->prepare(
+                "SELECT xp, level FROM {$table_users} WHERE id = %d",
+                $user_id
+            ));
+
+            $new_xp = $user->xp + $xp_reward;
+            $new_level = $this->calculate_level($new_xp);
+
+            // Update user's watched_ads count and add XP
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$table_users} SET watched_ads = watched_ads + 1, xp = %d, level = %d WHERE id = %d",
+                $new_xp,
+                $new_level,
+                $user_id
+            ));
         }
 
         // Generate ticket number (unique per prize draw)
@@ -204,6 +240,25 @@ class TicketsController extends WP_REST_Controller {
             $ticket_id
         ));
 
+        // Increment current_ads on prize (progress bar sync)
+        $new_current_ads = min($prize->current_ads + 1, $prize->goal_ads);
+        $update_data = ['current_ads' => $new_current_ads];
+
+        // Check if goal reached and timer should start
+        if ($new_current_ads >= $prize->goal_ads && $prize->timer_status === 'waiting') {
+            $update_data['timer_status'] = 'countdown';
+            $update_data['timer_started_at'] = current_time('mysql');
+            $update_data['scheduled_at'] = date('Y-m-d H:i:s', strtotime('+' . $prize->timer_duration . ' seconds'));
+        }
+
+        $wpdb->update($table_prizes, $update_data, ['id' => $prize_id]);
+
+        // Get updated prize
+        $updated_prize = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_prizes} WHERE id = %d",
+            $prize_id
+        ));
+
         // Get all user numbers for this prize
         $user_numbers = $wpdb->get_col($wpdb->prepare(
             "SELECT ticket_number FROM {$table_tickets} WHERE user_id = %d AND prize_id = %d AND status = 'active'",
@@ -222,9 +277,22 @@ class TicketsController extends WP_REST_Controller {
             'data' => [
                 'ticket' => $this->format_ticket($ticket),
                 'userNumbers' => array_map('intval', $user_numbers),
-                'totalPoolTickets' => (int) $total_pool
+                'totalPoolTickets' => (int) $total_pool,
+                'prize' => $this->format_prize($updated_prize)
             ]
         ], 201);
+    }
+
+    private function format_prize($prize) {
+        return [
+            'id' => (string) $prize->id,
+            'name' => $prize->name,
+            'currentAds' => (int) $prize->current_ads,
+            'goalAds' => (int) $prize->goal_ads,
+            'timerStatus' => $prize->timer_status,
+            'scheduledAt' => $prize->scheduled_at,
+            'timerStartedAt' => $prize->timer_started_at
+        ];
     }
 
     public function get_tickets_for_prize(WP_REST_Request $request) {
@@ -232,7 +300,7 @@ class TicketsController extends WP_REST_Controller {
         $table_tickets = $wpdb->prefix . 'rafflemania_tickets';
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $prize_id = $request->get_param('prize_id');
 
         $tickets = $wpdb->get_results($wpdb->prepare(
@@ -263,7 +331,7 @@ class TicketsController extends WP_REST_Controller {
         $table_tickets = $wpdb->prefix . 'rafflemania_tickets';
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $ticket_id = $request->get_param('id');
 
         $ticket = $wpdb->get_row($wpdb->prepare(
@@ -321,7 +389,8 @@ class TicketsController extends WP_REST_Controller {
             return false;
         }
 
-        $request->set_attribute('user_id', $payload['user_id']);
+        // Store user_id in request params for later retrieval
+        $request->set_param('_auth_user_id', $payload['user_id']);
         return true;
     }
 
@@ -367,5 +436,57 @@ class TicketsController extends WP_REST_Controller {
             'isWinner' => (bool) $ticket->is_winner,
             'createdAt' => $ticket->created_at
         ];
+    }
+
+    private function calculate_level($xp) {
+        $levels = [
+            1 => 0,
+            2 => 100,
+            3 => 250,
+            4 => 500,
+            5 => 1000,
+            6 => 2000,
+            7 => 3500,
+            8 => 5500,
+            9 => 8000,
+            10 => 11000,
+        ];
+
+        $level = 1;
+        foreach ($levels as $lvl => $threshold) {
+            if ($xp >= $threshold) {
+                $level = $lvl;
+            }
+        }
+
+        return $level;
+    }
+
+    private function track_daily_stat($stat_name, $amount = 1) {
+        global $wpdb;
+        $table_daily_stats = $wpdb->prefix . 'rafflemania_daily_stats';
+
+        // Use Italian timezone
+        $italy_tz = new \DateTimeZone('Europe/Rome');
+        $today = (new \DateTime('now', $italy_tz))->format('Y-m-d');
+
+        // Try to insert or update
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$table_daily_stats} WHERE stat_date = %s",
+            $today
+        ));
+
+        if ($existing) {
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$table_daily_stats} SET {$stat_name} = {$stat_name} + %d WHERE stat_date = %s",
+                $amount,
+                $today
+            ));
+        } else {
+            $wpdb->insert($table_daily_stats, [
+                'stat_date' => $today,
+                $stat_name => $amount
+            ]);
+        }
     }
 }

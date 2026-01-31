@@ -8,16 +8,19 @@ import axios from 'axios';
 const DIRECT_SETTINGS_URL = 'https://www.craftytraders.com/wp-content/plugins/rafflemania-api/get-settings.php';
 const AJAX_SETTINGS_URL = 'https://www.craftytraders.com/wp-admin/admin-ajax.php';
 
-// Default XP rewards - these values should match backend settings
-// They act as fallback if API fails due to caching
+// Default XP rewards - Sistema definitivo
+// WATCH_AD = 3 XP per pubblicità
+// PURCHASE_TICKET = 2 XP per biglietto acquistato
 const DEFAULT_XP_REWARDS = {
-  WATCH_AD: 10,
-  SKIP_AD: 20,
-  PURCHASE_CREDITS: 25,
-  WIN_PRIZE: 250,
-  REFERRAL: 50,
-  DAILY_STREAK: 10,
-  CREDIT_TICKET: 20, // Updated to match backend setting
+  WATCH_AD: 3,           // Guardare pubblicità = 3 XP
+  PURCHASE_TICKET: 2,    // Acquistare biglietto = 2 XP
+  // Legacy values (kept for compatibility)
+  SKIP_AD: 0,
+  PURCHASE_CREDITS: 0,
+  WIN_PRIZE: 0,
+  REFERRAL: 0,
+  DAILY_STREAK: 0,
+  CREDIT_TICKET: 2,      // Alias per PURCHASE_TICKET
 };
 
 // Default credits settings

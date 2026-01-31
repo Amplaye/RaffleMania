@@ -114,6 +114,52 @@ class AuthController extends WP_REST_Controller {
                 'permission_callback' => [$this, 'check_auth']
             ]
         ]);
+
+        // Verify email with token
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/verify-email', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'verify_email'],
+                'permission_callback' => '__return_true',
+                'args' => [
+                    'token' => [
+                        'required' => true,
+                        'type' => 'string'
+                    ]
+                ]
+            ]
+        ]);
+
+        // Resend verification email
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/resend-verification', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'resend_verification'],
+                'permission_callback' => '__return_true',
+                'args' => [
+                    'email' => [
+                        'required' => true,
+                        'type' => 'string',
+                        'format' => 'email'
+                    ]
+                ]
+            ]
+        ]);
+
+        // Web verification (browser fallback)
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/verify-email-web', [
+            [
+                'methods' => 'GET',
+                'callback' => [$this, 'verify_email_web'],
+                'permission_callback' => '__return_true',
+                'args' => [
+                    'token' => [
+                        'required' => true,
+                        'type' => 'string'
+                    ]
+                ]
+            ]
+        ]);
     }
 
     public function register(WP_REST_Request $request) {
@@ -163,6 +209,10 @@ class AuthController extends WP_REST_Controller {
             }
         }
 
+        // Generate verification token
+        $verification_token = bin2hex(random_bytes(32));
+        $verification_expires = date('Y-m-d H:i:s', strtotime('+24 hours'));
+
         // Insert user
         $result = $wpdb->insert($table_users, [
             'email' => $email,
@@ -170,12 +220,15 @@ class AuthController extends WP_REST_Controller {
             'password_hash' => $password_hash,
             'referral_code' => $new_referral_code,
             'referred_by' => $referred_by,
-            'credits' => $referred_by ? 10 : 0, // Bonus credits if referred
+            'credits' => 10, // 10 welcome credits (referral bonus given after 1 week of activity)
             'xp' => 0,
             'level' => 1,
             'current_streak' => 0,
             'avatar_color' => '#FF6B00',
-            'is_active' => 1
+            'is_active' => 1,
+            'email_verified' => 0,
+            'verification_token' => $verification_token,
+            'verification_token_expires' => $verification_expires
         ]);
 
         if (!$result) {
@@ -201,10 +254,10 @@ class AuthController extends WP_REST_Controller {
             ]);
         }
 
-        // Generate tokens
-        $tokens = $this->generate_tokens($user_id);
+        // Send verification email
+        $email_sent = $this->send_verification_email($email, $username, $verification_token);
 
-        // Get user data
+        // Get user data (without generating tokens - user must verify first)
         $user = $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM {$table_users} WHERE id = %d",
             $user_id
@@ -212,10 +265,11 @@ class AuthController extends WP_REST_Controller {
 
         return new WP_REST_Response([
             'success' => true,
-            'message' => 'Registrazione completata',
+            'message' => 'Registrazione completata! Ti abbiamo inviato un\'email di verifica. Controlla la tua casella di posta (anche lo spam) e clicca sul link per attivare il tuo account.',
             'data' => [
                 'user' => $this->format_user($user),
-                'tokens' => $tokens
+                'requiresVerification' => true,
+                'emailSent' => $email_sent
             ]
         ], 201);
     }
@@ -242,8 +296,16 @@ class AuthController extends WP_REST_Controller {
             return new WP_Error('invalid_credentials', 'Credenziali non valide', ['status' => 401]);
         }
 
+        // Check if email is verified
+        if (!$user->email_verified) {
+            return new WP_Error('email_not_verified', 'Devi verificare la tua email prima di accedere. Controlla la tua casella di posta.', ['status' => 403]);
+        }
+
         // Generate tokens
         $tokens = $this->generate_tokens($user->id);
+
+        // Track daily login (Italian timezone)
+        $this->track_daily_stat('logins');
 
         return new WP_REST_Response([
             'success' => true,
@@ -252,6 +314,34 @@ class AuthController extends WP_REST_Controller {
                 'tokens' => $tokens
             ]
         ]);
+    }
+
+    private function track_daily_stat($stat_name, $amount = 1) {
+        global $wpdb;
+        $table_daily_stats = $wpdb->prefix . 'rafflemania_daily_stats';
+
+        // Use Italian timezone
+        $italy_tz = new \DateTimeZone('Europe/Rome');
+        $today = (new \DateTime('now', $italy_tz))->format('Y-m-d');
+
+        // Try to insert or update
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$table_daily_stats} WHERE stat_date = %s",
+            $today
+        ));
+
+        if ($existing) {
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$table_daily_stats} SET {$stat_name} = {$stat_name} + %d WHERE stat_date = %s",
+                $amount,
+                $today
+            ));
+        } else {
+            $wpdb->insert($table_daily_stats, [
+                'stat_date' => $today,
+                $stat_name => $amount
+            ]);
+        }
     }
 
     public function logout(WP_REST_Request $request) {
@@ -465,6 +555,250 @@ class AuthController extends WP_REST_Controller {
         return $code;
     }
 
+    public function verify_email(WP_REST_Request $request) {
+        global $wpdb;
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        $token = $request->get_param('token');
+
+        // Find user with this verification token
+        $user = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_users} WHERE verification_token = %s",
+            $token
+        ));
+
+        if (!$user) {
+            return new WP_Error('invalid_token', 'Token di verifica non valido', ['status' => 400]);
+        }
+
+        // Check if token expired
+        if (strtotime($user->verification_token_expires) < time()) {
+            return new WP_Error('token_expired', 'Token di verifica scaduto. Richiedi un nuovo link.', ['status' => 400]);
+        }
+
+        // Check if already verified
+        if ($user->email_verified) {
+            return new WP_REST_Response([
+                'success' => true,
+                'message' => 'Email gia verificata',
+                'data' => [
+                    'alreadyVerified' => true
+                ]
+            ]);
+        }
+
+        // Update user as verified
+        $wpdb->update($table_users, [
+            'email_verified' => 1,
+            'verification_token' => null,
+            'verification_token_expires' => null
+        ], ['id' => $user->id]);
+
+        // Generate tokens for auto-login
+        $tokens = $this->generate_tokens($user->id);
+
+        // Get updated user data
+        $user = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_users} WHERE id = %d",
+            $user->id
+        ));
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'Email verificata con successo!',
+            'data' => [
+                'user' => $this->format_user($user),
+                'tokens' => $tokens
+            ]
+        ]);
+    }
+
+    public function verify_email_web(WP_REST_Request $request) {
+        global $wpdb;
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        $token = $request->get_param('token');
+
+        // Find user with this verification token
+        $user = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_users} WHERE verification_token = %s",
+            $token
+        ));
+
+        // HTML response helper
+        $html_response = function($title, $message, $success = true) {
+            $color = $success ? '#00B894' : '#E53935';
+            $icon = $success ? '✓' : '✗';
+            header('Content-Type: text/html; charset=utf-8');
+            echo "
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta name='viewport' content='width=device-width, initial-scale=1'>
+                <title>{$title} - RaffleMania</title>
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #FF6B00, #FF8533); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+                    .card { background: white; border-radius: 20px; padding: 40px; max-width: 400px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+                    .icon { width: 80px; height: 80px; border-radius: 50%; background: {$color}; color: white; font-size: 40px; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; }
+                    h1 { color: #333; margin-bottom: 10px; font-size: 24px; }
+                    p { color: #666; line-height: 1.6; margin-bottom: 20px; }
+                    .btn { display: inline-block; background: #FF6B00; color: white; padding: 14px 30px; border-radius: 10px; text-decoration: none; font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <div class='card'>
+                    <div class='icon'>{$icon}</div>
+                    <h1>{$title}</h1>
+                    <p>{$message}</p>
+                    <a href='rafflemania://' class='btn'>Apri RaffleMania</a>
+                </div>
+            </body>
+            </html>";
+            exit;
+        };
+
+        if (!$user) {
+            $html_response('Token Non Valido', 'Il link di verifica non e valido. Richiedi un nuovo link dall\'app.', false);
+        }
+
+        // Check if token expired
+        if (strtotime($user->verification_token_expires) < time()) {
+            $html_response('Link Scaduto', 'Il link di verifica e scaduto. Richiedi un nuovo link dall\'app.', false);
+        }
+
+        // Check if already verified
+        if ($user->email_verified) {
+            $html_response('Gia Verificato', 'Il tuo account e gia stato verificato. Puoi effettuare il login nell\'app.', true);
+        }
+
+        // Update user as verified
+        $wpdb->update($table_users, [
+            'email_verified' => 1,
+            'verification_token' => null,
+            'verification_token_expires' => null
+        ], ['id' => $user->id]);
+
+        $html_response('Email Verificata!', 'Il tuo account e stato verificato con successo. Ora puoi accedere a tutte le funzionalita di RaffleMania!', true);
+    }
+
+    public function resend_verification(WP_REST_Request $request) {
+        global $wpdb;
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        $email = $request->get_param('email');
+
+        // Find user
+        $user = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_users} WHERE email = %s",
+            $email
+        ));
+
+        if (!$user) {
+            // Don't reveal if email exists
+            return new WP_REST_Response([
+                'success' => true,
+                'message' => 'Se l\'email esiste, riceverai un nuovo link di verifica'
+            ]);
+        }
+
+        // Check if already verified
+        if ($user->email_verified) {
+            return new WP_REST_Response([
+                'success' => true,
+                'message' => 'Email gia verificata. Puoi effettuare il login.',
+                'data' => [
+                    'alreadyVerified' => true
+                ]
+            ]);
+        }
+
+        // Generate new verification token
+        $verification_token = bin2hex(random_bytes(32));
+        $verification_expires = date('Y-m-d H:i:s', strtotime('+24 hours'));
+
+        // Update user with new token
+        $wpdb->update($table_users, [
+            'verification_token' => $verification_token,
+            'verification_token_expires' => $verification_expires
+        ], ['id' => $user->id]);
+
+        // Send verification email
+        $this->send_verification_email($user->email, $user->username, $verification_token);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'Nuovo link di verifica inviato!'
+        ]);
+    }
+
+    private function send_verification_email($email, $username, $token) {
+        // Build verification URL - use the web endpoint that works
+        $verification_url = home_url("/wp-json/rafflemania/v1/auth/verify-email-web?token={$token}");
+
+        $subject = 'Verifica il tuo account RaffleMania';
+
+        $message = "
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: linear-gradient(135deg, #FF6B00, #FF8533); padding: 30px; text-align: center; border-radius: 12px 12px 0 0; }
+                .header h1 { color: white; margin: 0; font-size: 28px; }
+                .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 12px 12px; }
+                .button { display: inline-block; background: #FF6B00; color: white !important; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
+                .button:hover { background: #E55A00; }
+                .footer { text-align: center; color: #888; font-size: 12px; margin-top: 20px; }
+                .code { background: #eee; padding: 10px 15px; border-radius: 6px; font-family: monospace; font-size: 14px; word-break: break-all; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <h1>RaffleMania</h1>
+                </div>
+                <div class='content'>
+                    <h2>Ciao {$username}!</h2>
+                    <p>Grazie per esserti registrato su RaffleMania! Per completare la registrazione e iniziare a vincere premi incredibili, verifica il tuo indirizzo email.</p>
+
+                    <p style='text-align: center;'>
+                        <a href='{$verification_url}' class='button'>Verifica Email</a>
+                    </p>
+
+                    <p>Se il pulsante non funziona, copia e incolla questo link nel tuo browser:</p>
+                    <p class='code'>{$verification_url}</p>
+
+                    <p><strong>Il link scade tra 24 ore.</strong></p>
+
+                    <p>Se non hai creato un account su RaffleMania, puoi ignorare questa email.</p>
+                </div>
+                <div class='footer'>
+                    <p>&copy; " . date('Y') . " RaffleMania. Tutti i diritti riservati.</p>
+                    <p>Questa email e stata inviata automaticamente, non rispondere.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
+
+        $headers = [
+            'Content-Type: text/html; charset=UTF-8',
+            'From: RaffleMania <noreply@rafflemania.it>'
+        ];
+
+        $result = wp_mail($email, $subject, $message, $headers);
+
+        // Log email sending result for debugging
+        if (!$result) {
+            error_log("RaffleMania: Failed to send verification email to {$email}");
+        } else {
+            error_log("RaffleMania: Verification email sent to {$email}");
+        }
+
+        return $result;
+    }
+
     private function format_user($user) {
         return [
             'id' => (int) $user->id,
@@ -478,6 +812,7 @@ class AuthController extends WP_REST_Controller {
             'currentStreak' => (int) $user->current_streak,
             'lastStreakDate' => $user->last_streak_date,
             'referralCode' => $user->referral_code,
+            'emailVerified' => (bool) $user->email_verified,
             'createdAt' => $user->created_at
         ];
     }

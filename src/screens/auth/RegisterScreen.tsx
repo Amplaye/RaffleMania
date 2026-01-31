@@ -53,10 +53,14 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({navigation}) => {
     if (!validate()) return;
 
     try {
-      await register(email, password, displayName);
+      const result = await register(email, password, displayName);
       // If referral code was entered, it would be processed here
       if (referralCode) {
         console.log('Referral code:', referralCode);
+      }
+      // Navigate to email verification screen if required
+      if (result?.requiresVerification) {
+        navigation.navigate('EmailVerification', {email});
       }
     } catch (error: any) {
       Alert.alert('Errore', error.message || 'Errore durante la registrazione');

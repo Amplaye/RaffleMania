@@ -5,6 +5,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {BottomTabBarProps} from '@react-navigation/bottom-tabs';
 import {HomeScreen} from '../screens/home';
+import {PrizesScreen} from '../screens/prizes';
 import {TicketsScreen} from '../screens/tickets';
 import {ShopScreen} from '../screens/shop';
 import {ProfileScreen} from '../screens/profile';
@@ -13,6 +14,7 @@ import {useThemeColors} from '../hooks/useThemeColors';
 
 export type TabParamList = {
   Home: undefined;
+  Prizes: undefined;
   Tickets: undefined;
   Shop: undefined;
   Profile: undefined;
@@ -49,6 +51,7 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({state, descriptors, navigati
 
   const iconMap: Record<string, {outline: string; filled: string}> = {
     Home: {outline: 'home-outline', filled: 'home'},
+    Prizes: {outline: 'gift-outline', filled: 'gift'},
     Tickets: {outline: 'ticket-outline', filled: 'ticket'},
     Shop: {outline: 'cart-outline', filled: 'cart'},
     Profile: {outline: 'person-outline', filled: 'person'},
@@ -69,7 +72,6 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({state, descriptors, navigati
             const isFocused = state.index === index;
             const isLast = index === state.routes.length - 1;
             const icons = iconMap[route.name] || {outline: 'help-outline', filled: 'help'};
-            const isShop = route.name === 'Shop';
 
             const onPress = () => {
               const event = navigation.emit({
@@ -82,34 +84,6 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({state, descriptors, navigati
                 navigation.navigate(route.name);
               }
             };
-
-            // Highlight Shop tab with special styling
-            if (isShop) {
-              return (
-                <TouchableOpacity
-                  key={route.key}
-                  accessibilityRole="button"
-                  accessibilityState={isFocused ? {selected: true} : {}}
-                  accessibilityLabel={options.tabBarAccessibilityLabel}
-                  onPress={onPress}
-                  style={styles.tabButton}>
-                  <View style={styles.shopTabContainer}>
-                    <LinearGradient
-                      colors={isFocused ? [COLORS.primary, '#FF8500'] : ['#444', '#333']}
-                      start={{x: 0, y: 0}}
-                      end={{x: 1, y: 1}}
-                      style={styles.shopTabGradient}>
-                      <Ionicons
-                        name={isFocused ? icons.filled : icons.outline}
-                        size={24}
-                        color={COLORS.white}
-                      />
-                    </LinearGradient>
-                  </View>
-                  {!isLast && <View style={styles.tabSeparatorHidden} />}
-                </TouchableOpacity>
-              );
-            }
 
             return (
               <TouchableOpacity
@@ -153,6 +127,19 @@ export const TabNavigator: React.FC = () => {
               focused={focused}
               iconName="home-outline"
               iconNameFocused="home"
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Prizes"
+        component={PrizesScreen}
+        options={{
+          tabBarIcon: ({focused}) => (
+            <TabIcon
+              focused={focused}
+              iconName="gift-outline"
+              iconNameFocused="gift"
             />
           ),
         }}
@@ -239,30 +226,5 @@ const styles = StyleSheet.create({
     height: 20,
     width: 1,
     backgroundColor: 'rgba(255, 107, 0, 0.25)',
-  },
-  tabSeparatorHidden: {
-    position: 'absolute',
-    right: -32,
-    height: 20,
-    width: 1,
-    backgroundColor: 'transparent',
-  },
-  // Shop Tab Special Styling
-  shopTabContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shopTabGradient: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -15,
-    shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
 });

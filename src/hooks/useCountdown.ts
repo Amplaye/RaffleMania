@@ -1,4 +1,4 @@
-import {useState, useEffect, useCallback, useRef} from 'react';
+import {useState, useEffect, useCallback} from 'react';
 import {getCountdownParts, CountdownParts} from '../utils/formatters';
 
 // Debug mode - set to true to enable timer testing

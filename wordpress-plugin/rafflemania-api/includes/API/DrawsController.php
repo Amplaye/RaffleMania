@@ -59,6 +59,66 @@ class DrawsController extends WP_REST_Controller {
                 'permission_callback' => [$this, 'check_auth']
             ]
         ]);
+
+        // Create a draw (extraction) - called from app when timer expires
+        register_rest_route($this->namespace, '/' . $this->rest_base, [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'create_draw'],
+                'permission_callback' => [$this, 'check_auth'],
+                'args' => [
+                    'prize_id' => [
+                        'required' => true,
+                        'type' => 'integer'
+                    ],
+                    'winning_number' => [
+                        'required' => true,
+                        'type' => 'integer'
+                    ],
+                    'user_ticket_id' => [
+                        'required' => false,
+                        'type' => 'string'
+                    ],
+                    'timer_started_at' => [
+                        'required' => false,
+                        'type' => 'string',
+                        'description' => 'ISO timestamp when timer started (fallback)'
+                    ]
+                ]
+            ]
+        ]);
+
+        // Track extraction stats - simpler endpoint for debug/testing
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/track-stats', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'track_extraction_stats'],
+                'permission_callback' => [$this, 'check_auth'],
+                'args' => [
+                    'is_winner' => [
+                        'required' => false,
+                        'type' => 'boolean',
+                        'default' => false
+                    ]
+                ]
+            ]
+        ]);
+
+        // Public test endpoint (no auth required) - for debugging
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/track-stats-test', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'track_extraction_stats_test'],
+                'permission_callback' => '__return_true',
+                'args' => [
+                    'is_winner' => [
+                        'required' => false,
+                        'type' => 'boolean',
+                        'default' => false
+                    ]
+                ]
+            ]
+        ]);
     }
 
     public function get_draws(WP_REST_Request $request) {
@@ -237,6 +297,155 @@ class DrawsController extends WP_REST_Controller {
         ]);
     }
 
+    public function create_draw(WP_REST_Request $request) {
+        global $wpdb;
+        $table_draws = $wpdb->prefix . 'rafflemania_draws';
+        $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
+        $table_tickets = $wpdb->prefix . 'rafflemania_tickets';
+        $table_winners = $wpdb->prefix . 'rafflemania_winners';
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        $user_id = $request->get_attribute('user_id');
+        $prize_id = $request->get_param('prize_id');
+        $winning_number = $request->get_param('winning_number');
+        $user_ticket_id = $request->get_param('user_ticket_id');
+        $app_timer_started_at = $request->get_param('timer_started_at');
+
+        // Get prize
+        $prize = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_prizes} WHERE id = %d",
+            $prize_id
+        ));
+
+        if (!$prize) {
+            return new WP_Error('prize_not_found', 'Premio non trovato', ['status' => 404]);
+        }
+
+        // Use app-provided timer_started_at if DB doesn't have it
+        $timer_started_at = $prize->timer_started_at;
+        if (!$timer_started_at && $app_timer_started_at) {
+            // Convert ISO format to MySQL format
+            $ts = strtotime($app_timer_started_at);
+            $timer_started_at = date('Y-m-d H:i:s', $ts);
+
+            // Also update the prize in DB with timer data
+            $wpdb->update($table_prizes, [
+                'timer_status' => 'completed',
+                'timer_started_at' => $timer_started_at,
+                'extracted_at' => current_time('mysql')
+            ], ['id' => $prize_id]);
+        }
+
+        // Generate draw_id
+        $draw_id = 'draw_' . $prize_id . '_' . str_replace(['-', ':', ' '], '', substr($timer_started_at ?: current_time('mysql'), 0, 19));
+
+        // Check if draw already exists
+        $existing_draw = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_draws} WHERE draw_id = %s",
+            $draw_id
+        ));
+
+        if ($existing_draw) {
+            // Return existing draw
+            return new WP_REST_Response([
+                'success' => true,
+                'data' => [
+                    'draw' => $this->format_draw($existing_draw),
+                    'already_exists' => true
+                ]
+            ]);
+        }
+
+        // Get total tickets for this prize
+        $total_tickets = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table_tickets} WHERE prize_id = %d AND status = 'active'",
+            $prize_id
+        ));
+
+        // Find winner ticket
+        $winner_ticket = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_tickets} WHERE prize_id = %d AND ticket_number = %d AND status = 'active'",
+            $prize_id,
+            $winning_number
+        ));
+
+        $winner_user_id = $winner_ticket ? $winner_ticket->user_id : null;
+        $winner_ticket_id = $winner_ticket ? $winner_ticket->id : null;
+
+        // Create draw
+        $wpdb->insert($table_draws, [
+            'draw_id' => $draw_id,
+            'prize_id' => $prize_id,
+            'winning_number' => $winning_number,
+            'winner_user_id' => $winner_user_id,
+            'winner_ticket_id' => $winner_ticket_id,
+            'total_tickets' => $total_tickets,
+            'status' => 'completed',
+            'extracted_at' => current_time('mysql')
+        ]);
+
+        $draw_db_id = $wpdb->insert_id;
+
+        // Track daily draw stat
+        $this->track_daily_stat('draws_made');
+
+        // Update prize status
+        $wpdb->update($table_prizes, [
+            'timer_status' => 'completed',
+            'extracted_at' => current_time('mysql')
+        ], ['id' => $prize_id]);
+
+        // Mark all tickets for this prize as used
+        $wpdb->update($table_tickets, ['status' => 'used'], ['prize_id' => $prize_id, 'status' => 'active']);
+
+        // If there's a winner, create winner record and mark ticket as winner
+        if ($winner_ticket) {
+            $wpdb->update($table_tickets, [
+                'status' => 'winner',
+                'is_winner' => 1
+            ], ['id' => $winner_ticket->id]);
+
+            // Create winner record
+            $wpdb->insert($table_winners, [
+                'user_id' => $winner_user_id,
+                'prize_id' => $prize_id,
+                'draw_id' => $draw_db_id,
+                'ticket_id' => $winner_ticket->id
+            ]);
+
+            // Track daily winner stat
+            $this->track_daily_stat('winners');
+
+            // Get winner info for response
+            $winner = $wpdb->get_row($wpdb->prepare(
+                "SELECT username, avatar_url FROM {$table_users} WHERE id = %d",
+                $winner_user_id
+            ));
+        }
+
+        // Get created draw
+        $draw = $wpdb->get_row($wpdb->prepare(
+            "SELECT d.*, p.name as prize_name, p.image_url as prize_image, p.value as prize_value
+             FROM {$table_draws} d
+             LEFT JOIN {$table_prizes} p ON d.prize_id = p.id
+             WHERE d.id = %d",
+            $draw_db_id
+        ));
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => [
+                'draw' => $this->format_draw($draw),
+                'hasWinner' => !empty($winner_user_id),
+                'winner' => $winner_user_id ? [
+                    'userId' => (string) $winner_user_id,
+                    'username' => $winner->username ?? 'Utente',
+                    'avatarUrl' => $winner->avatar_url ?? null
+                ] : null
+            ]
+        ], 201);
+    }
+
     public function check_auth(WP_REST_Request $request) {
         $auth_header = $request->get_header('Authorization');
 
@@ -284,6 +493,49 @@ class DrawsController extends WP_REST_Controller {
         return $payload;
     }
 
+    public function track_extraction_stats(WP_REST_Request $request) {
+        $is_winner = $request->get_param('is_winner');
+
+        // Always track the draw
+        $this->track_daily_stat('draws_made');
+
+        // Track winner if applicable
+        if ($is_winner) {
+            $this->track_daily_stat('winners');
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'Stats tracked successfully',
+            'data' => [
+                'draws_tracked' => true,
+                'winner_tracked' => $is_winner
+            ]
+        ]);
+    }
+
+    // Public test endpoint (no auth) - for debugging only
+    public function track_extraction_stats_test(WP_REST_Request $request) {
+        $is_winner = $request->get_param('is_winner');
+
+        // Always track the draw
+        $this->track_daily_stat('draws_made');
+
+        // Track winner if applicable
+        if ($is_winner) {
+            $this->track_daily_stat('winners');
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'Stats tracked (TEST endpoint)',
+            'data' => [
+                'draws_tracked' => true,
+                'winner_tracked' => $is_winner
+            ]
+        ]);
+    }
+
     private function format_draw($draw) {
         return [
             'id' => (string) $draw->id,
@@ -299,5 +551,33 @@ class DrawsController extends WP_REST_Controller {
             'extractedAt' => $draw->extracted_at,
             'createdAt' => $draw->created_at
         ];
+    }
+
+    private function track_daily_stat($stat_name, $amount = 1) {
+        global $wpdb;
+        $table_daily_stats = $wpdb->prefix . 'rafflemania_daily_stats';
+
+        // Use Italian timezone
+        $italy_tz = new \DateTimeZone('Europe/Rome');
+        $today = (new \DateTime('now', $italy_tz))->format('Y-m-d');
+
+        // Try to insert or update
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$table_daily_stats} WHERE stat_date = %s",
+            $today
+        ));
+
+        if ($existing) {
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$table_daily_stats} SET {$stat_name} = {$stat_name} + %d WHERE stat_date = %s",
+                $amount,
+                $today
+            ));
+        } else {
+            $wpdb->insert($table_daily_stats, [
+                'stat_date' => $today,
+                $stat_name => $amount
+            ]);
+        }
     }
 }
