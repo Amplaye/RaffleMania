@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Animated,
   TouchableWithoutFeedback,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -508,8 +509,8 @@ const styles = StyleSheet.create({
   claimButtonGradient: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 50,
     borderRadius: 14,
+    minHeight: Platform.OS === 'ios' ? 56 : 50,
   },
   claimButtonText: {
     fontSize: 16,
@@ -519,6 +520,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textAlign: 'center',
     includeFontPadding: false,
+    paddingHorizontal: SPACING.sm,
   },
 });
 

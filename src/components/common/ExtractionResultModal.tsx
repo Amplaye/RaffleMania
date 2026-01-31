@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useMemo} from 'react';
-import {View, Text, StyleSheet, Animated, Modal, TouchableOpacity, Image, Dimensions, Easing} from 'react-native';
+import {View, Text, StyleSheet, Animated, Modal, TouchableOpacity, Image, Dimensions, Easing, Platform} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {FONT_FAMILY, FONT_WEIGHT, FONT_SIZE, RADIUS, SPACING, COLORS} from '../../utils/constants';
@@ -495,14 +495,17 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
   },
   loserButtonContent: {
-    paddingVertical: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: RADIUS.lg,
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
   },
   loserButtonText: {
     fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: '#FFFFFF',
+    paddingHorizontal: SPACING.sm,
   },
 });
 

@@ -658,7 +658,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 52,
+    height: Platform.OS === 'ios' ? 56 : 52,
+    paddingVertical: Platform.OS === 'ios' ? 16 : 12,
     gap: 8,
   },
   loginButtonText: {
@@ -687,8 +688,8 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   socialButtonSquare: {
-    width: 56,
-    height: 56,
+    width: Platform.OS === 'ios' ? 60 : 56,
+    height: Platform.OS === 'ios' ? 60 : 56,
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
@@ -702,8 +703,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   guestButton: {
-    width: 56,
-    height: 56,
+    width: Platform.OS === 'ios' ? 60 : 56,
+    height: Platform.OS === 'ios' ? 60 : 56,
     borderRadius: 16,
     overflow: 'hidden',
     shadowColor: COLORS.orange,

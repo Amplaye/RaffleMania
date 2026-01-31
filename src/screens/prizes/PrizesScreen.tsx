@@ -9,6 +9,7 @@ import {
   StatusBar,
   Animated,
   Dimensions,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -53,7 +54,7 @@ const AnimatedTab: React.FC<{
 
   const translateX = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, (SCREEN_WIDTH - SPACING.md * 2 - 8) / 2],
+    outputRange: [0, (SCREEN_WIDTH - SPACING.lg * 2 - 8) / 2],
   });
 
   return (
@@ -328,7 +329,7 @@ const styles = StyleSheet.create({
   },
   // Banner
   bannerContainer: {
-    marginHorizontal: SPACING.md,
+    marginHorizontal: SPACING.lg,
     borderRadius: RADIUS.lg,
     marginBottom: SPACING.md,
     borderWidth: 1,
@@ -374,7 +375,7 @@ const styles = StyleSheet.create({
   },
   // Animated Tabs
   tabWrapper: {
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.md,
   },
   animatedTabsContainer: {
@@ -392,7 +393,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 4,
     left: 4,
-    width: (SCREEN_WIDTH - SPACING.md * 2 - 8) / 2,
+    width: (SCREEN_WIDTH - SPACING.lg * 2 - 8) / 2,
     height: '100%',
     borderRadius: RADIUS.lg,
   },
@@ -424,7 +425,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: SPACING.lg,
     paddingBottom: 120,
   },
   // Prize Card

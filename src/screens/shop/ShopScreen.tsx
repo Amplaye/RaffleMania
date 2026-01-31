@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,12 @@ import {
   StatusBar,
   ScrollView,
   Alert,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {AnimatedBackground} from '../../components/common';
-import {useAuthStore, useCreditsStore} from '../../store';
+import {useAuthStore, useCreditsStore, useTicketsStore} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -80,7 +81,26 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
   const user = useAuthStore(state => state.user);
   const {addCredits} = useCreditsStore();
+  const {getAdCooldownSeconds} = useTicketsStore();
   const [isWatchingAd, setIsWatchingAd] = useState(false);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+  // Ad cooldown countdown
+  useEffect(() => {
+    const updateCooldown = () => {
+      setCooldownSeconds(getAdCooldownSeconds());
+    };
+    updateCooldown();
+    const interval = setInterval(updateCooldown, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Format ad cooldown in mm:ss
+  const formatAdCooldown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const handleRemoveBanner = () => {
     Alert.alert(
@@ -201,18 +221,18 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation}) => {
 
         {/* Watch Ad Button */}
         <TouchableOpacity
-          style={[styles.watchAdButton, {backgroundColor: colors.card}]}
+          style={[styles.watchAdButton, {backgroundColor: colors.card}, cooldownSeconds > 0 && styles.buttonDisabled]}
           onPress={handleWatchAd}
-          disabled={isWatchingAd}
+          disabled={isWatchingAd || cooldownSeconds > 0}
           activeOpacity={0.8}>
           <LinearGradient
-            colors={[COLORS.primary, '#FF8500']}
+            colors={cooldownSeconds === 0 ? [COLORS.primary, '#FF8500'] : ['#666', '#555']}
             start={{x: 0, y: 0}}
             end={{x: 1, y: 0}}
             style={styles.watchAdGradient}>
             <Ionicons name="play-circle" size={24} color={COLORS.white} />
             <Text style={styles.watchAdText}>
-              {isWatchingAd ? 'GUARDANDO...' : 'GUARDA PUBBLICITÀ E GUADAGNA UN CREDITO'}
+              {isWatchingAd ? 'GUARDANDO...' : cooldownSeconds > 0 ? `ATTENDI ${formatAdCooldown(cooldownSeconds)}` : 'GUARDA PUBBLICITÀ E GUADAGNA UN CREDITO'}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -329,8 +349,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   packageCardHighlighted: {
-    borderColor: COLORS.primary,
-    borderWidth: 2,
+    // Border rimosso
   },
   packageBadge: {
     position: 'absolute',
@@ -405,11 +424,15 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     overflow: 'hidden',
   },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
   watchAdGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
     gap: SPACING.sm,
   },
   watchAdText: {
@@ -417,6 +440,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    paddingHorizontal: SPACING.sm,
   },
 });
 

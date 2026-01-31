@@ -1,6 +1,6 @@
 import React from 'react';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
-import {View, StyleSheet, Text, TouchableOpacity} from 'react-native';
+import {View, StyleSheet, Text, TouchableOpacity, Platform} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {BottomTabBarProps} from '@react-navigation/bottom-tabs';
@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     right: 0,
   },
   tabBarContainer: {
-    height: 65,
+    height: Platform.OS === 'ios' ? 80 : 65,
     borderTopWidth: 1.5,
     borderTopColor: 'rgba(255, 107, 0, 0.35)',
   },
@@ -206,13 +206,14 @@ const styles = StyleSheet.create({
   tabBarContent: {
     flex: 1,
     flexDirection: 'row',
-    paddingTop: 8,
-    paddingBottom: 16,
+    paddingTop: Platform.OS === 'ios' ? 12 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
   },
   tabButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: Platform.OS === 'ios' ? 44 : 40,
   },
   tabItem: {
     alignItems: 'center',

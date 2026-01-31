@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   Modal,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -437,7 +438,8 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
   },
   priceButtonContent: {
-    paddingVertical: SPACING.sm,
+    paddingVertical: Platform.OS === 'ios' ? SPACING.md : SPACING.sm,
+    minHeight: Platform.OS === 'ios' ? 44 : 40,
     alignItems: 'center',
   },
   priceText: {
@@ -496,8 +498,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    minHeight: Platform.OS === 'ios' ? 56 : 52,
     gap: SPACING.sm,
   },
   paymentButtonText: {

@@ -11,14 +11,14 @@ import {
   StatusBar,
   Modal,
   Easing,
-  Alert,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {AnimatedBackground, AdOrCreditsModal, FlipCountdownTimer} from '../../components/common';
+import {AnimatedBackground, FlipCountdownTimer} from '../../components/common';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
-import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, useAuthStore, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS} from '../../store';
+import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS} from '../../store';
 import {getTotalPoolTickets} from '../../services/mock';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
@@ -240,10 +240,9 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const {prizeId} = route.params;
   const {colors, gradientColors, isDark, neon} = useThemeColors();
   const {prizes, incrementAdsForPrize} = usePrizesStore();
-  const {addTicket, incrementAdsWatched, getTicketsForPrize, getTicketNumbersForPrize} = useTicketsStore();
+  const {addTicket, incrementAdsWatched, getTicketsForPrize, getTicketNumbersForPrize, getAdCooldownSeconds} = useTicketsStore();
   const {addXPForAd, addXPForTicket} = useLevelStore();
-  const {useCreditsForTicket: spendCreditsForTicket, addCredits} = useCreditsStore();
-  const {user, refreshUserData} = useAuthStore();
+  const {addCredits} = useCreditsStore();
 
   // Get ticket stats for this prize
   const myTickets = getTicketsForPrize(prizeId);
@@ -255,8 +254,8 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [newTicketInfo, setNewTicketInfo] = useState<TicketModalInfo | null>(null);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
-  const [showAdOrCreditsModal, setShowAdOrCreditsModal] = useState(false);
   const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
+  const [adCooldownSeconds, setAdCooldownSeconds] = useState(0);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -305,6 +304,24 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
     return () => clearInterval(interval);
   }, [prize?.timerStatus, prize?.scheduledAt, prize?.id]);
 
+  // Ad cooldown countdown (ogni secondo)
+  useEffect(() => {
+    const updateCooldown = () => {
+      const seconds = getAdCooldownSeconds();
+      setAdCooldownSeconds(seconds);
+    };
+    updateCooldown();
+    const interval = setInterval(updateCooldown, 1000);
+    return () => clearInterval(interval);
+  }, [getAdCooldownSeconds]);
+
+  // Funzione per formattare il countdown in mm:ss
+  const formatAdCooldown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handleWatchAd = async () => {
     if (!prize) return;
 
@@ -350,55 +367,6 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
     setShowTicketModal(true);
 
     setIsWatchingAd(false);
-  };
-
-  const handleShowAdOrCreditsModal = () => {
-    if (!prize) return;
-    setShowAdOrCreditsModal(true);
-  };
-
-  const handleUseCredits = async () => {
-    if (!prize) return;
-    setShowAdOrCreditsModal(false);
-
-    const success = await spendCreditsForTicket();
-    if (!success) {
-      return;
-    }
-
-    // Aggiungi XP per l'acquisto del biglietto (2 XP)
-    const levelUpResult = addXPForTicket();
-    if (levelUpResult) {
-      addCredits(levelUpResult.creditReward, 'level_up');
-      console.log(`Level up! Livello ${levelUpResult.newLevel} - Premio: ${levelUpResult.creditReward} crediti`);
-    }
-
-    // Genera drawId per questo premio
-    const drawId = `draw_${prize.id}_${(prize.timerStartedAt || new Date().toISOString()).replace(/[^0-9]/g, '').slice(0, 14)}`;
-
-    // Add new ticket and get the assigned number
-    let newTicket;
-    try {
-      newTicket = await addTicket('credits', drawId, prize.id);
-    } catch (error: any) {
-      Alert.alert('Errore', error.message || 'Impossibile creare il biglietto');
-      return;
-    }
-
-    // Refresh user data to sync credits from backend
-    await refreshUserData();
-
-    // Get all user's numbers for this prize (including the new one)
-    const userNumbers = getTicketNumbersForPrize(prize.id);
-    const totalPool = getTotalPoolTickets(prize.id);
-
-    setNewTicketInfo({
-      ticketNumber: newTicket.ticketNumber,
-      prizeName: prize.name,
-      userNumbers,
-      totalPoolTickets: totalPool,
-    });
-    setShowTicketModal(true);
   };
 
   const handleCloseModal = () => {
@@ -697,15 +665,16 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
         <View style={{height: 100}} />
       </ScrollView>
 
-      {/* Fixed Bottom Button */}
+      {/* Fixed Bottom Buttons */}
       <View style={[styles.bottomButtonContainer, {backgroundColor: colors.background}]}>
+        {/* Watch Ad Button */}
         <TouchableOpacity
-          style={[styles.watchButton, neon.glowStrong]}
+          style={[styles.watchButton, neon.glowStrong, (isWatchingAd || adCooldownSeconds > 0) && styles.buttonDisabled]}
           activeOpacity={0.8}
-          onPress={handleShowAdOrCreditsModal}
-          disabled={isWatchingAd}>
+          onPress={handleWatchAd}
+          disabled={isWatchingAd || adCooldownSeconds > 0}>
           <LinearGradient
-            colors={isWatchingAd ? ['#999', '#777'] : [COLORS.primary, '#FF8500']}
+            colors={isWatchingAd || adCooldownSeconds > 0 ? ['#666', '#555'] : [COLORS.primary, '#FF8500']}
             start={{x: 0, y: 0}}
             end={{x: 1, y: 0}}
             style={styles.watchButtonGradient}>
@@ -714,6 +683,11 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
                 <>
                   <Ionicons name="hourglass" size={24} color={COLORS.white} />
                   <Text style={styles.watchButtonText}>Caricamento...</Text>
+                </>
+              ) : adCooldownSeconds > 0 ? (
+                <>
+                  <Ionicons name="time-outline" size={20} color={COLORS.white} />
+                  <Text style={styles.watchButtonText}>ATTENDI {formatAdCooldown(adCooldownSeconds)}</Text>
                 </>
               ) : (
                 <>
@@ -724,6 +698,15 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
             </View>
           </LinearGradient>
         </TouchableOpacity>
+
+        {/* Buy Credits Button */}
+        <TouchableOpacity
+          style={[styles.buyCreditsButton, {backgroundColor: colors.card, borderColor: COLORS.primary}]}
+          onPress={() => navigation.navigate('Credits')}
+          activeOpacity={0.8}>
+          <Ionicons name="cart" size={20} color={COLORS.primary} />
+          <Text style={styles.buyCreditsText}>COMPRA CREDITI</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Ticket Success Modal */}
@@ -731,23 +714,6 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
         visible={showTicketModal}
         ticketInfo={newTicketInfo}
         onClose={handleCloseModal}
-      />
-
-      {/* Ad or Credits Choice Modal */}
-      <AdOrCreditsModal
-        visible={showAdOrCreditsModal}
-        userCredits={user?.credits ?? 0}
-        prizeName={prize?.name ?? ''}
-        onWatchAd={() => {
-          setShowAdOrCreditsModal(false);
-          handleWatchAd();
-        }}
-        onUseCredits={handleUseCredits}
-        onGoToShop={() => {
-          setShowAdOrCreditsModal(false);
-          navigation.navigate('Credits');
-        }}
-        onClose={() => setShowAdOrCreditsModal(false)}
       />
     </LinearGradient>
   );
@@ -1162,7 +1128,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    borderRadius: RADIUS.lg,
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
     gap: SPACING.sm,
   },
   watchButtonText: {
@@ -1170,6 +1137,26 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.white,
+    paddingHorizontal: SPACING.sm,
+  },
+  buyCreditsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
+    borderRadius: RADIUS.lg,
+    borderWidth: 2,
+    marginTop: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  buyCreditsText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.primary,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
   // Error State
   errorContainer: {

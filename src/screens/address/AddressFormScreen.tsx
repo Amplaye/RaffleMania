@@ -286,7 +286,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    borderRadius: RADIUS.lg,
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
     gap: SPACING.sm,
   },
   saveButtonText: {
@@ -294,6 +295,7 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.white,
+    paddingHorizontal: SPACING.sm,
   },
 });
 

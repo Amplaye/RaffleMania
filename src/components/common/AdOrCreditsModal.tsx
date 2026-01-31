@@ -6,13 +6,14 @@ import {
   Modal,
   TouchableOpacity,
   Animated,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {SPACING, FONT_SIZE, FONT_WEIGHT, FONT_FAMILY, RADIUS} from '../../utils/constants';
 
-const CREDITS_PER_TICKET = 5;
+const CREDITS_PER_TICKET = 1;
 
 interface AdOrCreditsModalProps {
   visible: boolean;
@@ -257,7 +258,8 @@ const styles = StyleSheet.create({
   optionGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 64,
+    justifyContent: 'center',
+    minHeight: Platform.OS === 'ios' ? 68 : 64,
     borderRadius: RADIUS.lg,
   },
   optionIconContainer: {

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Animated,
   ScrollView,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -102,34 +103,6 @@ export const TicketSuccessModal: React.FC<TicketSuccessModalProps> = ({
             styles.modalContent,
             {transform: [{scale: scaleAnim}]},
           ]}>
-          {/* Success Icon with Glow */}
-          <View style={styles.iconContainer}>
-            <Animated.View
-              style={[
-                styles.iconGlow,
-                {
-                  opacity: confettiAnim.interpolate({
-                    inputRange: [0, 0.5, 1],
-                    outputRange: [0, 1, 0.6],
-                  }),
-                  transform: [
-                    {
-                      scale: confettiAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.8, 1.3],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            />
-            <LinearGradient
-              colors={[COLORS.primary, '#FF8500']}
-              style={styles.iconGradient}>
-              <Ionicons name="ticket" size={40} color={COLORS.white} />
-            </LinearGradient>
-          </View>
-
           {/* Title */}
           <Text style={styles.title}>
             {isBatch ? `${ticketCount} Numeri Ottenuti!` : 'Nuovo Numero Ottenuto!'}
@@ -265,33 +238,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 20,
-  },
-  iconContainer: {
-    marginBottom: SPACING.lg,
-    position: 'relative',
-  },
-  iconGlow: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: COLORS.primary,
-    top: -10,
-    left: -10,
-    opacity: 0.3,
-  },
-  iconGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden', // Required for iOS borderRadius
-    shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
   },
   title: {
     fontSize: FONT_SIZE.xl,
@@ -458,14 +404,17 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   closeButtonGradient: {
-    paddingVertical: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: RADIUS.lg,
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
   },
   closeButtonText: {
     fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.white,
+    paddingHorizontal: SPACING.sm,
   },
 });
 

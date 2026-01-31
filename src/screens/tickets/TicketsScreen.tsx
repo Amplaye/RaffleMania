@@ -9,6 +9,7 @@ import {
   StatusBar,
   Dimensions,
   LayoutAnimation,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -306,16 +307,34 @@ const WinningTicketCard: React.FC<{
 export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
   const [activeTab, setActiveTab] = useState<TabType>('active');
-  const {activeTickets, pastTickets, fetchTickets} = useTicketsStore();
+  const {activeTickets, pastTickets, fetchTickets, getAdCooldownSeconds} = useTicketsStore();
   const {prizes} = usePrizesStore();
   const [refreshing, setRefreshing] = useState(false);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const contentOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     fetchTickets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Ad cooldown countdown
+  useEffect(() => {
+    const updateCooldown = () => {
+      setCooldownSeconds(getAdCooldownSeconds());
+    };
+    updateCooldown();
+    const interval = setInterval(updateCooldown, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Format ad cooldown in mm:ss
+  const formatAdCooldown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const handleTabChange = (tab: TabType) => {
     // Animate content fade out, switch tab, fade in
@@ -501,18 +520,18 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
       {/* Bottom Watch Ad Button */}
       <View style={styles.bottomSection}>
         <TouchableOpacity
-          style={[styles.watchAdButton, {backgroundColor: colors.card}]}
+          style={[styles.watchAdButton, {backgroundColor: colors.card}, cooldownSeconds > 0 && styles.buttonDisabled]}
           onPress={handleWatchAd}
-          disabled={isWatchingAd}
+          disabled={isWatchingAd || cooldownSeconds > 0}
           activeOpacity={0.8}>
           <LinearGradient
-            colors={[COLORS.primary, '#FF8500']}
+            colors={cooldownSeconds === 0 ? [COLORS.primary, '#FF8500'] : ['#666', '#555']}
             start={{x: 0, y: 0}}
             end={{x: 1, y: 0}}
             style={styles.watchAdGradient}>
             <Ionicons name="play-circle" size={24} color={COLORS.white} />
             <Text style={styles.watchAdText}>
-              {isWatchingAd ? 'GUARDANDO...' : 'GUARDA PUBBLICITÀ E GUADAGNA UN CREDITO'}
+              {isWatchingAd ? 'GUARDANDO...' : cooldownSeconds > 0 ? `ATTENDI ${formatAdCooldown(cooldownSeconds)}` : 'GUARDA PUBBLICITÀ E GUADAGNA UN CREDITO'}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -853,11 +872,15 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     overflow: 'hidden',
   },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
   watchAdGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
     gap: SPACING.sm,
   },
   watchAdText: {
@@ -865,6 +888,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    paddingHorizontal: SPACING.sm,
   },
 });
 

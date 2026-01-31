@@ -502,13 +502,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 52,
+    minHeight: Platform.OS === 'ios' ? 56 : 52,
     gap: 8,
   },
   resetButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    paddingHorizontal: 8,
   },
   resendButton: {
     marginTop: 20,

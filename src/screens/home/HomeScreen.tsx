@@ -12,6 +12,7 @@ import {
   NativeScrollEvent,
   Alert,
   Modal,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -37,7 +38,7 @@ interface HomeScreenProps {
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
-  const {fetchTickets, addTicket, addTicketsBatch, incrementAdsWatched, canPurchaseTicket, getTicketsPurchasedToday, getAdCooldownRemaining, checkAndResetDaily, resetDailyLimit} = useTicketsStore();
+  const {fetchTickets, addTicket, addTicketsBatch, incrementAdsWatched, canPurchaseTicket, getTicketsPurchasedToday, getAdCooldownRemaining, getAdCooldownSeconds, checkAndResetDaily, resetDailyLimit} = useTicketsStore();
   const {prizes, fetchPrizes, fetchDraws, incrementAdsForPrize, fillPrizeToGoal, startTimerForPrize} = usePrizesStore();
   const {addXPForAd, addXPForTicket} = useLevelStore();
   const {currentStreak, checkAndUpdateStreak, getNextMilestone, hasClaimedToday, _hasHydrated} = useStreakStore();
@@ -57,6 +58,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const [streakReward, setStreakReward] = useState<{xp: number; credits: number; isWeeklyBonus: boolean; isMilestone: boolean; milestoneDay?: number} | null>(null);
   const [ticketsPurchasedToday, setTicketsPurchasedToday] = useState(0);
   const [cooldownMinutes, setCooldownMinutes] = useState(0);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [canBuyTicket, setCanBuyTicket] = useState(true);
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [showExtractionEffect, setShowExtractionEffect] = useState(false);
@@ -101,6 +103,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     };
     updateTicketData();
     const interval = setInterval(updateTicketData, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Ad cooldown countdown (every second)
+  useEffect(() => {
+    const updateCooldown = () => {
+      const seconds = getAdCooldownSeconds();
+      setCooldownSeconds(seconds);
+    };
+    updateCooldown();
+    const interval = setInterval(updateCooldown, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -173,6 +186,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       return `${mins}:${secs.toString().padStart(2, '0')}`;
     }
     return `${secs}s`;
+  };
+
+  // Format ad cooldown in mm:ss
+  const formatAdCooldown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getDrawIdForPrize = (prizeId: string, timerStartedAt?: string) => {
@@ -289,6 +309,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         totalPoolTickets: totalPool,
       });
       setShowTicketSuccessModal(true);
+
+      // Attiva il cooldown di 20 minuti anche per acquisti con crediti
+      incrementAdsWatched();
     } catch (error) {
       console.error('[HomeScreen] Batch ticket purchase failed:', error);
       // Refund credits if batch purchase failed
@@ -559,18 +582,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
 
           {/* Watch Ad Button */}
           <TouchableOpacity
-            style={[styles.watchAdButton, (!canBuyTicket || !currentPrize || isBettingLocked) && styles.buttonDisabled]}
+            style={[styles.watchAdButton, (!canBuyTicket || !currentPrize || isBettingLocked || cooldownSeconds > 0) && styles.buttonDisabled]}
             onPress={handleWatchAd}
-            disabled={isWatchingAd || !canBuyTicket || !currentPrize || isBettingLocked}
+            disabled={isWatchingAd || !canBuyTicket || !currentPrize || isBettingLocked || cooldownSeconds > 0}
             activeOpacity={0.8}>
             <LinearGradient
-              colors={canBuyTicket && currentPrize && !isBettingLocked ? [COLORS.primary, '#FF8500'] : ['#666', '#555']}
+              colors={canBuyTicket && currentPrize && !isBettingLocked && cooldownSeconds === 0 ? [COLORS.primary, '#FF8500'] : ['#666', '#555']}
               start={{x: 0, y: 0}}
               end={{x: 1, y: 0}}
               style={styles.watchAdGradient}>
               <Ionicons name="play-circle" size={24} color={COLORS.white} />
               <Text style={styles.watchAdText}>
-                {isBettingLocked ? 'PUNTATE CHIUSE' : isWatchingAd ? 'CARICAMENTO...' : cooldownMinutes > 0 ? `ATTENDI ${cooldownMinutes} MIN` : 'GUARDA UNA PUBBLICITÀ E RICEVI UN BIGLIETTO!'}
+                {isBettingLocked ? 'PUNTATE CHIUSE' : isWatchingAd ? 'CARICAMENTO...' : cooldownSeconds > 0 ? `ATTENDI ${formatAdCooldown(cooldownSeconds)}` : 'GUARDA UNA PUBBLICITÀ E RICEVI UN BIGLIETTO!'}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -801,8 +824,8 @@ const styles = StyleSheet.create({
   buyTicketGradient: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.lg,
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
     gap: 4,
   },
   buyTicketText: {
@@ -811,6 +834,7 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     textAlign: 'center',
+    paddingHorizontal: SPACING.sm,
   },
   buttonDisabled: {
     opacity: 0.5,
@@ -988,7 +1012,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
     gap: SPACING.sm,
   },
   watchAdText: {
@@ -996,12 +1021,13 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    paddingHorizontal: SPACING.sm,
   },
   buyCreditsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.md,
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
     borderRadius: RADIUS.lg,
     borderWidth: 2,
     gap: SPACING.sm,
@@ -1061,9 +1087,8 @@ const styles = StyleSheet.create({
   ticketOptionGradient: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    minWidth: 90,
+    minWidth: Platform.OS === 'ios' ? 100 : 90,
+    minHeight: Platform.OS === 'ios' ? 90 : 80,
     gap: 4,
   },
   ticketOptionQty: {

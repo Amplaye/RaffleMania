@@ -93,24 +93,55 @@ export const getInputStyles = (): ViewStyle & TextStyle => {
   }) as ViewStyle & TextStyle;
 };
 
-// Platform-specific button padding (iOS needs slightly more)
+// Platform-specific button padding (iOS needs more padding for touch targets and text visibility)
 export const getButtonPadding = (size: 'small' | 'medium' | 'large' = 'medium'): ViewStyle => {
   const paddings = {
     small: Platform.select({
-      ios: {paddingVertical: 10, paddingHorizontal: 16},
+      ios: {paddingVertical: 12, paddingHorizontal: 18},
       android: {paddingVertical: 8, paddingHorizontal: 14},
     }),
     medium: Platform.select({
-      ios: {paddingVertical: 16, paddingHorizontal: 24},
+      ios: {paddingVertical: 18, paddingHorizontal: 28},
       android: {paddingVertical: 14, paddingHorizontal: 22},
     }),
     large: Platform.select({
-      ios: {paddingVertical: 20, paddingHorizontal: 32},
+      ios: {paddingVertical: 22, paddingHorizontal: 36},
       android: {paddingVertical: 18, paddingHorizontal: 30},
     }),
   };
 
   return paddings[size] as ViewStyle;
+};
+
+// Platform-specific spacing values - iOS typically needs slightly more spacing
+export const getPlatformSpacing = (baseValue: number): number => {
+  return Platform.OS === 'ios' ? Math.round(baseValue * 1.15) : baseValue;
+};
+
+// Platform-specific button height (ensures consistent touch targets)
+export const getButtonHeight = (size: 'small' | 'medium' | 'large' = 'medium'): number => {
+  const heights = {
+    small: Platform.OS === 'ios' ? 40 : 36,
+    medium: Platform.OS === 'ios' ? 52 : 48,
+    large: Platform.OS === 'ios' ? 60 : 56,
+  };
+  return heights[size];
+};
+
+// Platform-specific gradient button style
+export const getGradientButtonStyle = (size: 'small' | 'medium' | 'large' = 'medium'): ViewStyle => {
+  return Platform.select({
+    ios: {
+      paddingVertical: size === 'small' ? 14 : size === 'medium' ? 18 : 22,
+      paddingHorizontal: size === 'small' ? 20 : size === 'medium' ? 28 : 36,
+      minHeight: getButtonHeight(size),
+    },
+    android: {
+      paddingVertical: size === 'small' ? 10 : size === 'medium' ? 14 : 18,
+      paddingHorizontal: size === 'small' ? 16 : size === 'medium' ? 24 : 32,
+      minHeight: getButtonHeight(size),
+    },
+  }) as ViewStyle;
 };
 
 // Platform-specific border radius handling
@@ -242,6 +273,9 @@ export default {
   createTextStyle,
   getInputStyles,
   getButtonPadding,
+  getPlatformSpacing,
+  getButtonHeight,
+  getGradientButtonStyle,
   getBorderRadiusStyle,
   createFlexGap,
   getModalOverlayStyle,

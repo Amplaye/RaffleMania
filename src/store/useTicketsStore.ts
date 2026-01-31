@@ -73,6 +73,7 @@ interface TicketsState {
   canPurchaseTicket: () => boolean;
   getTicketsPurchasedToday: () => number;
   getAdCooldownRemaining: () => number; // Minuti rimanenti
+  getAdCooldownSeconds: () => number; // Secondi rimanenti per countdown
   checkAndResetDaily: () => void;
   resetDailyLimit: () => void; // Debug: reset limite giornaliero
 
@@ -309,6 +310,18 @@ export const useTicketsStore = create<TicketsState>()(
     const now = new Date();
     const diffMinutes = (now.getTime() - lastWatched.getTime()) / (1000 * 60);
     const remaining = DAILY_LIMITS.AD_COOLDOWN_MINUTES - diffMinutes;
+    return remaining > 0 ? Math.ceil(remaining) : 0;
+  },
+
+  getAdCooldownSeconds: () => {
+    const state = get();
+    if (!state.lastAdWatchedAt) return 0;
+
+    const lastWatched = new Date(state.lastAdWatchedAt);
+    const now = new Date();
+    const diffSeconds = (now.getTime() - lastWatched.getTime()) / 1000;
+    const cooldownSeconds = DAILY_LIMITS.AD_COOLDOWN_MINUTES * 60;
+    const remaining = cooldownSeconds - diffSeconds;
     return remaining > 0 ? Math.ceil(remaining) : 0;
   },
 
