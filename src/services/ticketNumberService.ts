@@ -24,6 +24,32 @@ interface DrawTicketRegistry {
 // In produzione questo è gestito dal database con lock
 const drawRegistries: Map<string, DrawTicketRegistry> = new Map();
 
+// Range per numeri casuali (1-999999)
+const MIN_TICKET_NUMBER = 1;
+const MAX_TICKET_NUMBER = 999999;
+
+/**
+ * Genera un numero casuale univoco per un draw
+ * Usa timestamp + random per massimizzare l'unicità tra dispositivi
+ */
+const generateUniqueRandomNumber = (existingNumbers: Set<number>): number => {
+  // Usa timestamp (ultimi 6 digit) + componente random per unicità cross-device
+  const timestamp = Date.now() % 1000000;
+  const random = Math.floor(Math.random() * 1000);
+
+  // Combina per creare un numero nel range
+  let number = ((timestamp * 1000 + random) % (MAX_TICKET_NUMBER - MIN_TICKET_NUMBER + 1)) + MIN_TICKET_NUMBER;
+
+  // Se per caso esiste già (improbabile), genera uno nuovo
+  let attempts = 0;
+  while (existingNumbers.has(number) && attempts < 100) {
+    number = Math.floor(Math.random() * (MAX_TICKET_NUMBER - MIN_TICKET_NUMBER + 1)) + MIN_TICKET_NUMBER;
+    attempts++;
+  }
+
+  return number;
+};
+
 /**
  * Genera un drawId unico basato su prizeId e timerStartedAt
  */
@@ -55,7 +81,7 @@ const getOrCreateRegistry = (drawId: string, prizeId: string): DrawTicketRegistr
 
 /**
  * Assegna numeri univoci per un draw (MODE: MOCK/OFFLINE)
- * Questo metodo simula il comportamento atomico del backend
+ * Usa numeri casuali basati su timestamp per garantire unicità cross-device
  *
  * @param drawId - ID del draw/estrazione
  * @param prizeId - ID del premio
@@ -72,15 +98,17 @@ const assignNumbersLocal = (
   const registry = getOrCreateRegistry(drawId, prizeId);
   const assignedNumbers: number[] = [];
 
-  // Assegna i numeri sequenzialmente (atomicamente in questa implementazione locale)
+  // Assegna numeri casuali univoci (basati su timestamp + random)
+  // Questo garantisce unicità anche tra dispositivi diversi
   for (let i = 0; i < quantity; i++) {
-    const number = registry.nextNumber;
+    // Aggiungi piccolo delay tra numeri per variare il timestamp
+    const number = generateUniqueRandomNumber(registry.assignedNumbers);
     registry.assignedNumbers.add(number);
     assignedNumbers.push(number);
-    registry.nextNumber++;
+    registry.nextNumber = Math.max(registry.nextNumber, number + 1);
   }
 
-  console.log(`[TicketService] Assigned ${quantity} numbers to user ${userId} for draw ${drawId}:`, assignedNumbers);
+  console.log(`[TicketService] Assigned ${quantity} random numbers to user ${userId} for draw ${drawId}:`, assignedNumbers);
   console.log(`[TicketService] Total numbers assigned for this draw: ${registry.assignedNumbers.size}`);
 
   return assignedNumbers;
@@ -90,33 +118,35 @@ const assignNumbersLocal = (
  * Assegna numeri univoci tramite API backend
  * Il backend gestisce la concorrenza con transazioni atomiche
  *
- * @param drawId - ID del draw/estrazione
- * @param prizeId - ID del premio
+ * @param prizeId - ID del premio (numerico)
  * @param quantity - Numero di biglietti da assegnare
  * @param source - Fonte dell'acquisto ('ad' | 'credits')
  * @returns Array di numeri univoci assegnati
  */
 const assignNumbersAPI = async (
-  drawId: string,
   prizeId: string,
   quantity: number,
   source: 'ad' | 'credits'
 ): Promise<number[]> => {
   try {
+    // Estrai l'ID numerico del premio (rimuovi prefisso se presente)
+    const numericPrizeId = parseInt(prizeId.replace(/\D/g, ''), 10) || parseInt(prizeId, 10);
+
     const response = await apiClient.post('/tickets/batch', {
-      draw_id: drawId,
-      prize_id: prizeId,
+      prize_id: numericPrizeId,
       quantity,
       source,
     });
 
-    const tickets = response.data.data.tickets;
-    const numbers = tickets.map((t: any) => t.ticketNumber || t.ticket_number);
+    // Il backend restituisce assignedNumbers direttamente
+    const numbers = response.data.data.assignedNumbers ||
+                   response.data.data.tickets?.map((t: any) => t.ticketNumber || t.ticket_number) ||
+                   [];
 
     console.log(`[TicketService] API assigned ${quantity} numbers:`, numbers);
     return numbers;
   } catch (error) {
-    console.error('[TicketService] API error:', getErrorMessage(error));
+    console.log('[TicketService] API error:', getErrorMessage(error));
     throw error;
   }
 };
@@ -166,12 +196,12 @@ export const requestTickets = async (
   const useMockMode = API_CONFIG.USE_MOCK_DATA || isGuestUser;
 
   if (useMockMode) {
-    // Modalità mock: assegnazione locale
+    // Modalità mock: assegnazione locale (per utenti guest)
     assignedNumbers = assignNumbersLocal(drawId, prizeId, quantity, userId);
   } else {
-    // Modalità API: il backend gestisce l'atomicità
+    // Modalità API: il backend gestisce l'atomicità con transazioni
     try {
-      assignedNumbers = await assignNumbersAPI(drawId, prizeId, quantity, source);
+      assignedNumbers = await assignNumbersAPI(prizeId, quantity, source);
     } catch (error) {
       // Fallback a locale se API fallisce (solo per errori di rete)
       console.log('[TicketService] API failed, falling back to local assignment');

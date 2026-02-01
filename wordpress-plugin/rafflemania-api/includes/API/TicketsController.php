@@ -71,6 +71,33 @@ class TicketsController extends WP_REST_Controller {
                 'permission_callback' => '__return_true'
             ]
         ]);
+
+        // Create multiple tickets in batch (atomic operation)
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/batch', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'create_tickets_batch'],
+                'permission_callback' => [$this, 'check_auth'],
+                'args' => [
+                    'prize_id' => [
+                        'required' => true,
+                        'type' => 'integer'
+                    ],
+                    'quantity' => [
+                        'required' => true,
+                        'type' => 'integer',
+                        'minimum' => 1,
+                        'maximum' => 10
+                    ],
+                    'source' => [
+                        'required' => false,
+                        'type' => 'string',
+                        'default' => 'ad',
+                        'enum' => ['ad', 'credits']
+                    ]
+                ]
+            ]
+        ]);
     }
 
     public function get_tickets(WP_REST_Request $request) {
@@ -373,6 +400,200 @@ class TicketsController extends WP_REST_Controller {
                 'totalTickets' => (int) $total
             ]
         ]);
+    }
+
+    /**
+     * Create multiple tickets in a single atomic operation
+     * Uses database transaction to ensure unique sequential numbers
+     */
+    public function create_tickets_batch(WP_REST_Request $request) {
+        global $wpdb;
+        $table_tickets = $wpdb->prefix . 'rafflemania_tickets';
+        $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        $user_id = $request->get_param('_auth_user_id');
+        $prize_id = $request->get_param('prize_id');
+        $quantity = (int) $request->get_param('quantity');
+        $source = $request->get_param('source') ?: 'ad';
+
+        // Validate quantity
+        if ($quantity < 1 || $quantity > 10) {
+            return new WP_Error('invalid_quantity', 'Quantità non valida (1-10)', ['status' => 400]);
+        }
+
+        // Check prize exists and is active
+        $prize = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_prizes} WHERE id = %d AND is_active = 1",
+            $prize_id
+        ));
+
+        if (!$prize) {
+            return new WP_Error('prize_not_found', 'Premio non trovato o non attivo', ['status' => 404]);
+        }
+
+        // Start transaction for atomic operation
+        $wpdb->query('START TRANSACTION');
+
+        try {
+            // If using credits, check and deduct
+            if ($source === 'credits') {
+                $user = $wpdb->get_row($wpdb->prepare(
+                    "SELECT credits, xp, level FROM {$table_users} WHERE id = %d FOR UPDATE",
+                    $user_id
+                ));
+
+                $credit_cost = get_option('rafflemania_credits_per_ticket', 1);
+                $total_cost = $credit_cost * $quantity;
+
+                if ($user->credits < $total_cost) {
+                    $wpdb->query('ROLLBACK');
+                    return new WP_Error('insufficient_credits', 'Crediti insufficienti', ['status' => 400]);
+                }
+
+                // Get XP reward from settings
+                $xp_reward = get_option('rafflemania_xp_credit_ticket', 5) * $quantity;
+
+                // Deduct credits and add XP
+                $new_xp = $user->xp + $xp_reward;
+                $new_level = $this->calculate_level($new_xp);
+
+                $wpdb->query($wpdb->prepare(
+                    "UPDATE {$table_users} SET credits = credits - %d, xp = %d, level = %d WHERE id = %d",
+                    $total_cost,
+                    $new_xp,
+                    $new_level,
+                    $user_id
+                ));
+
+                // Record transaction
+                $table_transactions = $wpdb->prefix . 'rafflemania_transactions';
+                $wpdb->insert($table_transactions, [
+                    'user_id' => $user_id,
+                    'type' => 'spend',
+                    'amount' => -$total_cost,
+                    'description' => $quantity . ' biglietti per ' . $prize->name,
+                    'reference_id' => 'prize_' . $prize_id
+                ]);
+
+                // Track daily credits spent
+                $this->track_daily_stat('credits_spent', $total_cost);
+            }
+
+            // Track daily ads watched and add XP (for 'ad' source)
+            if ($source === 'ad') {
+                $this->track_daily_stat('ads_watched');
+
+                // Get XP reward from settings
+                $xp_reward = get_option('rafflemania_xp_watch_ad', 10);
+
+                // Get current user XP and level
+                $user = $wpdb->get_row($wpdb->prepare(
+                    "SELECT xp, level FROM {$table_users} WHERE id = %d FOR UPDATE",
+                    $user_id
+                ));
+
+                $new_xp = $user->xp + $xp_reward;
+                $new_level = $this->calculate_level($new_xp);
+
+                // Update user's watched_ads count and add XP
+                $wpdb->query($wpdb->prepare(
+                    "UPDATE {$table_users} SET watched_ads = watched_ads + 1, xp = %d, level = %d WHERE id = %d",
+                    $new_xp,
+                    $new_level,
+                    $user_id
+                ));
+            }
+
+            // Generate draw_id
+            $draw_id = $prize->timer_started_at
+                ? 'draw_' . $prize_id . '_' . str_replace(['-', ':', ' '], '', substr($prize->timer_started_at, 0, 19))
+                : 'draw_' . $prize_id . '_pending';
+
+            // Lock and get next ticket number atomically
+            $max_number = $wpdb->get_var($wpdb->prepare(
+                "SELECT COALESCE(MAX(ticket_number), 0) FROM {$table_tickets} WHERE prize_id = %d FOR UPDATE",
+                $prize_id
+            ));
+
+            $created_tickets = [];
+            $assigned_numbers = [];
+
+            // Create tickets with sequential numbers
+            for ($i = 0; $i < $quantity; $i++) {
+                $ticket_number = $max_number + $i + 1;
+                $assigned_numbers[] = $ticket_number;
+
+                $result = $wpdb->insert($table_tickets, [
+                    'user_id' => $user_id,
+                    'prize_id' => $prize_id,
+                    'draw_id' => $draw_id,
+                    'ticket_number' => $ticket_number,
+                    'source' => $source,
+                    'status' => 'active'
+                ]);
+
+                if (!$result) {
+                    $wpdb->query('ROLLBACK');
+                    return new WP_Error('ticket_creation_failed', 'Impossibile creare il biglietto', ['status' => 500]);
+                }
+
+                $ticket_id = $wpdb->insert_id;
+                $created_tickets[] = [
+                    'id' => (string) $ticket_id,
+                    'ticketNumber' => $ticket_number,
+                    'prizeId' => (string) $prize_id,
+                    'drawId' => $draw_id,
+                    'source' => $source,
+                    'status' => 'active',
+                    'createdAt' => current_time('mysql')
+                ];
+            }
+
+            // Update prize current_ads
+            $new_current_ads = min($prize->current_ads + $quantity, $prize->goal_ads);
+            $update_data = ['current_ads' => $new_current_ads];
+
+            // Check if goal reached and timer should start
+            if ($new_current_ads >= $prize->goal_ads && $prize->timer_status === 'waiting') {
+                $update_data['timer_status'] = 'countdown';
+                $update_data['timer_started_at'] = current_time('mysql');
+                $update_data['scheduled_at'] = date('Y-m-d H:i:s', strtotime('+' . $prize->timer_duration . ' seconds'));
+            }
+
+            $wpdb->update($table_prizes, $update_data, ['id' => $prize_id]);
+
+            // Commit transaction
+            $wpdb->query('COMMIT');
+
+            // Get all user numbers for this prize
+            $user_numbers = $wpdb->get_col($wpdb->prepare(
+                "SELECT ticket_number FROM {$table_tickets} WHERE user_id = %d AND prize_id = %d AND status = 'active'",
+                $user_id,
+                $prize_id
+            ));
+
+            // Get total pool tickets
+            $total_pool = $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM {$table_tickets} WHERE prize_id = %d AND status = 'active'",
+                $prize_id
+            ));
+
+            return new WP_REST_Response([
+                'success' => true,
+                'data' => [
+                    'tickets' => $created_tickets,
+                    'assignedNumbers' => $assigned_numbers,
+                    'userNumbers' => array_map('intval', $user_numbers),
+                    'totalPoolTickets' => (int) $total_pool,
+                    'quantity' => $quantity
+                ]
+            ], 201);
+
+        } catch (\Exception $e) {
+            $wpdb->query('ROLLBACK');
+            return new WP_Error('batch_failed', 'Errore durante la creazione dei biglietti: ' . $e->getMessage(), ['status' => 500]);
+        }
     }
 
     public function check_auth(WP_REST_Request $request) {
