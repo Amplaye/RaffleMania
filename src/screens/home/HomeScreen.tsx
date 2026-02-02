@@ -16,9 +16,9 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
-import {AnimatedBackground, StreakModal, ExtractionResultModal, UrgencyBorderEffect, ExtractionStartEffect, FlipCountdownTimer, TicketSuccessModal, TicketSuccessInfo} from '../../components/common';
+import {AnimatedBackground, StreakModal, StreakRecoveryModal, ExtractionResultModal, UrgencyBorderEffect, ExtractionStartEffect, FlipCountdownTimer, TicketSuccessModal, TicketSuccessInfo} from '../../components/common';
 import {getTotalPoolTickets} from '../../services/mock';
-import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, useExtractionStore, DAILY_LIMITS, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS} from '../../store';
+import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, useExtractionStore, useLevelUpStore, DAILY_LIMITS, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS, setMidnightStreakCallback} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -41,7 +41,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const {fetchTickets, addTicket, addTicketsBatch, incrementAdsWatched, canPurchaseTicket, getTicketsPurchasedToday, getAdCooldownRemaining, getAdCooldownSeconds, checkAndResetDaily, resetDailyLimit} = useTicketsStore();
   const {prizes, fetchPrizes, fetchDraws, incrementAdsForPrize, fillPrizeToGoal, startTimerForPrize} = usePrizesStore();
   const {addXPForAd, addXPForTicket} = useLevelStore();
-  const {currentStreak, checkAndUpdateStreak, getNextMilestone, hasClaimedToday, _hasHydrated} = useStreakStore();
+  const {currentStreak, checkAndUpdateStreak, getNextMilestone, hasClaimedToday, _hasHydrated, checkDayChange, setupMidnightTimer, missedDays, shouldShowRecoveryPopup, markRecoveryPopupShown} = useStreakStore();
   const {useCreditsForTickets: spendCreditsForTickets, addCredits} = useCreditsStore();
   const user = useAuthStore(state => state.user);
   const refreshUserData = useAuthStore(state => state.refreshUserData);
@@ -57,13 +57,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [streakReward, setStreakReward] = useState<{xp: number; credits: number; isWeeklyBonus: boolean; isMilestone: boolean; milestoneDay?: number} | null>(null);
   const [ticketsPurchasedToday, setTicketsPurchasedToday] = useState(0);
-  const [cooldownMinutes, setCooldownMinutes] = useState(0);
+  const [_cooldownMinutes, setCooldownMinutes] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [canBuyTicket, setCanBuyTicket] = useState(true);
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [showExtractionEffect, setShowExtractionEffect] = useState(false);
   const [showTicketSuccessModal, setShowTicketSuccessModal] = useState(false);
   const [ticketSuccessInfo, setTicketSuccessInfo] = useState<TicketSuccessInfo | null>(null);
+  const [showStreakRecoveryModal, setShowStreakRecoveryModal] = useState(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -77,21 +78,50 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     fetchPrizes();
     fetchDraws();
     fetchSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Check streak
+  // Check streak e setup midnight callback
   useEffect(() => {
     if (!_hasHydrated) return;
+
+    // Registra callback per quando scatta la mezzanotte
+    setMidnightStreakCallback((reward) => {
+      console.log('[HomeScreen] Midnight callback received, showing streak modal');
+      setStreakReward(reward);
+      setShowStreakModal(true);
+    });
+
+    // Setup midnight timer se non già fatto
+    setupMidnightTimer();
+
     const checkStreak = async () => {
+      // Controlla prima se il giorno è cambiato
+      checkDayChange();
+
+      // Poi controlla se mostrare il popup
       if (!hasClaimedToday) {
         const reward = await checkAndUpdateStreak();
         if (reward) {
           setStreakReward(reward);
           setTimeout(() => setShowStreakModal(true), 500);
+        } else {
+          // Se reward è null e lo streak è rotto, mostra il modal di recupero
+          // ma solo se non è già stato mostrato oggi
+          if (shouldShowRecoveryPopup()) {
+            markRecoveryPopupShown();
+            setTimeout(() => setShowStreakRecoveryModal(true), 500);
+          }
         }
       }
     };
     checkStreak();
+
+    // Cleanup callback quando component si smonta
+    return () => {
+      setMidnightStreakCallback(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_hasHydrated]);
 
   // Update ticket data
@@ -104,6 +134,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     updateTicketData();
     const interval = setInterval(updateTicketData, 60000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Ad cooldown countdown (every second)
@@ -115,6 +146,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     updateCooldown();
     const interval = setInterval(updateCooldown, 1000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Countdown timer effect
@@ -139,6 +171,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPrize?.timerStatus, currentPrize?.scheduledAt, currentPrize?.id]);
 
   // Handle extraction when timer ends
@@ -178,15 +211,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     }
   };
 
-  // Format countdown display
-  const formatCountdown = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    if (mins > 0) {
-      return `${mins}:${secs.toString().padStart(2, '0')}`;
-    }
-    return `${secs}s`;
-  };
 
   // Format ad cooldown in mm:ss
   const formatAdCooldown = (seconds: number) => {
@@ -450,7 +474,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
 
         {/* Debug Buttons - Hidden when timer is active */}
         {currentPrize?.timerStatus !== 'countdown' && currentPrize?.timerStatus !== 'extracting' && (
-          <View style={styles.debugContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.debugScrollContent}
+            style={styles.debugScrollContainer}>
             <TouchableOpacity
               style={[styles.debugButton, {backgroundColor: colors.card}]}
               onPress={() => {
@@ -486,7 +514,51 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               activeOpacity={0.7}>
               <Text style={[styles.debugButtonText, {color: colors.text}]}>TIMER 10s</Text>
             </TouchableOpacity>
-          </View>
+
+            <TouchableOpacity
+              style={[styles.debugButton, {backgroundColor: colors.card}]}
+              onPress={async () => {
+                resetStreak();
+                Alert.alert('Debug', 'Streak resettato! Riapri l\'app per vedere il popup.');
+              }}
+              activeOpacity={0.7}>
+              <Text style={[styles.debugButtonText, {color: colors.text}]}>RESET STREAK</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.debugButton, {backgroundColor: colors.card}]}
+              onPress={() => {
+                // Simula 3 giorni persi settando lastLoginDate a 4 giorni fa
+                const fourDaysAgo = new Date();
+                fourDaysAgo.setDate(fourDaysAgo.getDate() - 4);
+                const dateStr = `${fourDaysAgo.getFullYear()}-${String(fourDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(fourDaysAgo.getDate()).padStart(2, '0')}`;
+                useStreakStore.setState({
+                  currentStreak: 5,
+                  lastLoginDate: dateStr,
+                  lastClaimedDate: dateStr,
+                  hasClaimedToday: false,
+                  streakBroken: false,
+                  missedDays: 0,
+                });
+                Alert.alert('Debug', 'Simulato streak di 5 giorni con 3 giorni persi. Riapri l\'app per vedere il modal di recupero.');
+              }}
+              activeOpacity={0.7}>
+              <Text style={[styles.debugButtonText, {color: colors.text}]}>TEST RECOVERY</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.debugButton, {backgroundColor: '#FF6B00'}]}
+              onPress={() => {
+                // Test level up - simula passaggio dal livello corrente al prossimo
+                const currentLevel = useLevelStore.getState().level;
+                const nextLevel = Math.min(currentLevel + 1, 10);
+                const creditReward = nextLevel <= 10 ? [0, 5, 10, 20, 35, 50, 65, 80, 90, 95, 100][nextLevel] : 0;
+                useLevelUpStore.getState().triggerLevelUp(currentLevel, nextLevel, creditReward);
+              }}
+              activeOpacity={0.7}>
+              <Text style={[styles.debugButtonText, {color: '#FFFFFF'}]}>TEST LEVEL UP</Text>
+            </TouchableOpacity>
+          </ScrollView>
         )}
 
         {/* Flip Countdown Timer - Card style timer */}
@@ -667,6 +739,45 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         onClose={() => setShowStreakModal(false)}
       />
 
+      {/* Streak Recovery Modal */}
+      <StreakRecoveryModal
+        visible={showStreakRecoveryModal}
+        currentStreak={currentStreak}
+        missedDays={missedDays}
+        userCredits={user?.credits ?? 0}
+        onRecover={async () => {
+          const success = await recoverStreak();
+          setShowStreakRecoveryModal(false);
+          if (success) {
+            // Ora controlla e aggiorna lo streak (mostrerà il popup normale)
+            const reward = await checkAndUpdateStreak();
+            if (reward) {
+              setStreakReward(reward);
+              setTimeout(() => setShowStreakModal(true), 300);
+            }
+            refreshUserData();
+          } else {
+            Alert.alert('Errore', 'Crediti insufficienti per recuperare la streak.');
+          }
+        }}
+        onSkip={() => {
+          setShowStreakRecoveryModal(false);
+          // Resetta lo streak e mostra il popup del giorno 1
+          resetStreak();
+          setTimeout(async () => {
+            const reward = await checkAndUpdateStreak();
+            if (reward) {
+              setStreakReward(reward);
+              setTimeout(() => setShowStreakModal(true), 300);
+            }
+          }, 100);
+        }}
+        onGoToProfile={() => {
+          setShowStreakRecoveryModal(false);
+          navigation.navigate('Streak');
+        }}
+      />
+
       {/* Extraction Result Modal */}
       <ExtractionResultModal
         visible={showResultModal}
@@ -840,24 +951,31 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   // Debug Buttons
-  debugContainer: {
+  debugScrollContainer: {
+    height: 28,
+    maxHeight: 28,
+    marginBottom: 4,
+  },
+  debugScrollContent: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-    marginHorizontal: SPACING.md,
-    marginBottom: SPACING.sm,
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
   },
   debugButton: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: RADIUS.md,
+    height: 22,
+    paddingHorizontal: 8,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: `${COLORS.primary}40`,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   debugButtonText: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    lineHeight: 11,
   },
   // Countdown Timer
   countdownContainer: {

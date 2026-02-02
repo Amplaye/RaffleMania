@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1084147654031",
+    "project_id": "rafflemania-483c8",
+    "storage_bucket": "rafflemania-483c8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1084147654031:android:4af2743424bb9f7e6d7ffa",
+        "android_client_info": {
+          "package_name": "com.rafflemaniaapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVTYAcM11D30E3Skzm0mBR8NA2OQZkovM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

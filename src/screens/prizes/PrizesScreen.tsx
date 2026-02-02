@@ -9,7 +9,6 @@ import {
   StatusBar,
   Animated,
   Dimensions,
-  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -216,6 +215,7 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
 
   useEffect(() => {
     fetchPrizes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Filter prizes by status

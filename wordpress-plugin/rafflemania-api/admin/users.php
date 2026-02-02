@@ -3,6 +3,7 @@ if (!defined('ABSPATH')) exit;
 
 global $wpdb;
 $table_users = $wpdb->prefix . 'rafflemania_users';
+$table_referrals = $wpdb->prefix . 'rafflemania_referrals';
 
 $search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
 $page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
@@ -13,19 +14,25 @@ $where = "1=1";
 $params = [];
 
 if ($search) {
-    $where .= " AND (username LIKE %s OR email LIKE %s)";
+    $where .= " AND (u.username LIKE %s OR u.email LIKE %s)";
     $params[] = '%' . $wpdb->esc_like($search) . '%';
     $params[] = '%' . $wpdb->esc_like($search) . '%';
 }
 
-$total = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table_users} WHERE {$where}", ...$params));
+$total = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table_users} u WHERE {$where}", ...$params));
 $total_pages = ceil($total / $per_page);
 
 $params[] = $per_page;
 $params[] = $offset;
 
+// Query with referral count subquery
 $users = $wpdb->get_results($wpdb->prepare(
-    "SELECT * FROM {$table_users} WHERE {$where} ORDER BY created_at DESC LIMIT %d OFFSET %d",
+    "SELECT u.*,
+            (SELECT COUNT(*) FROM {$table_referrals} r WHERE r.referrer_user_id = u.id) as referral_count
+     FROM {$table_users} u
+     WHERE {$where}
+     ORDER BY u.created_at DESC
+     LIMIT %d OFFSET %d",
     ...$params
 ));
 ?>
@@ -115,7 +122,8 @@ $users = $wpdb->get_results($wpdb->prepare(
                     <th>XP</th>
                     <th>Crediti</th>
                     <th>Streak</th>
-                    <th>Referral</th>
+                    <th>Codice Ref.</th>
+                    <th>Amici Portati</th>
                     <th>Registrato</th>
                     <th>Stato</th>
                 </tr>
@@ -135,6 +143,13 @@ $users = $wpdb->get_results($wpdb->prepare(
                     <td><?php echo number_format($user->credits); ?></td>
                     <td><?php echo $user->current_streak; ?> 🔥</td>
                     <td><code><?php echo esc_html($user->referral_code); ?></code></td>
+                    <td>
+                        <?php if ($user->referral_count > 0): ?>
+                        <span class="rafflemania-badge rafflemania-badge-success"><?php echo $user->referral_count; ?> 👥</span>
+                        <?php else: ?>
+                        <span style="color: #999;">0</span>
+                        <?php endif; ?>
+                    </td>
                     <td><?php echo date('d/m/Y', strtotime($user->created_at)); ?></td>
                     <td>
                         <?php if ($user->is_active): ?>

@@ -23,6 +23,7 @@ const SlideDigitCard = memo(({digit, isUrgent, prevDigit}: {digit: string; isUrg
         useNativeDriver: true,
       }).start();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [digit, prevDigit]);
 
   // New digit slides in from right
@@ -122,6 +123,7 @@ export const FlipCountdownTimer: React.FC<FlipCountdownTimerProps> = ({
 
     setPrevTime(time);
     setTime(newTime);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seconds]);
 
   // Pulse animation when urgent
@@ -146,6 +148,7 @@ export const FlipCountdownTimer: React.FC<FlipCountdownTimerProps> = ({
     } else {
       pulseAnim.setValue(1);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isUrgent, isVisible]);
 
   if (!isVisible) return null;

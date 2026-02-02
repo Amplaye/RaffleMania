@@ -1,6 +1,6 @@
 import React from 'react';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
-import {View, StyleSheet, Text, TouchableOpacity, Platform} from 'react-native';
+import {View, StyleSheet, TouchableOpacity, Platform} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {BottomTabBarProps} from '@react-navigation/bottom-tabs';
@@ -9,7 +9,7 @@ import {PrizesScreen} from '../screens/prizes';
 import {TicketsScreen} from '../screens/tickets';
 import {ShopScreen} from '../screens/shop';
 import {ProfileScreen} from '../screens/profile';
-import {COLORS, FONT_FAMILY, FONT_WEIGHT} from '../utils/constants';
+import {COLORS} from '../utils/constants';
 import {useThemeColors} from '../hooks/useThemeColors';
 
 export type TabParamList = {

@@ -1,4 +1,4 @@
-import React, {useRef, useEffect} from 'react';
+import React, {useRef, useEffect, useState, useCallback} from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,13 @@ import {
   Alert,
   Animated,
   Clipboard,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer} from '../../components/common';
-import {useAuthStore} from '../../store';
+import {useAuthStore, useReferralStore, REFERRAL_REWARDS} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -87,14 +89,15 @@ const StepItem: React.FC<{
   );
 };
 
-// Invited Friend Card (mock data for now)
+// Invited Friend Card
 const InvitedFriendCard: React.FC<{
   name: string;
   daysActive: number;
   isCompleted: boolean;
+  rewardClaimed: boolean;
   colors: any;
-}> = ({name, daysActive, isCompleted, colors}) => {
-  const progress = Math.min(daysActive / 7, 1);
+}> = ({name, daysActive, isCompleted, rewardClaimed: _rewardClaimed, colors}) => {
+  const progress = Math.min(daysActive / REFERRAL_REWARDS.DAYS_REQUIRED, 1);
 
   return (
     <View style={[styles.friendCard, {backgroundColor: colors.card}]}>
@@ -105,7 +108,7 @@ const InvitedFriendCard: React.FC<{
         <View style={styles.friendInfo}>
           <Text style={[styles.friendName, {color: colors.text}]}>{name}</Text>
           <Text style={[styles.friendStatus, {color: colors.textMuted}]}>
-            {isCompleted ? 'Completato!' : `${daysActive}/7 giorni attivi`}
+            {isCompleted ? 'Completato!' : `${daysActive}/${REFERRAL_REWARDS.DAYS_REQUIRED} giorni attivi`}
           </Text>
         </View>
       </View>
@@ -113,7 +116,7 @@ const InvitedFriendCard: React.FC<{
         {isCompleted ? (
           <View style={styles.completedBadge}>
             <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-            <Text style={styles.completedText}>+15</Text>
+            <Text style={styles.completedText}>+{REFERRAL_REWARDS.REFERRER_CREDITS}</Text>
           </View>
         ) : (
           <View style={styles.progressContainer}>
@@ -132,24 +135,111 @@ const InvitedFriendCard: React.FC<{
   );
 };
 
+// My Progress Card (when I was referred by someone)
+const MyProgressCard: React.FC<{
+  referrerName: string;
+  daysActive: number;
+  isCompleted: boolean;
+  rewardClaimed: boolean;
+  colors: any;
+}> = ({referrerName, daysActive, isCompleted, rewardClaimed, colors}) => {
+  const progress = Math.min(daysActive / REFERRAL_REWARDS.DAYS_REQUIRED, 1);
+
+  return (
+    <View style={[styles.myProgressCard, {backgroundColor: colors.card, borderColor: COLORS.primary}]}>
+      <View style={styles.myProgressHeader}>
+        <Ionicons name="gift" size={24} color={COLORS.primary} />
+        <Text style={[styles.myProgressTitle, {color: colors.text}]}>Il tuo bonus referral</Text>
+      </View>
+      <Text style={[styles.myProgressSubtitle, {color: colors.textMuted}]}>
+        Invitato da <Text style={{color: COLORS.primary, fontWeight: '600'}}>{referrerName}</Text>
+      </Text>
+
+      {isCompleted ? (
+        <View style={styles.myProgressCompleted}>
+          <Ionicons name="checkmark-circle" size={28} color="#4CAF50" />
+          <Text style={[styles.myProgressCompletedText, {color: '#4CAF50'}]}>
+            {rewardClaimed ? 'Bonus riscosso!' : `Hai guadagnato ${REFERRAL_REWARDS.REFERRED_CREDITS} crediti!`}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <View style={styles.myProgressBarContainer}>
+            <View style={[styles.myProgressBar, {backgroundColor: `${COLORS.primary}20`}]}>
+              <View
+                style={[
+                  styles.myProgressFill,
+                  {width: `${progress * 100}%`, backgroundColor: COLORS.primary},
+                ]}
+              />
+            </View>
+            <Text style={[styles.myProgressText, {color: colors.textSecondary}]}>
+              {daysActive}/{REFERRAL_REWARDS.DAYS_REQUIRED} giorni
+            </Text>
+          </View>
+          <Text style={[styles.myProgressHint, {color: colors.textMuted}]}>
+            Resta attivo per {REFERRAL_REWARDS.DAYS_REQUIRED - daysActive} giorni per ricevere {REFERRAL_REWARDS.REFERRED_CREDITS} crediti!
+          </Text>
+        </>
+      )}
+    </View>
+  );
+};
+
 export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
   const {colors, isDark} = useThemeColors();
   const {user} = useAuthStore();
+  const {
+    referredUsers,
+    referrer,
+    isLoading,
+    getTotalCreditsEarned,
+    checkAndClaimRewards,
+    updateDailyActivity,
+    fetchReferrals,
+    simulateNewReferral,
+    simulateDaysActive,
+  } = useReferralStore();
+
   const referralCode = user?.referralCode || 'RAFFLE2024';
 
-  // Mock data for invited friends
-  const invitedFriends = [
-    {name: 'Marco', daysActive: 7, isCompleted: true},
-    {name: 'Giulia', daysActive: 4, isCompleted: false},
-    {name: 'Luca', daysActive: 2, isCompleted: false},
-  ];
+  // Fetch referrals, update daily activity and check for rewards on mount
+  useEffect(() => {
+    const initReferrals = async () => {
+      // First fetch from API to get latest data
+      await fetchReferrals();
 
-  const totalCreditsEarned = invitedFriends.filter(f => f.isCompleted).length * 15;
+      // Then update activity
+      await updateDailyActivity();
+
+      // Check and claim rewards
+      const rewards = await checkAndClaimRewards();
+      if (rewards.referrerReward > 0 || rewards.referredReward > 0) {
+        const total = rewards.referrerReward + rewards.referredReward;
+        Alert.alert(
+          'Congratulazioni!',
+          `Hai guadagnato ${total} crediti bonus dai referral!`,
+          [{text: 'Fantastico!'}]
+        );
+      }
+    };
+
+    initReferrals();
+  }, [fetchReferrals, updateDailyActivity, checkAndClaimRewards]);
+
+  const totalCreditsEarned = getTotalCreditsEarned();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchReferrals();
+    setRefreshing(false);
+  }, [fetchReferrals]);
 
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `Unisciti a RaffleMania e vinci premi incredibili! 🎁\n\nUsa il mio codice: ${referralCode}\n\nSe resti attivo per 7 giorni, entrambi riceveremo 15 crediti bonus! 💰\n\nScarica ora: https://rafflemania.app`,
+        message: `Unisciti a RaffleMania e vinci premi incredibili! \n\nUsa il mio codice: ${referralCode}\n\nSe resti attivo per ${REFERRAL_REWARDS.DAYS_REQUIRED} giorni, entrambi riceveremo ${REFERRAL_REWARDS.REFERRER_CREDITS} crediti bonus!\n\nScarica ora: https://rafflemania.app`,
       });
     } catch (error) {
       console.log('Share error:', error);
@@ -158,7 +248,7 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
 
   const handleCopyCode = () => {
     Clipboard.setString(referralCode);
-    Alert.alert('Copiato!', 'Il codice è stato copiato negli appunti');
+    Alert.alert('Copiato!', 'Il codice e stato copiato negli appunti');
   };
 
   const steps = [
@@ -174,13 +264,13 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
     },
     {
       icon: 'calendar-outline',
-      title: '7 giorni attivi',
-      description: "L'amico deve essere attivo per 7 giorni consecutivi",
+      title: `${REFERRAL_REWARDS.DAYS_REQUIRED} giorni attivi`,
+      description: `L'amico deve essere attivo per ${REFERRAL_REWARDS.DAYS_REQUIRED} giorni consecutivi`,
     },
     {
       icon: 'gift-outline',
       title: 'Entrambi vincete!',
-      description: 'Tu e il tuo amico ricevete 15 crediti ciascuno',
+      description: `Tu e il tuo amico ricevete ${REFERRAL_REWARDS.REFERRER_CREDITS} crediti ciascuno`,
     },
   ];
 
@@ -189,7 +279,7 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          style={[styles.backButton, {borderColor: colors.border}]}
+          style={styles.backButton}
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -200,7 +290,23 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}>
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+          />
+        }>
+        {/* Loading indicator */}
+        {isLoading && !refreshing && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <Text style={[styles.loadingText, {color: colors.textMuted}]}>Caricamento...</Text>
+          </View>
+        )}
+
         {/* Hero Section - Same style as Credits Screen balanceCard */}
         <View style={styles.heroCard}>
           <LinearGradient
@@ -211,12 +317,23 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
             <View style={styles.heroContentWrapper}>
               <View style={styles.heroContent}>
                 <Text style={styles.heroLabel}>Invita e Guadagna!</Text>
-                <Text style={styles.heroAmount}>15</Text>
-                <Text style={styles.heroSubtext}>crediti per ogni amico attivo 7 giorni</Text>
+                <Text style={styles.heroAmount}>{REFERRAL_REWARDS.REFERRER_CREDITS}</Text>
+                <Text style={styles.heroSubtext}>crediti per ogni amico attivo {REFERRAL_REWARDS.DAYS_REQUIRED} giorni</Text>
               </View>
             </View>
           </LinearGradient>
         </View>
+
+        {/* My Progress (if I was referred) */}
+        {referrer && (
+          <MyProgressCard
+            referrerName={referrer.displayName}
+            daysActive={referrer.daysActive}
+            isCompleted={referrer.isCompleted}
+            rewardClaimed={referrer.rewardClaimed}
+            colors={colors}
+          />
+        )}
 
         {/* Referral Code Section */}
         <View style={[styles.codeSection, {backgroundColor: colors.card}]}>
@@ -264,7 +381,7 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
         <View style={styles.statsRow}>
           <View style={[styles.statCard, {backgroundColor: colors.card}]}>
             <Ionicons name="people-outline" size={28} color={COLORS.primary} />
-            <Text style={[styles.statValue, {color: colors.text}]}>{invitedFriends.length}</Text>
+            <Text style={[styles.statValue, {color: colors.text}]}>{referredUsers.length}</Text>
             <Text style={[styles.statLabel, {color: colors.textMuted}]}>Amici invitati</Text>
           </View>
           <View style={[styles.statCard, {backgroundColor: colors.card}]}>
@@ -275,21 +392,71 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
         </View>
 
         {/* Invited Friends */}
-        {invitedFriends.length > 0 && (
+        {referredUsers.length > 0 && (
           <>
             <Text style={[styles.sectionTitle, {color: colors.text}]}>I tuoi amici</Text>
             <View style={styles.friendsList}>
-              {invitedFriends.map((friend, index) => (
+              {referredUsers.map((friend, index) => (
                 <InvitedFriendCard
-                  key={index}
-                  name={friend.name}
+                  key={friend.id || index}
+                  name={friend.displayName}
                   daysActive={friend.daysActive}
                   isCompleted={friend.isCompleted}
+                  rewardClaimed={friend.rewardClaimed}
                   colors={colors}
                 />
               ))}
             </View>
           </>
+        )}
+
+        {/* Empty State */}
+        {referredUsers.length === 0 && (
+          <View style={[styles.emptyState, {backgroundColor: colors.card}]}>
+            <Ionicons name="people-outline" size={48} color={colors.textMuted} />
+            <Text style={[styles.emptyStateTitle, {color: colors.text}]}>
+              Nessun amico invitato
+            </Text>
+            <Text style={[styles.emptyStateText, {color: colors.textMuted}]}>
+              Condividi il tuo codice e inizia a guadagnare crediti!
+            </Text>
+          </View>
+        )}
+
+        {/* Debug/Test Section - only in development */}
+        {__DEV__ && (
+          <View style={[styles.debugSection, {backgroundColor: colors.card}]}>
+            <Text style={[styles.debugTitle, {color: colors.textMuted}]}>Test Referral</Text>
+            <View style={styles.debugButtons}>
+              <TouchableOpacity
+                style={[styles.debugButton, {backgroundColor: `${COLORS.primary}20`}]}
+                onPress={() => {
+                  const names = ['Marco', 'Giulia', 'Luca', 'Anna', 'Pietro', 'Sofia'];
+                  const randomName = names[Math.floor(Math.random() * names.length)];
+                  simulateNewReferral(randomName);
+                  Alert.alert('Test', `Simulato nuovo referral: ${randomName}`);
+                }}>
+                <Ionicons name="person-add" size={18} color={COLORS.primary} />
+                <Text style={[styles.debugButtonText, {color: COLORS.primary}]}>+ Nuovo Amico</Text>
+              </TouchableOpacity>
+              {referredUsers.length > 0 && (
+                <TouchableOpacity
+                  style={[styles.debugButton, {backgroundColor: `${COLORS.primary}20`}]}
+                  onPress={() => {
+                    const pendingUser = referredUsers.find(u => !u.isCompleted);
+                    if (pendingUser) {
+                      simulateDaysActive(pendingUser.id, REFERRAL_REWARDS.DAYS_REQUIRED);
+                      Alert.alert('Test', `${pendingUser.displayName} ha completato i 7 giorni!`);
+                    } else {
+                      Alert.alert('Test', 'Tutti gli amici hanno gia completato');
+                    }
+                  }}>
+                  <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} />
+                  <Text style={[styles.debugButtonText, {color: COLORS.primary}]}>Completa Amico</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
         )}
 
         {/* Bottom spacing */}
@@ -312,6 +479,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    borderColor: COLORS.primary,
     borderRadius: RADIUS.md,
   },
   headerTitle: {
@@ -323,6 +491,18 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: SPACING.md,
+  },
+  // Loading
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+  },
+  loadingText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
   },
   // Hero Section - Same as CreditsScreen balanceCard
   heroCard: {
@@ -368,6 +548,67 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     marginTop: SPACING.xs,
   },
+  // My Progress Card
+  myProgressCard: {
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
+    borderWidth: 2,
+  },
+  myProgressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.xs,
+  },
+  myProgressTitle: {
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  myProgressSubtitle: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    marginBottom: SPACING.md,
+  },
+  myProgressBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  myProgressBar: {
+    flex: 1,
+    height: 10,
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+  myProgressFill: {
+    height: '100%',
+    borderRadius: 5,
+  },
+  myProgressText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.semibold,
+    minWidth: 60,
+    textAlign: 'right',
+  },
+  myProgressHint: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    fontStyle: 'italic',
+  },
+  myProgressCompleted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  myProgressCompletedText: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
   // Code Section
   codeSection: {
     borderRadius: RADIUS.xl,
@@ -396,6 +637,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: SPACING.md,
   },
   codeText: {
     fontSize: 24,
@@ -601,6 +843,58 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 3,
+  },
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
+    padding: SPACING.xl,
+    borderRadius: RADIUS.xl,
+  },
+  emptyStateTitle: {
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.xs,
+  },
+  emptyStateText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    textAlign: 'center',
+  },
+  // Debug Section
+  debugSection: {
+    marginTop: SPACING.lg,
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderStyle: 'dashed',
+  },
+  debugTitle: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.medium,
+    textAlign: 'center',
+    marginBottom: SPACING.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  debugButtons: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    justifyContent: 'center',
+  },
+  debugButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.md,
+  },
+  debugButtonText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.medium,
   },
 });
 

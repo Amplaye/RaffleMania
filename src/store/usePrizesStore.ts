@@ -158,7 +158,6 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
   isLoading: false,
 
   fetchPrizes: async () => {
-    const currentPrizes = get().prizes;
     set({isLoading: true});
 
     try {

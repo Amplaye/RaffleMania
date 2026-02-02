@@ -1,5 +1,5 @@
-import React, {useEffect, useRef, useState} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Animated, Easing, Image, Modal, TextInput} from 'react-native';
+import React, {useEffect, useState} from 'react';
+import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Image, Modal, TextInput} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer, Card} from '../../components/common';
@@ -21,62 +21,41 @@ const AnimatedProgressBar: React.FC<{
   backgroundColor: string;
   height?: number;
 }> = ({progress, color: _color, backgroundColor, height = 10}) => {
-  const progressAnim = useRef(new Animated.Value(0)).current;
-  const shimmerPosition = useRef(new Animated.Value(-1)).current;
-
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: progress / 100,
-      duration: 1000,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [progress, progressAnim]);
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(shimmerPosition, {
-        toValue: 2,
-        duration: 2500,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    ).start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const animatedWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
-
-  const shimmerTranslate = shimmerPosition.interpolate({
-    inputRange: [-1, 2],
-    outputRange: [-100, 300],
-  });
+  // Ensure minimum 5% width so bar is always visible
+  const clampedProgress = Math.max(progress, 5);
+  const widthPercent = `${clampedProgress}%`;
 
   return (
-    <View style={[styles.animatedProgressBg, {backgroundColor, height, borderRadius: height / 2}]}>
-      <Animated.View style={[styles.animatedProgressFill, {width: animatedWidth, height, borderRadius: height / 2}]}>
+    <View style={{
+      width: '100%',
+      height: height,
+      backgroundColor: backgroundColor,
+      borderRadius: height / 2,
+      overflow: 'hidden',
+    }}>
+      <View style={{
+        width: widthPercent as `${number}%`,
+        height: height,
+        borderRadius: height / 2,
+        overflow: 'hidden',
+      }}>
         <LinearGradient
           colors={[COLORS.primary, '#FF8500']}
           start={{x: 0, y: 0}}
           end={{x: 1, y: 0}}
-          style={[styles.animatedProgressGradient, {height, borderRadius: height / 2}]}
+          style={{
+            width: '100%',
+            height: '100%',
+            borderRadius: height / 2,
+          }}
         />
-        <Animated.View
-          style={[
-            styles.progressShimmer,
-            {transform: [{translateX: shimmerTranslate}]},
-          ]}
-        />
-      </Animated.View>
+      </View>
     </View>
   );
 };
 
 // Level Card Component
-const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors, onPress}) => {
+const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors: _colors, onPress}) => {
   const level = useLevelStore(state => state.level);
   const getLevelInfo = useLevelStore(state => state.getLevelInfo);
   const getProgressToNextLevel = useLevelStore(state => state.getProgressToNextLevel);
@@ -107,8 +86,8 @@ const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors, onPres
 
           {/* Info livello */}
           <View style={styles.levelInfo}>
-            <Text style={[styles.levelName, {color: levelInfo.color}]}>{levelInfo.name}</Text>
-            <Text style={[styles.levelSubtext, {color: colors.textMuted}]}>Livello {level}</Text>
+            <Text style={[styles.levelName, {color: COLORS.primary}]}>{levelInfo.name}</Text>
+            <Text style={[styles.levelSubtext, {color: '#000000', fontWeight: 'bold'}]}>Livello {level}</Text>
           </View>
 
         </View>
@@ -116,20 +95,20 @@ const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors, onPres
         {/* Progress */}
         <View style={styles.levelProgress}>
           <View style={styles.levelProgressLabels}>
-            <Text style={[styles.levelProgressLabel, {color: levelInfo.color}]}>Lv.{level}</Text>
-            <Text style={[styles.levelProgressLabel, {color: nextLevelInfo?.color || colors.textMuted}]}>
+            <Text style={[styles.levelProgressLabel, {color: COLORS.primary}]}>Lv.{level}</Text>
+            <Text style={[styles.levelProgressLabel, {color: COLORS.primary}]}>
               {nextLevelInfo ? `Lv.${nextLevelInfo.level}` : 'MAX'}
             </Text>
           </View>
           <AnimatedProgressBar
             progress={progress}
             color={COLORS.primary}
-            backgroundColor={colors.border}
+            backgroundColor={'#FFD9B3'}
             height={12}
           />
           <View style={styles.levelProgressInfo}>
-            <Text style={[styles.levelProgressPercent, {color: colors.textSecondary}]}>{Math.round(progress)}%</Text>
-            <Text style={[styles.levelProgressXp, {color: colors.textMuted}]}>
+            <Text style={[styles.levelProgressPercent, {color: '#000000'}]}>{Math.round(progress)}%</Text>
+            <Text style={[styles.levelProgressXp, {color: '#000000', fontWeight: 'bold'}]}>
               {xpNeeded > 0 ? `${xpNeeded} XP al prossimo livello` : 'Livello massimo raggiunto!'}
             </Text>
           </View>
@@ -137,20 +116,20 @@ const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors, onPres
 
         {/* Next level */}
         {nextLevelInfo && (
-          <View style={[styles.nextLevel, {backgroundColor: `${nextLevelInfo.color}10`, borderColor: `${nextLevelInfo.color}30`}]}>
-            <View style={[styles.nextLevelIcon, {backgroundColor: `${nextLevelInfo.color}20`}]}>
-              <Ionicons name={nextLevelInfo.icon as any} size={20} color={nextLevelInfo.color} />
+          <View style={[styles.nextLevel, {backgroundColor: `${COLORS.primary}10`, borderColor: `${COLORS.primary}30`}]}>
+            <View style={[styles.nextLevelIcon, {backgroundColor: `${COLORS.primary}20`}]}>
+              <Ionicons name={nextLevelInfo.icon as any} size={20} color={COLORS.primary} />
             </View>
             <View style={styles.nextLevelText}>
-              <Text style={[styles.nextLevelTitle, {color: colors.text}]}>Prossimo: {nextLevelInfo.name}</Text>
-              <Text style={[styles.nextLevelXp, {color: colors.textMuted}]}>Raggiungi {nextLevelInfo.minXP} XP</Text>
+              <Text style={[styles.nextLevelTitle, {color: '#000000'}]}>Prossimo: {nextLevelInfo.name}</Text>
+              <Text style={[styles.nextLevelXp, {color: '#333333'}]}>Raggiungi {nextLevelInfo.minXP} XP</Text>
             </View>
-            <Ionicons name="arrow-forward" size={18} color={nextLevelInfo.color} />
+            <Ionicons name="arrow-forward" size={18} color={COLORS.primary} />
           </View>
         )}
 
         {/* Hint */}
-        <Text style={[styles.levelHint, {color: colors.textMuted}]}>
+        <Text style={[styles.levelHint, {color: '#000000', fontWeight: 'bold'}]}>
           Tocca per vedere tutti i livelli e vantaggi
         </Text>
       </Card>
@@ -339,11 +318,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
 
   const menuItems: MenuItem[] = [
     {
-      id: 'credits',
-      iconName: 'diamond',
-      title: 'I Miei Crediti',
-      subtitle: `${user?.credits || 0} crediti disponibili`,
-      onPress: () => navigation.navigate('Credits'),
+      id: 'streak',
+      iconName: 'flame',
+      title: 'Login Streak',
+      subtitle: 'Accedi ogni giorno per bonus',
+      onPress: () => navigation.navigate('Streak'),
     },
     {
       id: 'leaderboard',
@@ -353,25 +332,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
       onPress: () => navigation.navigate('Leaderboard'),
     },
     {
-      id: 'wins',
-      iconName: 'trophy',
-      title: 'Le Mie Vincite',
-      subtitle: 'Storico premi vinti',
-      onPress: () => navigation.navigate('MyWins'),
-    },
-    {
       id: 'referral',
       iconName: 'gift',
       title: 'Invita Amici',
       subtitle: `Codice: ${user?.referralCode || 'N/A'}`,
       onPress: () => navigation.navigate('Referral'),
-    },
-    {
-      id: 'address',
-      iconName: 'location',
-      title: 'Indirizzo di Spedizione',
-      subtitle: user?.shippingAddress ? 'Configurato' : 'Non configurato',
-      onPress: () => navigation.navigate('AddressForm'),
     },
     {
       id: 'settings',
@@ -504,21 +469,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
         </View>
       </Card>
 
-      {/* Support */}
-      <Card style={styles.supportCard}>
+      {/* Support Buttons */}
+      <View style={styles.supportButtonsContainer}>
         <TouchableOpacity
-          style={styles.supportItem}
-          onPress={() => Alert.alert('Aiuto', 'Funzionalita in arrivo!')}>
-          <Ionicons name="help-circle-outline" size={20} color={colors.primary} />
-          <Text style={[styles.supportText, {color: colors.textSecondary}]}>Centro Assistenza</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.supportItem}
+          style={styles.supportButton}
           onPress={() => Alert.alert('Feedback', 'Funzionalita in arrivo!')}>
-          <Ionicons name="chatbubble-outline" size={20} color={colors.primary} />
-          <Text style={[styles.supportText, {color: colors.textSecondary}]}>Invia Feedback</Text>
+          <Ionicons name="help-circle-outline" size={22} color={colors.primary} />
+          <Text style={[styles.supportButtonText, {color: colors.primary}]}>Invia Feedback</Text>
         </TouchableOpacity>
-      </Card>
+        <TouchableOpacity
+          style={styles.supportButton}
+          onPress={() => Alert.alert('Aiuto', 'Funzionalita in arrivo!')}>
+          <Ionicons name="chatbubble-outline" size={22} color={colors.primary} />
+          <Text style={[styles.supportButtonText, {color: colors.primary}]}>Parla con un operatore</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={[styles.version, {color: colors.textLight}]}>RaffleMania v1.0.0</Text>
 
@@ -540,6 +505,11 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
     marginBottom: SPACING.md,
     position: 'relative',
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   editIconContainer: {
     position: 'absolute',
@@ -611,6 +581,11 @@ const styles = StyleSheet.create({
   // Level Card styles
   levelCard: {
     marginBottom: SPACING.md,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   levelHeader: {
     flexDirection: 'row',
@@ -796,9 +771,19 @@ const styles = StyleSheet.create({
   },
   menuCard: {
     marginBottom: SPACING.md,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   themeCard: {
     marginBottom: SPACING.md,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   themeRow: {
     flexDirection: 'row',
@@ -856,21 +841,28 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 2,
   },
-  supportCard: {
+  supportButtonsContainer: {
     flexDirection: 'row',
+    gap: SPACING.sm,
     marginBottom: SPACING.lg,
   },
-  supportItem: {
+  supportButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.sm,
-    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    gap: SPACING.xs,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.lg,
   },
-  supportText: {
+  supportButtonText: {
     fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
   },
   version: {
     textAlign: 'center',

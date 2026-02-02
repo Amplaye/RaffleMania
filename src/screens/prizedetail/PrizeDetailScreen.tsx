@@ -302,6 +302,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prize?.timerStatus, prize?.scheduledAt, prize?.id]);
 
   // Ad cooldown countdown (ogni secondo)

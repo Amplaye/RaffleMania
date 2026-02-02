@@ -3,7 +3,7 @@
  * Plugin Name: RaffleMania API
  * Plugin URI: https://rafflemania.app
  * Description: REST API backend per l'app RaffleMania - Gestione premi, biglietti, estrazioni e utenti
- * Version: 1.3.0
+ * Version: 1.4.2
  * Author: RaffleMania Team
  * Author URI: https://rafflemania.app
  * Text Domain: rafflemania-api
@@ -64,6 +64,13 @@ add_action('init', function() {
     add_action('wp_ajax_rafflemania_settings', 'rafflemania_ajax_settings_handler');
     add_action('wp_ajax_nopriv_rafflemania_settings', 'rafflemania_ajax_settings_handler');
 });
+
+// Directly register referral routes to ensure they load - v1.4.1
+add_action('rest_api_init', function() {
+    require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/ReferralController.php';
+    $referrals = new RaffleMania\API\ReferralController();
+    $referrals->register_routes();
+}, 99);
 
 function rafflemania_ajax_settings_handler() {
     $xp_watch_ad = (int) get_option('rafflemania_xp_watch_ad', 10);

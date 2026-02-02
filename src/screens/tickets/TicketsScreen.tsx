@@ -327,6 +327,7 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
     updateCooldown();
     const interval = setInterval(updateCooldown, 1000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Format ad cooldown in mm:ss

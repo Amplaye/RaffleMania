@@ -202,7 +202,7 @@ export const requestTickets = async (
     // Modalità API: il backend gestisce l'atomicità con transazioni
     try {
       assignedNumbers = await assignNumbersAPI(prizeId, quantity, source);
-    } catch (error) {
+    } catch {
       // Fallback a locale se API fallisce (solo per errori di rete)
       console.log('[TicketService] API failed, falling back to local assignment');
       assignedNumbers = assignNumbersLocal(drawId, prizeId, quantity, userId);

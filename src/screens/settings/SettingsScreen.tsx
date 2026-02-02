@@ -9,6 +9,9 @@ import {
   Alert,
   Linking,
   Platform,
+  TextInput,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -46,7 +49,11 @@ interface SettingLink {
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
   const {colors} = useThemeColors();
-  const {logout} = useAuthStore();
+  const {logout, deleteAccount, isLoading, token} = useAuthStore();
+  const isGuestUser = token?.startsWith('guest_token_');
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [password, setPassword] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [notifications, setNotifications] = useState({
     pushEnabled: true,
     emailEnabled: true,
@@ -112,9 +119,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
     },
     {
       id: 'support',
-      icon: 'help-circle',
-      title: 'Centro Assistenza',
-      onPress: () => Alert.alert('Assistenza', 'Contattaci a support@rafflemania.app'),
+      icon: 'chatbubbles',
+      title: 'Assistenza',
+      subtitle: 'Chatta con il supporto',
+      onPress: () => navigation.navigate('SupportChat'),
     },
     {
       id: 'rate',
@@ -177,18 +185,64 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
   };
 
   const handleDeleteAccount = () => {
+    // Guest users just logout
+    if (isGuestUser) {
+      Alert.alert(
+        'Elimina Account Ospite',
+        'Vuoi eliminare i dati del tuo account ospite?',
+        [
+          {text: 'Annulla', style: 'cancel'},
+          {
+            text: 'Elimina',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteAccount('');
+              } catch (error: any) {
+                Alert.alert('Errore', error.message);
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    // First confirmation
     Alert.alert(
       'Elimina Account',
       'Sei sicuro di voler eliminare il tuo account? Questa azione è irreversibile e perderai tutti i tuoi dati, crediti e biglietti.',
       [
         {text: 'Annulla', style: 'cancel'},
         {
-          text: 'Elimina',
+          text: 'Continua',
           style: 'destructive',
-          onPress: () => Alert.alert('Account', 'Funzionalità in arrivo'),
+          onPress: () => {
+            // Show password modal
+            setPassword('');
+            setShowPasswordModal(true);
+          },
         },
       ],
     );
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!password || password.trim() === '') {
+      Alert.alert('Errore', 'Devi inserire la password per continuare');
+      return;
+    }
+
+    setDeletingAccount(true);
+    try {
+      await deleteAccount(password);
+      setShowPasswordModal(false);
+      Alert.alert('Account Eliminato', 'Il tuo account è stato eliminato permanentemente.');
+    } catch (error: any) {
+      Alert.alert('Errore', error.message || 'Impossibile eliminare l\'account');
+    } finally {
+      setDeletingAccount(false);
+    }
   };
 
   return (
@@ -253,12 +307,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
         <TouchableOpacity
           style={[styles.actionButton, styles.deleteButton]}
           onPress={handleDeleteAccount}
+          disabled={isLoading}
           activeOpacity={0.8}>
           <View style={[styles.deleteButtonInner, {backgroundColor: colors.card, borderColor: colors.error}]}>
             <View style={[styles.actionButtonIconContainer, styles.deleteIconContainer]}>
               <Ionicons name="trash-outline" size={22} color={colors.error} />
             </View>
-            <Text style={[styles.deleteButtonText, {color: colors.error}]}>Elimina account</Text>
+            <Text style={[styles.deleteButtonText, {color: colors.error}]}>
+              {isLoading ? 'Eliminazione...' : 'Elimina account'}
+            </Text>
             <Ionicons name="chevron-forward" size={20} color={colors.error} />
           </View>
         </TouchableOpacity>
@@ -266,6 +323,60 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
         {/* App Version */}
         <Text style={[styles.version, {color: colors.textMuted}]}>RaffleMania v1.0.0 (build 1)</Text>
       </ScrollView>
+
+      {/* Password Confirmation Modal */}
+      <Modal
+        visible={showPasswordModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPasswordModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, {backgroundColor: colors.card}]}>
+            <View style={[styles.modalIconContainer, {backgroundColor: `${colors.error}15`}]}>
+              <Ionicons name="warning" size={32} color={colors.error} />
+            </View>
+            <Text style={[styles.modalTitle, {color: colors.text}]}>Conferma Eliminazione</Text>
+            <Text style={[styles.modalSubtitle, {color: colors.textMuted}]}>
+              Inserisci la tua password per confermare l'eliminazione definitiva dell'account
+            </Text>
+
+            <TextInput
+              style={[styles.passwordInput, {
+                backgroundColor: colors.background,
+                color: colors.text,
+                borderColor: colors.border,
+              }]}
+              placeholder="Password"
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+              autoCapitalize="none"
+              editable={!deletingAccount}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel, {borderColor: colors.border}]}
+                onPress={() => setShowPasswordModal(false)}
+                disabled={deletingAccount}>
+                <Text style={[styles.modalButtonText, {color: colors.text}]}>Annulla</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonDelete, {backgroundColor: colors.error}]}
+                onPress={handleConfirmDelete}
+                disabled={deletingAccount}>
+                {deletingAccount ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={[styles.modalButtonText, {color: '#FFFFFF'}]}>Elimina</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 };
@@ -382,7 +493,7 @@ const styles = StyleSheet.create({
   deleteButtonInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: SPACING.md,
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
     paddingHorizontal: SPACING.md,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
@@ -408,6 +519,74 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginTop: SPACING.lg,
     marginBottom: SPACING.xl,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    alignItems: 'center',
+  },
+  modalIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
+  },
+  modalTitle: {
+    fontSize: FONT_SIZE.lg,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+    marginBottom: SPACING.xs,
+  },
+  modalSubtitle: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    textAlign: 'center',
+    marginBottom: SPACING.lg,
+    lineHeight: 20,
+  },
+  passwordInput: {
+    width: '100%',
+    height: 50,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    paddingHorizontal: SPACING.md,
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.regular,
+    marginBottom: SPACING.lg,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  modalButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonCancel: {
+    borderWidth: 1,
+  },
+  modalButtonDelete: {
+    backgroundColor: COLORS.error,
+  },
+  modalButtonText: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
   },
 });
 

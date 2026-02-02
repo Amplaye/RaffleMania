@@ -1,8 +1,9 @@
 import React, {useEffect} from 'react';
-import {StatusBar} from 'react-native';
+import {StatusBar, View} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {OneSignal} from 'react-native-onesignal';
 import {AppNavigator} from './src/navigation';
+import {LevelUpOverlay} from './src/components/common';
 import {COLORS} from './src/utils/constants';
 
 // OneSignal App ID
@@ -23,7 +24,10 @@ const App: React.FC = () => {
         barStyle="dark-content"
         backgroundColor={COLORS.background}
       />
-      <AppNavigator />
+      <View style={{flex: 1}}>
+        <AppNavigator />
+        <LevelUpOverlay />
+      </View>
     </SafeAreaProvider>
   );
 };

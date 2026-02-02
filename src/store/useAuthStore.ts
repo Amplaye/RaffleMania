@@ -36,8 +36,9 @@ interface AuthState {
   loginAsGuest: () => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginWithApple: () => Promise<void>;
-  register: (email: string, password: string, username: string) => Promise<{requiresVerification: boolean}>;
+  register: (email: string, password: string, username: string, referralCode?: string) => Promise<{requiresVerification: boolean}>;
   logout: () => Promise<void>;
+  deleteAccount: (password: string) => Promise<void>;
   updateUser: (userData: Partial<User>) => void;
   updateDisplayName: (displayName: string) => Promise<void>;
   setLoading: (loading: boolean) => void;
@@ -281,10 +282,17 @@ export const useAuthStore = create<AuthState>()(
     }
   },
 
-  register: async (email: string, password: string, username: string) => {
+  register: async (email: string, password: string, username: string, referralCode?: string) => {
     set({isLoading: true});
 
     try {
+      // Store referral code temporarily for after verification
+      if (referralCode) {
+        console.log('[AuthStore] Storing referral code:', referralCode);
+        await AsyncStorage.setItem('pending_referral_code', referralCode);
+        await AsyncStorage.setItem('pending_referral_username', username);
+      }
+
       if (API_CONFIG.USE_MOCK_DATA) {
         await new Promise<void>(resolve => setTimeout(() => resolve(), 1500));
         // Mock: User is NOT authenticated until email verification
@@ -302,6 +310,7 @@ export const useAuthStore = create<AuthState>()(
         email,
         password,
         username,
+        referral_code: referralCode,
       });
 
       const {requiresVerification} = response.data.data;
@@ -340,6 +349,59 @@ export const useAuthStore = create<AuthState>()(
         token: null,
         isAuthenticated: false,
       });
+    }
+  },
+
+  deleteAccount: async (password: string) => {
+    set({isLoading: true});
+
+    try {
+      const token = get().token;
+
+      // Guest users can just logout - no account to delete
+      if (token?.startsWith('guest_token_')) {
+        await get().logout();
+        set({isLoading: false});
+        return;
+      }
+
+      if (API_CONFIG.USE_MOCK_DATA) {
+        await new Promise<void>(resolve => setTimeout(() => resolve(), 1500));
+        await get().logout();
+        set({isLoading: false});
+        return;
+      }
+
+      // Call API to delete account
+      const response = await apiClient.delete('/users/me/delete', {
+        data: {
+          password,
+          confirm: true,
+        },
+      });
+
+      if (response.data.success) {
+        // Clear all local data
+        await tokenManager.clearTokens();
+        await AsyncStorage.multiRemove([
+          'rafflemania-auth-storage',
+          'rafflemania-referral-storage',
+          'pending_referral_code',
+          'pending_referral_username',
+        ]);
+        await GoogleSignin.signOut().catch(() => {});
+        OneSignal.logout();
+
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+          isLoading: false,
+        });
+      }
+    } catch (error) {
+      set({isLoading: false});
+      throw new Error(getErrorMessage(error));
     }
   },
 
@@ -402,9 +464,15 @@ export const useAuthStore = create<AuthState>()(
   updateUser: (userData: Partial<User>) => {
     const currentUser = get().user;
     if (currentUser) {
+      console.log('[AuthStore] updateUser called with:', userData);
+      console.log('[AuthStore] Before update - XP:', currentUser.xp, 'Credits:', currentUser.credits);
+      const newUser = {...currentUser, ...userData};
+      console.log('[AuthStore] After update - XP:', newUser.xp, 'Credits:', newUser.credits);
       set({
-        user: {...currentUser, ...userData},
+        user: newUser,
       });
+    } else {
+      console.log('[AuthStore] updateUser failed - no current user');
     }
   },
 
@@ -441,14 +509,55 @@ export const useAuthStore = create<AuthState>()(
     try {
       if (API_CONFIG.USE_MOCK_DATA) {
         await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
-        const currentUser = get().user;
-        if (currentUser) {
-          set({
-            user: {...currentUser, emailVerified: true},
-            pendingVerificationEmail: null,
-            isLoading: false,
+
+        // Get stored registration data
+        const pendingEmail = get().pendingVerificationEmail;
+        const pendingUsername = await AsyncStorage.getItem('pending_referral_username');
+        const pendingReferralCode = await AsyncStorage.getItem('pending_referral_code');
+
+        // Create the verified user
+        const newUserId = `user_${Date.now()}`;
+        const newUser: User = {
+          id: newUserId,
+          email: pendingEmail || 'user@example.com',
+          displayName: pendingUsername || 'Utente',
+          avatarColor: '#FF6B00',
+          credits: 0,
+          xp: 0,
+          level: 1,
+          totalTickets: 0,
+          watchedAdsCount: 0,
+          winsCount: 0,
+          currentStreak: 0,
+          referralCode: 'REF' + Date.now().toString(36).toUpperCase().substring(0, 5),
+          referredBy: pendingReferralCode || undefined,
+          createdAt: new Date().toISOString(),
+          emailVerified: true,
+        };
+
+        // Process referral if code was provided
+        if (pendingReferralCode) {
+          console.log('[AuthStore] Processing referral code after verification:', pendingReferralCode);
+          // Import referral store dynamically to avoid circular dependency
+          const {useReferralStore} = await import('./useReferralStore');
+          // Set the referrer for this user (mock: we create a fake referrer)
+          useReferralStore.getState().setReferrer({
+            id: 'referrer_' + pendingReferralCode,
+            displayName: 'Amico ' + pendingReferralCode.substring(0, 4),
+            referralCode: pendingReferralCode,
           });
+          // Clean up
+          await AsyncStorage.removeItem('pending_referral_code');
+          await AsyncStorage.removeItem('pending_referral_username');
         }
+
+        set({
+          user: newUser,
+          token: 'verified_token_' + Date.now(),
+          isAuthenticated: true,
+          pendingVerificationEmail: null,
+          isLoading: false,
+        });
         return;
       }
 

@@ -197,15 +197,25 @@ class AuthController extends WP_REST_Controller {
         // Hash password
         $password_hash = password_hash($password, PASSWORD_DEFAULT);
 
-        // Process referral if provided
+        // Process referral if provided (case-insensitive lookup)
         $referred_by = null;
+        $referrer = null;
         if ($referral_code) {
+            // Normalize: trim whitespace and convert to uppercase
+            $referral_code_normalized = strtoupper(trim($referral_code));
+
             $referrer = $wpdb->get_row($wpdb->prepare(
-                "SELECT id, referral_code FROM {$table_users} WHERE referral_code = %s",
-                $referral_code
+                "SELECT id, referral_code FROM {$table_users} WHERE UPPER(referral_code) = %s",
+                $referral_code_normalized
             ));
             if ($referrer) {
-                $referred_by = $referral_code;
+                // Use the actual stored referral code (not user input)
+                $referred_by = $referrer->referral_code;
+                error_log("[RaffleMania] Referral found: User input '{$referral_code}' matched code '{$referrer->referral_code}' (user ID: {$referrer->id})");
+            } else {
+                // Return error if referral code was provided but not found
+                error_log("[RaffleMania] Referral NOT found: User input '{$referral_code}' normalized to '{$referral_code_normalized}'");
+                return new WP_Error('invalid_referral_code', 'Il codice referral inserito non è valido. Verifica il codice e riprova.', ['status' => 400]);
             }
         }
 
@@ -237,21 +247,32 @@ class AuthController extends WP_REST_Controller {
 
         $user_id = $wpdb->insert_id;
 
-        // If referred, give bonus to referrer too
+        // If referred, give bonus to referrer and record the referral
         if ($referred_by && isset($referrer)) {
+            // Give welcome bonus to referrer (10 credits)
             $wpdb->query($wpdb->prepare(
                 "UPDATE {$table_users} SET credits = credits + 10 WHERE id = %d",
                 $referrer->id
             ));
 
-            // Record referral
+            // Record referral with activity tracking
             $table_referrals = $wpdb->prefix . 'rafflemania_referrals';
-            $wpdb->insert($table_referrals, [
+            $insert_result = $wpdb->insert($table_referrals, [
                 'referrer_user_id' => $referrer->id,
                 'referred_user_id' => $user_id,
-                'referral_code' => $referral_code,
-                'bonus_given' => 1
+                'referral_code' => $referred_by,
+                'bonus_given' => 1,
+                'days_active' => 1,
+                'last_active_date' => date('Y-m-d'),
+                'reward_claimed' => 0,
+                'referred_reward_claimed' => 0
             ]);
+
+            if ($insert_result) {
+                error_log("[RaffleMania] Referral recorded: referrer_id={$referrer->id}, referred_id={$user_id}, code={$referred_by}");
+            } else {
+                error_log("[RaffleMania] ERROR inserting referral: " . $wpdb->last_error);
+            }
         }
 
         // Send verification email

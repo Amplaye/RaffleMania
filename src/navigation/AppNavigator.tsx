@@ -21,6 +21,8 @@ import {PrizeDetailScreen} from '../screens/prizedetail';
 import {AvatarCustomizationScreen} from '../screens/avatar';
 import {LeaderboardScreen} from '../screens/leaderboard';
 import {EmailVerificationScreen} from '../screens/auth';
+import {StreakScreen} from '../screens/streak';
+import {SupportChatScreen} from '../screens/support';
 
 // Stack param list
 export type RootStackParamList = {
@@ -37,6 +39,8 @@ export type RootStackParamList = {
   AvatarCustomization: undefined;
   Leaderboard: undefined;
   EmailVerification: {email?: string};
+  Streak: undefined;
+  SupportChat: undefined;
 };
 
 type PlaceholderProps = NativeStackScreenProps<RootStackParamList, keyof RootStackParamList>;
@@ -155,6 +159,16 @@ const MainStack: React.FC = () => {
         name="EmailVerification"
         component={EmailVerificationScreen}
         options={{title: 'Verifica Email'}}
+      />
+      <Stack.Screen
+        name="Streak"
+        component={StreakScreen}
+        options={{title: 'Login Streak'}}
+      />
+      <Stack.Screen
+        name="SupportChat"
+        component={SupportChatScreen}
+        options={{title: 'Assistenza'}}
       />
     </Stack.Navigator>
   );

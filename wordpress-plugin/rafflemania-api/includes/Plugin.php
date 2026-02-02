@@ -1,9 +1,9 @@
 <?php
-// Force opcache refresh: 2026-01-27-v3
+// Force opcache refresh: 2026-02-01-referral-v1
 namespace RaffleMania;
 
 /**
- * Main Plugin Class - v1.3
+ * Main Plugin Class - v1.4.1
  */
 class Plugin {
     private static $instance = null;
@@ -20,6 +20,9 @@ class Plugin {
     }
 
     private function init_hooks() {
+        // Run database migration on init (ensures columns exist)
+        add_action('init', [$this, 'maybe_migrate_database']);
+
         // Register REST API routes
         add_action('rest_api_init', [$this, 'register_routes']);
 
@@ -97,6 +100,11 @@ class Plugin {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/SettingsController.php';
         $settings = new API\SettingsController();
         $settings->register_routes();
+
+        // Referral endpoints - v1.4
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/ReferralController.php';
+        $referrals = new API\ReferralController();
+        $referrals->register_routes();
     }
 
     public function add_admin_menu() {
@@ -367,6 +375,51 @@ class Plugin {
                     'prize_id' => $prize->id
                 ]
             ]);
+        }
+    }
+
+    /**
+     * Run database migration if needed (called on init)
+     */
+    public function maybe_migrate_database() {
+        $db_version = get_option('rafflemania_referral_db_version', '0');
+
+        if (version_compare($db_version, '1.4', '<')) {
+            global $wpdb;
+            $table_referrals = $wpdb->prefix . 'rafflemania_referrals';
+
+            // Check if table exists
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_referrals}'");
+            if (!$table_exists) {
+                return;
+            }
+
+            // Get existing columns
+            $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_referrals}");
+            $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+            // Add new columns if they don't exist
+            if (!in_array('days_active', $existing_columns)) {
+                $wpdb->query("ALTER TABLE {$table_referrals} ADD COLUMN days_active int(11) DEFAULT 1 AFTER bonus_given");
+            }
+
+            if (!in_array('last_active_date', $existing_columns)) {
+                $wpdb->query("ALTER TABLE {$table_referrals} ADD COLUMN last_active_date date DEFAULT NULL AFTER days_active");
+            }
+
+            if (!in_array('reward_claimed', $existing_columns)) {
+                $wpdb->query("ALTER TABLE {$table_referrals} ADD COLUMN reward_claimed tinyint(1) DEFAULT 0 AFTER last_active_date");
+            }
+
+            if (!in_array('referred_reward_claimed', $existing_columns)) {
+                $wpdb->query("ALTER TABLE {$table_referrals} ADD COLUMN referred_reward_claimed tinyint(1) DEFAULT 0 AFTER reward_claimed");
+            }
+
+            // Set initial values for existing records
+            $wpdb->query("UPDATE {$table_referrals} SET last_active_date = DATE(created_at) WHERE last_active_date IS NULL");
+
+            // Update version
+            update_option('rafflemania_referral_db_version', '1.4');
         }
     }
 }

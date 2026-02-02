@@ -163,6 +163,27 @@ class UsersController extends WP_REST_Controller {
                 'permission_callback' => '__return_true'
             ]
         ]);
+
+        // Delete account permanently
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/me/delete', [
+            [
+                'methods' => 'DELETE',
+                'callback' => [$this, 'delete_account'],
+                'permission_callback' => [$this, 'check_auth'],
+                'args' => [
+                    'password' => [
+                        'required' => true,
+                        'type' => 'string',
+                        'description' => 'Current password for confirmation'
+                    ],
+                    'confirm' => [
+                        'required' => true,
+                        'type' => 'boolean',
+                        'description' => 'Must be true to confirm deletion'
+                    ]
+                ]
+            ]
+        ]);
     }
 
     public function get_profile(WP_REST_Request $request) {
@@ -626,12 +647,16 @@ class UsersController extends WP_REST_Controller {
             $referrer->id
         ));
 
-        // Record referral
+        // Record referral with activity tracking
         $wpdb->insert($table_referrals, [
             'referrer_user_id' => $referrer->id,
             'referred_user_id' => $user_id,
             'referral_code' => $code,
-            'bonus_given' => 1
+            'bonus_given' => 1,
+            'days_active' => 1,
+            'last_active_date' => date('Y-m-d'),
+            'reward_claimed' => 0,
+            'referred_reward_claimed' => 0
         ]);
 
         return new WP_REST_Response([
@@ -690,6 +715,90 @@ class UsersController extends WP_REST_Controller {
                     ];
                 }, $wins),
                 'total' => count($wins)
+            ]
+        ]);
+    }
+
+    /**
+     * Permanently delete user account and all associated data
+     */
+    public function delete_account(WP_REST_Request $request) {
+        global $wpdb;
+
+        $user_id = $request->get_param('_auth_user_id');
+        $password = $request->get_param('password');
+        $confirm = $request->get_param('confirm');
+
+        // Verify confirmation
+        if (!$confirm) {
+            return new WP_Error('not_confirmed', 'Devi confermare l\'eliminazione dell\'account', ['status' => 400]);
+        }
+
+        // Get user and verify password
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+        $user = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, email, password_hash FROM {$table_users} WHERE id = %d",
+            $user_id
+        ));
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'Utente non trovato', ['status' => 404]);
+        }
+
+        // Verify password
+        if (!password_verify($password, $user->password_hash)) {
+            return new WP_Error('invalid_password', 'Password non corretta', ['status' => 401]);
+        }
+
+        // Begin deletion process - delete all related data
+        $tables_to_clean = [
+            'rafflemania_referrals' => ['referrer_user_id', 'referred_user_id'],
+            'rafflemania_tickets' => ['user_id'],
+            'rafflemania_transactions' => ['user_id'],
+            'rafflemania_winners' => ['user_id'],
+            'rafflemania_streaks' => ['user_id'],
+            'rafflemania_notifications' => ['user_id'],
+            'rafflemania_shipments' => ['user_id'],
+        ];
+
+        $deleted_counts = [];
+
+        foreach ($tables_to_clean as $table_suffix => $columns) {
+            $table_name = $wpdb->prefix . $table_suffix;
+
+            // Check if table exists
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_name}'");
+            if (!$table_exists) {
+                continue;
+            }
+
+            foreach ($columns as $column) {
+                $count = $wpdb->query($wpdb->prepare(
+                    "DELETE FROM {$table_name} WHERE {$column} = %d",
+                    $user_id
+                ));
+                if (!isset($deleted_counts[$table_suffix])) {
+                    $deleted_counts[$table_suffix] = 0;
+                }
+                $deleted_counts[$table_suffix] += $count;
+            }
+        }
+
+        // Finally delete the user
+        $user_deleted = $wpdb->delete($table_users, ['id' => $user_id]);
+
+        if (!$user_deleted) {
+            error_log("[RaffleMania] ERROR deleting user {$user_id}: " . $wpdb->last_error);
+            return new WP_Error('deletion_failed', 'Errore durante l\'eliminazione dell\'account', ['status' => 500]);
+        }
+
+        error_log("[RaffleMania] Account deleted: user_id={$user_id}, email={$user->email}, deleted_data=" . json_encode($deleted_counts));
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'Account eliminato permanentemente',
+            'data' => [
+                'deleted' => true
             ]
         ]);
     }

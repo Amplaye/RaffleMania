@@ -77,7 +77,7 @@ const CreditPackageCard: React.FC<CreditPackageProps> = ({package_, onPress}) =>
   );
 };
 
-export const ShopScreen: React.FC<ShopScreenProps> = ({navigation}) => {
+export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
   const user = useAuthStore(state => state.user);
   const {addCredits} = useCreditsStore();
@@ -93,6 +93,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation}) => {
     updateCooldown();
     const interval = setInterval(updateCooldown, 1000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Format ad cooldown in mm:ss

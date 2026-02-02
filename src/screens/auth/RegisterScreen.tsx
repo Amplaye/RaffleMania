@@ -53,17 +53,46 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({navigation}) => {
     if (!validate()) return;
 
     try {
-      const result = await register(email, password, displayName);
-      // If referral code was entered, it would be processed here
-      if (referralCode) {
-        console.log('Referral code:', referralCode);
-      }
+      const result = await register(email, password, displayName, referralCode.trim() || undefined);
       // Navigate to email verification screen if required
       if (result?.requiresVerification) {
         navigation.navigate('EmailVerification', {email});
       }
     } catch (error: any) {
-      Alert.alert('Errore', error.message || 'Errore durante la registrazione');
+      const errorMessage = error.message || 'Errore durante la registrazione';
+
+      // Check if it's an invalid referral code error
+      if (errorMessage.toLowerCase().includes('referral') || errorMessage.toLowerCase().includes('codice')) {
+        setErrors(prev => ({...prev, referralCode: errorMessage}));
+        Alert.alert(
+          'Codice Referral Non Valido',
+          'Il codice referral inserito non esiste. Verifica il codice e riprova, oppure lascia il campo vuoto per continuare senza referral.',
+          [
+            {text: 'Correggi', style: 'cancel'},
+            {
+              text: 'Continua senza',
+              onPress: async () => {
+                setReferralCode('');
+                setErrors(prev => {
+                  const {referralCode: _unused, ...rest} = prev;
+                  void _unused;
+                  return rest;
+                });
+                try {
+                  const retryResult = await register(email, password, displayName, undefined);
+                  if (retryResult?.requiresVerification) {
+                    navigation.navigate('EmailVerification', {email});
+                  }
+                } catch (retryError: any) {
+                  Alert.alert('Errore', retryError.message || 'Errore durante la registrazione');
+                }
+              },
+            },
+          ],
+        );
+      } else {
+        Alert.alert('Errore', errorMessage);
+      }
     }
   };
 
@@ -133,8 +162,19 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({navigation}) => {
             label="Codice Referral (opzionale)"
             placeholder="Hai un codice amico?"
             value={referralCode}
-            onChangeText={text => setReferralCode(text.toUpperCase())}
+            onChangeText={text => {
+              setReferralCode(text.toUpperCase());
+              // Clear referral error when user types
+              if (errors.referralCode) {
+                setErrors(prev => {
+                  const {referralCode: _unused, ...rest} = prev;
+                  void _unused;
+                  return rest;
+                });
+              }
+            }}
             autoCapitalize="characters"
+            error={errors.referralCode}
           />
 
           <Button

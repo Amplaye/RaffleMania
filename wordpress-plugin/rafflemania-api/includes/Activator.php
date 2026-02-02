@@ -8,8 +8,50 @@ class Activator {
 
     public static function activate() {
         self::create_tables();
+        self::migrate_referrals_table();
         self::insert_default_data();
         flush_rewrite_rules();
+    }
+
+    /**
+     * Migrate existing referrals table to add new columns
+     */
+    private static function migrate_referrals_table() {
+        global $wpdb;
+        $table_referrals = $wpdb->prefix . 'rafflemania_referrals';
+
+        // Check if table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_referrals}'");
+        if (!$table_exists) {
+            return;
+        }
+
+        // Get existing columns
+        $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_referrals}");
+        $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+        // Add days_active column if not exists
+        if (!in_array('days_active', $existing_columns)) {
+            $wpdb->query("ALTER TABLE {$table_referrals} ADD COLUMN days_active int(11) DEFAULT 1 AFTER bonus_given");
+        }
+
+        // Add last_active_date column if not exists
+        if (!in_array('last_active_date', $existing_columns)) {
+            $wpdb->query("ALTER TABLE {$table_referrals} ADD COLUMN last_active_date date DEFAULT NULL AFTER days_active");
+        }
+
+        // Add reward_claimed column if not exists
+        if (!in_array('reward_claimed', $existing_columns)) {
+            $wpdb->query("ALTER TABLE {$table_referrals} ADD COLUMN reward_claimed tinyint(1) DEFAULT 0 AFTER last_active_date");
+        }
+
+        // Add referred_reward_claimed column if not exists
+        if (!in_array('referred_reward_claimed', $existing_columns)) {
+            $wpdb->query("ALTER TABLE {$table_referrals} ADD COLUMN referred_reward_claimed tinyint(1) DEFAULT 0 AFTER reward_claimed");
+        }
+
+        // Set initial last_active_date for existing records
+        $wpdb->query("UPDATE {$table_referrals} SET last_active_date = DATE(created_at) WHERE last_active_date IS NULL");
     }
 
     private static function create_tables() {
@@ -166,7 +208,7 @@ class Activator {
         ) {$charset_collate};";
         dbDelta($sql_streaks);
 
-        // Referrals table
+        // Referrals table (updated for 7-day activity tracking)
         $table_referrals = $wpdb->prefix . 'rafflemania_referrals';
         $sql_referrals = "CREATE TABLE {$table_referrals} (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -174,6 +216,10 @@ class Activator {
             referred_user_id bigint(20) UNSIGNED NOT NULL,
             referral_code varchar(20) NOT NULL,
             bonus_given tinyint(1) DEFAULT 0,
+            days_active int(11) DEFAULT 1,
+            last_active_date date DEFAULT NULL,
+            reward_claimed tinyint(1) DEFAULT 0,
+            referred_reward_claimed tinyint(1) DEFAULT 0,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             KEY referrer_user_id (referrer_user_id),

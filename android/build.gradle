@@ -18,6 +18,8 @@ buildscript {
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
         // OneSignal Gradle Plugin
         classpath("gradle.plugin.com.onesignal:onesignal-gradle-plugin:[0.14.0, 0.99.99]")
+        // Google Services Plugin for Firebase
+        classpath("com.google.gms:google-services:4.4.4")
     }
 }
 

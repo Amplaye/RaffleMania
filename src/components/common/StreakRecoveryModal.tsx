@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useCallback} from 'react';
+import React, {useEffect, useRef} from 'react';
 import {
   View,
   Text,
@@ -11,95 +11,56 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useThemeColors} from '../../hooks/useThemeColors';
-import {SPACING, FONT_WEIGHT, FONT_FAMILY, RADIUS} from '../../utils/constants';
+import {SPACING, FONT_WEIGHT, FONT_FAMILY, RADIUS, COLORS} from '../../utils/constants';
 
-interface StreakReward {
-  xp: number;
-  credits: number;
-  isWeeklyBonus: boolean;
-  isMilestone: boolean;
-}
-
-interface StreakModalProps {
+interface StreakRecoveryModalProps {
   visible: boolean;
   currentStreak: number;
-  reward: StreakReward | null;
-  nextMilestone: number;
-  daysUntilWeeklyBonus: number;
-  onClose: () => void;
+  missedDays: number;
+  userCredits: number;
+  onRecover: () => void;
+  onSkip: () => void;
+  onGoToProfile?: () => void;
 }
 
-// Generate day rewards for the current week based on streak
-const getDayRewards = (currentStreak: number) => {
-  // Calculate which week we're in (0-indexed)
-  const currentWeek = Math.floor((currentStreak - 1) / 7);
+// Generate day rewards for the current week based on streak (same as StreakModal)
+const getDayRewards = (currentStreak: number, _missedDays: number) => {
+  // Calculate which week we're in based on streak before missing days
+  const effectiveStreak = currentStreak;
+  const currentWeek = Math.floor((effectiveStreak - 1) / 7);
   const startDay = currentWeek * 7 + 1;
 
   return [
-    {day: startDay, xp: 5, credits: 0, icon: 'flash'},
-    {day: startDay + 1, xp: 5, credits: 0, icon: 'flash'},
-    {day: startDay + 2, xp: 5, credits: 0, icon: 'flash'},
-    {day: startDay + 3, xp: 5, credits: 0, icon: 'flash'},
-    {day: startDay + 4, xp: 5, credits: 0, icon: 'flash'},
-    {day: startDay + 5, xp: 5, credits: 0, icon: 'flash'},
-    {day: startDay + 6, xp: 10, credits: 1, icon: 'gift'},
+    {day: startDay, xp: 5, credits: 0},
+    {day: startDay + 1, xp: 5, credits: 0},
+    {day: startDay + 2, xp: 5, credits: 0},
+    {day: startDay + 3, xp: 5, credits: 0},
+    {day: startDay + 4, xp: 5, credits: 0},
+    {day: startDay + 5, xp: 5, credits: 0},
+    {day: startDay + 6, xp: 10, credits: 1},
   ];
 };
 
-export const StreakModal: React.FC<StreakModalProps> = ({
+export const StreakRecoveryModal: React.FC<StreakRecoveryModalProps> = ({
   visible,
   currentStreak,
-  onClose,
+  missedDays,
+  onGoToProfile,
 }) => {
   const {isDark} = useThemeColors();
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
-  const dayAnims = useRef([...Array(7)].map(() => new Animated.Value(0))).current;
 
   // Get rewards for current week
-  const dayRewards = getDayRewards(currentStreak);
-
-  const dayAnimsRef = useRef<Animated.CompositeAnimation[]>([]);
-  const mainAnimRef = useRef<Animated.CompositeAnimation | null>(null);
-  const isClosingRef = useRef(false);
-
-  // Close handler with fade out animation
-  const handleClose = useCallback(() => {
-    if (isClosingRef.current) return;
-    isClosingRef.current = true;
-
-    dayAnimsRef.current.forEach(anim => {
-      try { anim.stop(); } catch { /* ignore */ }
-    });
-    dayAnimsRef.current = [];
-
-    // Animate out
-    Animated.parallel([
-      Animated.timing(opacityAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 0.8,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onClose();
-      isClosingRef.current = false;
-    });
-  }, [onClose, opacityAnim, scaleAnim]);
+  const dayRewards = getDayRewards(currentStreak > 0 ? currentStreak : 1, missedDays);
 
   useEffect(() => {
     if (visible) {
-      isClosingRef.current = false;
       scaleAnim.setValue(0.8);
       opacityAnim.setValue(0);
-      dayAnims.forEach(anim => anim.setValue(0));
 
       // Main modal animation
-      mainAnimRef.current = Animated.parallel([
+      Animated.parallel([
         Animated.spring(scaleAnim, {
           toValue: 1,
           friction: 6,
@@ -111,41 +72,47 @@ export const StreakModal: React.FC<StreakModalProps> = ({
           duration: 250,
           useNativeDriver: true,
         }),
-      ]);
-      mainAnimRef.current.start();
-
-      // Staggered day cards animation
-      dayAnimsRef.current = [];
-      dayAnims.forEach((anim, index) => {
-        const dayAnim = Animated.sequence([
-          Animated.delay(index * 80),
-          Animated.spring(anim, {
-            toValue: 1,
-            friction: 6,
-            tension: 50,
-            useNativeDriver: true,
-          }),
-        ]);
-        dayAnimsRef.current.push(dayAnim);
-        dayAnim.start();
-      });
+      ]).start();
     }
-  }, [visible, scaleAnim, opacityAnim, dayAnims]);
+  }, [visible, scaleAnim, opacityAnim]);
 
-  // Keep component in tree but hide when not visible (fixes Fabric crash on iOS)
+  // Calculate which days are completed, missed, or pending
+  // Example: currentStreak = 1, missedDays = 1, today = Day 3
+  // Day 1: completed (dayNumber <= currentStreak)
+  // Day 2: missed (dayNumber > currentStreak && dayNumber <= currentStreak + missedDays)
+  // Day 3: current/today (dayNumber === currentStreak + missedDays + 1)
+  // Day 4+: pending (future days)
+  const todayDay = currentStreak + missedDays + 1;
+
+  const getDisplayDayStatus = (dayNumber: number) => {
+    // Days up to current streak are completed
+    if (dayNumber <= currentStreak) {
+      return 'completed';
+    }
+    // Days between current streak and today are missed
+    if (dayNumber > currentStreak && dayNumber < todayDay) {
+      return 'missed';
+    }
+    // Today's day
+    if (dayNumber === todayDay) {
+      return 'current';
+    }
+    // Future days
+    return 'pending';
+  };
+
   return (
     <Animated.View
       style={[
         styles.absoluteContainer,
         {
           opacity: opacityAnim,
-          // When not visible AND opacity is 0, move off-screen
           transform: [{translateX: visible ? 0 : -10000}],
         },
       ]}
       pointerEvents={visible ? 'auto' : 'none'}
     >
-      <TouchableWithoutFeedback onPress={handleClose}>
+      <TouchableWithoutFeedback>
         <View style={styles.overlay}>
           <TouchableWithoutFeedback>
             <Animated.View
@@ -156,7 +123,7 @@ export const StreakModal: React.FC<StreakModalProps> = ({
                 }
               ]}>
 
-              {/* App gradient background */}
+              {/* Background */}
               <LinearGradient
                 colors={isDark
                   ? ['#1a1a1a', '#2d1810', '#1a1a1a']
@@ -169,30 +136,32 @@ export const StreakModal: React.FC<StreakModalProps> = ({
 
               {/* Header */}
               <View style={styles.header}>
-                <Text style={[styles.headerTitle, {color: isDark ? '#FFD700' : '#FF6B00'}]}>Daily Login</Text>
+                <Text style={[styles.headerTitle, {color: isDark ? '#FF6B6B' : '#E53935'}]}>
+                  Streak Interrotta!
+                </Text>
+                <Text style={[styles.headerSubtitle, {color: isDark ? '#B3B3B3' : '#666666'}]}>
+                  Hai perso {missedDays} giorn{missedDays === 1 ? 'o' : 'i'} di login
+                </Text>
               </View>
 
-              {/* Days 1-4 Row */}
+              {/* Days 1-4 Row (same as StreakModal) */}
               <View style={styles.daysRow}>
-                {dayRewards.slice(0, 4).map((dayReward, index) => {
-                  const isCompleted = dayReward.day <= currentStreak;
+                {dayRewards.slice(0, 4).map((dayReward) => {
+                  const status = getDisplayDayStatus(dayReward.day);
+                  const isCompleted = status === 'completed';
+                  const isMissed = status === 'missed';
 
                   return (
-                    <Animated.View
-                      key={dayReward.day}
-                      style={[
-                        styles.dayBox,
-                        {
-                          transform: [{scale: dayAnims[index]}],
-                        },
-                      ]}>
+                    <View key={dayReward.day} style={styles.dayBox}>
                       <LinearGradient
                         colors={
                           isCompleted
                             ? ['#00B894', '#00a884']
-                            : isDark
-                              ? ['#2A2A2A', '#1E1E1E']
-                              : ['#FFFFFF', '#F8F8F8']
+                            : isMissed
+                              ? ['#E53935', '#C62828']
+                              : isDark
+                                ? ['#2A2A2A', '#1E1E1E']
+                                : ['#FFFFFF', '#F8F8F8']
                         }
                         start={{x: 0, y: 0}}
                         end={{x: 0, y: 1}}
@@ -201,14 +170,18 @@ export const StreakModal: React.FC<StreakModalProps> = ({
                         <View style={styles.dayContentWrapper}>
                           <Text style={[
                             styles.dayLabel,
-                            isCompleted && styles.dayLabelLight,
-                            !isCompleted && {color: isDark ? '#808080' : '#666666'},
+                            (isCompleted || isMissed) && styles.dayLabelLight,
+                            !isCompleted && !isMissed && {color: isDark ? '#808080' : '#666666'},
                           ]}>
                             Day {dayReward.day}
                           </Text>
                           {isCompleted ? (
                             <View style={styles.checkContainer}>
                               <Ionicons name="checkmark" size={22} color="#fff" />
+                            </View>
+                          ) : isMissed ? (
+                            <View style={styles.checkContainer}>
+                              <Ionicons name="close" size={22} color="#fff" />
                             </View>
                           ) : (
                             <View style={styles.rewardContainer}>
@@ -222,36 +195,32 @@ export const StreakModal: React.FC<StreakModalProps> = ({
                           )}
                         </View>
                       </LinearGradient>
-                    </Animated.View>
+                    </View>
                   );
                 })}
               </View>
 
-              {/* Days 5-7 Row */}
+              {/* Days 5-7 Row (same as StreakModal) */}
               <View style={styles.daysRow}>
                 {dayRewards.slice(4, 7).map((dayReward, idx) => {
-                  const index = idx + 4;
-                  const isCompleted = dayReward.day <= currentStreak;
+                  const status = getDisplayDayStatus(dayReward.day);
+                  const isCompleted = status === 'completed';
+                  const isMissed = status === 'missed';
                   const isDay7 = idx === 2;
 
                   return (
-                    <Animated.View
-                      key={dayReward.day}
-                      style={[
-                        styles.dayBox,
-                        {
-                          transform: [{scale: dayAnims[index]}],
-                        },
-                      ]}>
+                    <View key={dayReward.day} style={styles.dayBox}>
                       <LinearGradient
                         colors={
                           isCompleted
                             ? ['#00B894', '#00a884']
-                            : isDay7
-                              ? ['#FFB366', '#FF8533']
-                              : isDark
-                                ? ['#2A2A2A', '#1E1E1E']
-                                : ['#FFFFFF', '#F8F8F8']
+                            : isMissed
+                              ? ['#E53935', '#C62828']
+                              : isDay7
+                                ? ['#FFB366', '#FF8533']
+                                : isDark
+                                  ? ['#2A2A2A', '#1E1E1E']
+                                  : ['#FFFFFF', '#F8F8F8']
                         }
                         start={{x: 0, y: 0}}
                         end={{x: 0, y: 1}}
@@ -260,14 +229,18 @@ export const StreakModal: React.FC<StreakModalProps> = ({
                         <View style={styles.dayContentWrapper}>
                           <Text style={[
                             styles.dayLabel,
-                            (isCompleted || isDay7) && styles.dayLabelLight,
-                            !isCompleted && !isDay7 && {color: isDark ? '#808080' : '#666666'},
+                            (isCompleted || isMissed || isDay7) && styles.dayLabelLight,
+                            !isCompleted && !isMissed && !isDay7 && {color: isDark ? '#808080' : '#666666'},
                           ]}>
                             Day {dayReward.day}
                           </Text>
                           {isCompleted ? (
                             <View style={styles.checkContainer}>
                               <Ionicons name="checkmark" size={22} color="#fff" />
+                            </View>
+                          ) : isMissed ? (
+                            <View style={styles.checkContainer}>
+                              <Ionicons name="close" size={22} color="#fff" />
                             </View>
                           ) : (
                             <View style={styles.rewardContainer}>
@@ -278,7 +251,7 @@ export const StreakModal: React.FC<StreakModalProps> = ({
                               ]}>
                                 +{dayReward.xp} XP
                               </Text>
-                              {isDay7 && dayReward.credits > 0 && (
+                              {isDay7 && dayReward.credits > 0 && !isMissed && (
                                 <View style={styles.bonusTag}>
                                   <Ionicons name="logo-usd" size={10} color="#fff" />
                                   <Text style={styles.bonusText}>+{dayReward.credits}</Text>
@@ -288,26 +261,39 @@ export const StreakModal: React.FC<StreakModalProps> = ({
                           )}
                         </View>
                       </LinearGradient>
-                    </Animated.View>
+                    </View>
                   );
                 })}
               </View>
 
-              {/* Claim Button */}
-              <TouchableOpacity
-                style={styles.claimButton}
-                onPress={handleClose}
-                activeOpacity={0.85}
-              >
-                <LinearGradient
-                  colors={['#FF6B00', '#FF8C00', '#FFB366']}
-                  start={{x: 0, y: 0}}
-                  end={{x: 1, y: 0}}
-                  style={styles.claimButtonGradient}
-                >
-                  <Text style={styles.claimButtonText}>RISCUOTI</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+              {/* Recover Button */}
+              <View style={styles.buttonsContainer}>
+                {onGoToProfile && (
+                  <TouchableOpacity
+                    style={styles.recoverButton}
+                    onPress={() => {
+                      Animated.timing(opacityAnim, {
+                        toValue: 0,
+                        duration: 200,
+                        useNativeDriver: true,
+                      }).start(() => {
+                        onGoToProfile();
+                      });
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <LinearGradient
+                      colors={[COLORS.primary, '#FF8500']}
+                      start={{x: 0, y: 0}}
+                      end={{x: 1, y: 0}}
+                      style={styles.recoverButtonGradient}
+                    >
+                      <Ionicons name="refresh" size={20} color="#fff" />
+                      <Text style={styles.recoverButtonText}>RECUPERA STREAK</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+              </View>
 
             </Animated.View>
           </TouchableWithoutFeedback>
@@ -338,8 +324,9 @@ const styles = StyleSheet.create({
     maxWidth: 360,
     borderRadius: RADIUS.xl,
     borderWidth: 2,
-    borderColor: '#FF6B00',
+    borderColor: '#E53935',
     overflow: 'hidden',
+    paddingBottom: SPACING.lg,
   },
   gradientBg: {
     position: 'absolute',
@@ -353,17 +340,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: SPACING.lg,
     paddingBottom: SPACING.md,
+    paddingHorizontal: SPACING.lg,
   },
   headerTitle: {
     fontSize: 24,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    textShadowColor: 'rgba(255, 107, 0, 0.3)',
-    textShadowOffset: {width: 0, height: 2},
-    textShadowRadius: 8,
     textAlign: 'center',
-    includeFontPadding: false,
+    marginBottom: 4,
   },
+  headerSubtitle: {
+    fontSize: 14,
+    fontFamily: FONT_FAMILY.medium,
+    textAlign: 'center',
+  },
+  // Day boxes - same as StreakModal
   daysRow: {
     flexDirection: 'row',
     paddingHorizontal: SPACING.sm,
@@ -392,7 +383,6 @@ const styles = StyleSheet.create({
   dayContentWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    // Ensure content is centered on both platforms
     width: '100%',
     height: '100%',
   },
@@ -441,26 +431,29 @@ const styles = StyleSheet.create({
     color: '#fff',
     includeFontPadding: false,
   },
-  claimButton: {
-    margin: SPACING.lg,
-    borderRadius: 14,
+  buttonsContainer: {
+    paddingHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
   },
-  claimButtonGradient: {
+  recoverButton: {
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  recoverButtonGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
     minHeight: Platform.OS === 'ios' ? 56 : 50,
+    gap: 8,
   },
-  claimButtonText: {
+  recoverButtonText: {
     fontSize: 16,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: '#fff',
     letterSpacing: 2,
-    textAlign: 'center',
-    includeFontPadding: false,
-    paddingHorizontal: SPACING.sm,
   },
 });
 
-export default StreakModal;
+export default StreakRecoveryModal;

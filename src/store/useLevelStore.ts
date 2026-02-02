@@ -2,6 +2,7 @@ import {create} from 'zustand';
 import {persist, createJSONStorage} from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {LevelInfo} from '../types';
+import {useLevelUpStore} from './useLevelUpStore';
 
 // XP rewards - Sistema definitivo
 export const XP_REWARDS = {
@@ -90,18 +91,21 @@ export const useLevelStore = create<LevelState>()(
     // Check if leveled up and reward not yet claimed
     if (newLevel > level && !claimedLevelRewards.includes(newLevel)) {
       const newLevelInfo = getLevelByNumber(newLevel);
-      if (newLevelInfo.creditReward && newLevelInfo.creditReward > 0) {
-        levelUpResult = {
-          newLevel,
-          creditReward: newLevelInfo.creditReward,
-          levelName: newLevelInfo.name,
-        };
+      const creditReward = newLevelInfo.creditReward || 0;
 
-        // Add credits via credits store (will be handled by caller)
-        set({
-          claimedLevelRewards: [...claimedLevelRewards, newLevel],
-        });
-      }
+      levelUpResult = {
+        newLevel,
+        creditReward,
+        levelName: newLevelInfo.name,
+      };
+
+      // Trigger level up overlay
+      useLevelUpStore.getState().triggerLevelUp(level, newLevel, creditReward);
+
+      // Mark reward as claimed
+      set({
+        claimedLevelRewards: [...claimedLevelRewards, newLevel],
+      });
     }
 
     set({

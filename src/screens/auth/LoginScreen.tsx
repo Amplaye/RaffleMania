@@ -658,8 +658,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: Platform.OS === 'ios' ? 56 : 52,
-    paddingVertical: Platform.OS === 'ios' ? 16 : 12,
+    minHeight: Platform.OS === 'ios' ? 56 : 52,
     gap: 8,
   },
   loginButtonText: {
