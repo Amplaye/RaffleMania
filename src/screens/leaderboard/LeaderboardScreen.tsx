@@ -468,7 +468,7 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({navigation}
       </View>
 
       {/* Update Info Text */}
-      <Text style={styles.updateScheduleText}>
+      <Text style={[styles.updateScheduleText, {color: colors.text}]}>
         Aggiornamento classifica alle 00:00
       </Text>
 
@@ -540,7 +540,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: '#000000',
     textAlign: 'center',
     marginBottom: SPACING.sm,
   },

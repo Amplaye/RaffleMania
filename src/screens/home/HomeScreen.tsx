@@ -647,7 +647,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
                 {user?.credits ?? 0} crediti
               </Text>
             </View>
-            <Text style={styles.ticketCounterText}>
+            <Text style={[styles.ticketCounterText, {color: colors.text}]}>
               Biglietti oggi: <Text style={styles.ticketCounterValue}>{ticketsPurchasedToday}/{DAILY_LIMITS.MAX_TICKETS_PER_DAY}</Text>
             </Text>
           </View>
@@ -1025,6 +1025,7 @@ const styles = StyleSheet.create({
   prizeSlideWrapper: {
     width: SLIDE_WIDTH,
     paddingHorizontal: SPACING.md,
+    paddingBottom: 20,
     justifyContent: 'center',
   },
   prizeSlide: {
@@ -1063,8 +1064,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: SPACING.md,
-    gap: SPACING.sm,
+    marginBottom: 40,
+    gap: 6,
   },
   paginationDot: {
     width: 10,
@@ -1116,7 +1117,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: '#000',
   },
   ticketCounterValue: {
     color: COLORS.primary,

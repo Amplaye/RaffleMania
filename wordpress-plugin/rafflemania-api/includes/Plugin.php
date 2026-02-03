@@ -1,5 +1,5 @@
 <?php
-// Force opcache refresh: 2026-02-01-referral-v1
+// Force opcache refresh: 2026-02-02-support-chat-v2
 namespace RaffleMania;
 
 /**
@@ -105,6 +105,11 @@ class Plugin {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/ReferralController.php';
         $referrals = new API\ReferralController();
         $referrals->register_routes();
+
+        // Support Chat endpoints - v1.5
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/SupportChatController.php';
+        $support = new API\SupportChatController();
+        $support->register_routes();
     }
 
     public function add_admin_menu() {
@@ -165,6 +170,15 @@ class Plugin {
 
         add_submenu_page(
             'rafflemania',
+            'Supporto Chat',
+            'Supporto',
+            'manage_options',
+            'rafflemania-support',
+            [$this, 'render_support_page']
+        );
+
+        add_submenu_page(
+            'rafflemania',
             'Impostazioni',
             'Impostazioni',
             'manage_options',
@@ -195,6 +209,11 @@ class Plugin {
 
     public function render_settings_page() {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/settings.php';
+    }
+
+    public function render_support_page() {
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/support-chat.php';
     }
 
     public function render_shipments_page() {

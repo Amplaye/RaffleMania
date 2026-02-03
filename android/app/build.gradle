@@ -118,4 +118,8 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // Firebase
+    implementation project(':react-native-firebase_app')
+    implementation project(':react-native-firebase_firestore')
 }

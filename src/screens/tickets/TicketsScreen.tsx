@@ -201,7 +201,7 @@ const PrizeGroupCard: React.FC<{
               <Text style={[styles.prizeGroupName, {color: colors.text}]} numberOfLines={1}>
                 {group.prizeName}
               </Text>
-              <Text style={styles.prizeGroupSubtitle}>
+              <Text style={[styles.prizeGroupSubtitle, {color: colors.text}]}>
                 {group.numbers.length} {group.numbers.length === 1 ? 'numero' : 'numeri'} • {((group.numbers.length / group.totalPoolTickets) * 100).toFixed(2)}% chance
               </Text>
             </View>
@@ -670,7 +670,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: '#000000',
     marginTop: 2,
   },
   prizeGroupRight: {

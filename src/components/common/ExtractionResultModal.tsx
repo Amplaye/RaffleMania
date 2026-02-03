@@ -3,6 +3,7 @@ import {View, Text, StyleSheet, Animated, Modal, TouchableOpacity, Image, Dimens
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {FONT_FAMILY, FONT_WEIGHT, FONT_SIZE, RADIUS, SPACING, COLORS} from '../../utils/constants';
+import {useThemeColors} from '../../hooks/useThemeColors';
 
 const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
 
@@ -121,6 +122,7 @@ export const ExtractionResultModal: React.FC<ExtractionResultModalProps> = ({
   userNumbers = [],
   onClose,
 }) => {
+  const {colors, isDark} = useThemeColors();
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const iconScaleAnim = useRef(new Animated.Value(0)).current;
@@ -218,14 +220,14 @@ export const ExtractionResultModal: React.FC<ExtractionResultModalProps> = ({
               </Animated.View>
 
               {/* Message */}
-              <Text style={styles.loserTitle}>Peccato!</Text>
-              <Text style={styles.loserSubtitle}>Non hai vinto questa volta</Text>
+              <Text style={[styles.loserTitle, {color: colors.text}]}>Peccato!</Text>
+              <Text style={[styles.loserSubtitle, {color: colors.textSecondary}]}>Non hai vinto questa volta</Text>
 
               {/* Winning Number Display */}
               {winningNumber !== undefined && (
-                <View style={styles.extractedNumberBox}>
-                  <Text style={styles.extractedNumberLabel}>Numero Estratto</Text>
-                  <Text style={styles.extractedNumber}>#{winningNumber}</Text>
+                <View style={[styles.extractedNumberBox, {backgroundColor: isDark ? '#2A2A2A' : '#F5F5F5'}]}>
+                  <Text style={[styles.extractedNumberLabel, {color: colors.textSecondary}]}>Numero Estratto</Text>
+                  <Text style={[styles.extractedNumber, {color: colors.text}]}>#{winningNumber}</Text>
                 </View>
               )}
 
@@ -404,16 +406,13 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: '#333',
   },
   loserSubtitle: {
     fontSize: FONT_SIZE.md,
     fontFamily: FONT_FAMILY.regular,
-    color: '#888',
     marginBottom: SPACING.md,
   },
   extractedNumberBox: {
-    backgroundColor: '#F5F5F5',
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.md,
@@ -423,13 +422,11 @@ const styles = StyleSheet.create({
   extractedNumberLabel: {
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.medium,
-    color: '#888',
   },
   extractedNumber: {
     fontSize: 32,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: '#333',
   },
   userNumbersBox: {
     backgroundColor: `${COLORS.primary}10`,

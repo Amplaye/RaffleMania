@@ -158,7 +158,7 @@ const Particle: React.FC<{index: number; startAnim: boolean}> = ({index, startAn
 
 export const LevelUpOverlay: React.FC = () => {
   const {isVisible, levelUpData, hideLevelUp} = useLevelUpStore();
-  const {isDark} = useThemeColors();
+  const {colors, isDark} = useThemeColors();
 
   // Animations
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
@@ -372,7 +372,7 @@ export const LevelUpOverlay: React.FC = () => {
                         },
                       ]}>
                       <Text style={styles.levelNumberNew}>{levelUpData.newLevel}</Text>
-                      <Text style={styles.levelNameNew}>{levelUpData.newLevelInfo.name}</Text>
+                      <Text style={[styles.levelNameNew, {color: colors.text}]}>{levelUpData.newLevelInfo.name}</Text>
                     </Animated.View>
                   </View>
                 </View>
@@ -399,7 +399,7 @@ export const LevelUpOverlay: React.FC = () => {
                     />
                   </Animated.View>
                 </View>
-                <Text style={styles.progressText}>
+                <Text style={[styles.progressText, {color: colors.text}]}>
                   Livello completato!
                 </Text>
               </View>
@@ -524,7 +524,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.md,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: '#000000',
     marginTop: 2,
   },
   progressContainer: {
@@ -548,7 +547,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    color: '#000000',
     textAlign: 'center',
     marginTop: 6,
   },

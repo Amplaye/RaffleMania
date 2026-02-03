@@ -1,5 +1,6 @@
 import {create} from 'zustand';
 import firestore from '@react-native-firebase/firestore';
+import apiClient from '../services/apiClient';
 
 export interface ChatMessage {
   id: string;
@@ -132,6 +133,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
           {merge: true}
         );
+
+      // Notify admin about new message (fire and forget)
+      apiClient.post('/support/notify-admin', {
+        user_id: userId,
+        user_name: userName,
+        message: text.trim().substring(0, 100),
+      }).catch(() => {
+        // Silently ignore - admin notification is optional
+      });
     } catch (error: any) {
       console.error('Error sending message:', error);
       set({error: error.message});

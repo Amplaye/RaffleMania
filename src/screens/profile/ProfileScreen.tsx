@@ -55,7 +55,7 @@ const AnimatedProgressBar: React.FC<{
 };
 
 // Level Card Component
-const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors: _colors, onPress}) => {
+const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors, onPress}) => {
   const level = useLevelStore(state => state.level);
   const getLevelInfo = useLevelStore(state => state.getLevelInfo);
   const getProgressToNextLevel = useLevelStore(state => state.getProgressToNextLevel);
@@ -87,7 +87,7 @@ const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors: _color
           {/* Info livello */}
           <View style={styles.levelInfo}>
             <Text style={[styles.levelName, {color: COLORS.primary}]}>{levelInfo.name}</Text>
-            <Text style={[styles.levelSubtext, {color: '#000000', fontWeight: 'bold'}]}>Livello {level}</Text>
+            <Text style={[styles.levelSubtext, {color: colors.text, fontWeight: 'bold'}]}>Livello {level}</Text>
           </View>
 
         </View>
@@ -107,8 +107,8 @@ const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors: _color
             height={12}
           />
           <View style={styles.levelProgressInfo}>
-            <Text style={[styles.levelProgressPercent, {color: '#000000'}]}>{Math.round(progress)}%</Text>
-            <Text style={[styles.levelProgressXp, {color: '#000000', fontWeight: 'bold'}]}>
+            <Text style={[styles.levelProgressPercent, {color: colors.text}]}>{Math.round(progress)}%</Text>
+            <Text style={[styles.levelProgressXp, {color: colors.text, fontWeight: 'bold'}]}>
               {xpNeeded > 0 ? `${xpNeeded} XP al prossimo livello` : 'Livello massimo raggiunto!'}
             </Text>
           </View>
@@ -121,15 +121,15 @@ const LevelCard: React.FC<{colors: any; onPress: () => void}> = ({colors: _color
               <Ionicons name={nextLevelInfo.icon as any} size={20} color={COLORS.primary} />
             </View>
             <View style={styles.nextLevelText}>
-              <Text style={[styles.nextLevelTitle, {color: '#000000'}]}>Prossimo: {nextLevelInfo.name}</Text>
-              <Text style={[styles.nextLevelXp, {color: '#333333'}]}>Raggiungi {nextLevelInfo.minXP} XP</Text>
+              <Text style={[styles.nextLevelTitle, {color: colors.text}]}>Prossimo: {nextLevelInfo.name}</Text>
+              <Text style={[styles.nextLevelXp, {color: colors.textSecondary}]}>Raggiungi {nextLevelInfo.minXP} XP</Text>
             </View>
             <Ionicons name="arrow-forward" size={18} color={COLORS.primary} />
           </View>
         )}
 
         {/* Hint */}
-        <Text style={[styles.levelHint, {color: '#000000', fontWeight: 'bold'}]}>
+        <Text style={[styles.levelHint, {color: colors.text, fontWeight: 'bold'}]}>
           Tocca per vedere tutti i livelli e vantaggi
         </Text>
       </Card>
@@ -479,7 +479,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.supportButton}
-          onPress={() => Alert.alert('Aiuto', 'Funzionalita in arrivo!')}>
+          onPress={() => navigation.navigate('SupportChat')}>
           <Ionicons name="chatbubble-outline" size={22} color={colors.primary} />
           <Text style={[styles.supportButtonText, {color: colors.primary}]}>Parla con un operatore</Text>
         </TouchableOpacity>

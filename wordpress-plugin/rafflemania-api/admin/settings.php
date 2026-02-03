@@ -1,4 +1,5 @@
 <?php
+// Settings Page v1.5 - 2026-02-02 - Firebase Support
 if (!defined('ABSPATH')) exit;
 
 // Handle save
@@ -20,6 +21,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_settings_
         // Push notifications (OneSignal - Free)
         update_option('rafflemania_onesignal_app_id', sanitize_text_field($_POST['onesignal_app_id']));
         update_option('rafflemania_onesignal_api_key', sanitize_text_field($_POST['onesignal_api_key']));
+
+        // Firebase (for Support Chat)
+        update_option('rafflemania_firebase_project_id', sanitize_text_field($_POST['firebase_project_id']));
+        update_option('rafflemania_firebase_api_key', sanitize_text_field($_POST['firebase_api_key']));
 
         // Contact email
         update_option('rafflemania_contact_email', sanitize_email($_POST['contact_email']));
@@ -177,6 +182,28 @@ $jwt_secret = get_option('rafflemania_jwt_secret', '');
                     <label>OneSignal REST API Key</label>
                     <input type="password" name="onesignal_api_key" value="<?php echo esc_attr(get_option('rafflemania_onesignal_api_key', '')); ?>">
                     <small>La tua REST API Key di OneSignal</small>
+                </div>
+            </div>
+
+            <!-- Firebase for Chat -->
+            <div class="rafflemania-settings-card">
+                <h2><span class="dashicons dashicons-format-chat"></span> Firebase (Chat Supporto)</h2>
+
+                <div class="rafflemania-info-box" style="background: #fff3e0; border-color: #ff9800;">
+                    <strong>🔥 Firebase Firestore</strong><br>
+                    Per la chat di supporto. Vai su <a href="https://console.firebase.google.com" target="_blank">Firebase Console</a> → Project Settings per ottenere le credenziali.
+                </div>
+
+                <div class="rafflemania-form-row">
+                    <label>Firebase Project ID</label>
+                    <input type="text" name="firebase_project_id" value="<?php echo esc_attr(get_option('rafflemania_firebase_project_id', '')); ?>" placeholder="es. rafflemania-12345">
+                    <small>Il Project ID del tuo progetto Firebase</small>
+                </div>
+
+                <div class="rafflemania-form-row">
+                    <label>Firebase Web API Key</label>
+                    <input type="password" name="firebase_api_key" value="<?php echo esc_attr(get_option('rafflemania_firebase_api_key', '')); ?>">
+                    <small>La Web API Key (opzionale per regole pubbliche)</small>
                 </div>
             </div>
 

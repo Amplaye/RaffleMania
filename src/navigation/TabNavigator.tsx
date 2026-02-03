@@ -1,6 +1,7 @@
 import React from 'react';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {View, StyleSheet, TouchableOpacity, Platform} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {BottomTabBarProps} from '@react-navigation/bottom-tabs';
@@ -48,6 +49,10 @@ const TabIcon: React.FC<TabIconProps> = ({
 // Custom Tab Bar
 const CustomTabBar: React.FC<BottomTabBarProps> = ({state, descriptors, navigation}) => {
   const {colors, isDark} = useThemeColors();
+  const insets = useSafeAreaInsets();
+
+  // Calculate proper bottom padding for 3-button navigation on Android
+  const bottomInset = Platform.OS === 'android' ? Math.max(insets.bottom, 8) : insets.bottom;
 
   const iconMap: Record<string, {outline: string; filled: string}> = {
     Home: {outline: 'home-outline', filled: 'home'},
@@ -57,16 +62,19 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({state, descriptors, navigati
     Profile: {outline: 'person-outline', filled: 'person'},
   };
 
+  // Dynamic height based on safe area
+  const tabBarHeight = 50 + bottomInset + (Platform.OS === 'ios' ? 8 : 0);
+
   return (
     <View style={styles.customTabBarWrapper}>
-      <View style={styles.tabBarContainer}>
+      <View style={[styles.tabBarContainer, {height: tabBarHeight}]}>
         <LinearGradient
           colors={isDark ? ['#2A2520', '#252015'] : ['#FFE0BD', '#FFDAB3']}
           start={{x: 0.5, y: 0}}
           end={{x: 0.5, y: 1}}
           style={styles.tabBarGradient}
         />
-        <View style={styles.tabBarContent}>
+        <View style={[styles.tabBarContent, {paddingBottom: bottomInset}]}>
           {state.routes.map((route, index) => {
             const {options} = descriptors[route.key];
             const isFocused = state.index === index;
@@ -196,7 +204,6 @@ const styles = StyleSheet.create({
     right: 0,
   },
   tabBarContainer: {
-    height: Platform.OS === 'ios' ? 80 : 65,
     borderTopWidth: 1.5,
     borderTopColor: 'rgba(255, 107, 0, 0.35)',
   },
@@ -206,8 +213,7 @@ const styles = StyleSheet.create({
   tabBarContent: {
     flex: 1,
     flexDirection: 'row',
-    paddingTop: Platform.OS === 'ios' ? 12 : 8,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
+    paddingTop: 8,
   },
   tabButton: {
     flex: 1,
