@@ -33,5 +33,106 @@ target 'RaffleManiaApp' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # ============================================
+    # FIX 1: gRPC module map for Firebase Firestore
+    # ============================================
+    installer.pods_project.targets.each do |target|
+      if target.name == 'gRPC-Core'
+        target.build_configurations.each do |config|
+          config.build_settings['CLANG_WARN_STRICT_PROTOTYPES'] = 'NO'
+        end
+      end
+    end
+
+    # Fix gRPC-Core modulemap path in ALL xcconfig files
+    # The modulemap exists in Target Support Files but many pods look in Headers/Private/grpc
+    wrong_path = '${PODS_ROOT}/Headers/Private/grpc/gRPC-Core.modulemap'
+    correct_path = '${PODS_ROOT}/Target Support Files/gRPC-Core/gRPC-Core.modulemap'
+    fixed_count = 0
+
+    Dir.glob("#{installer.sandbox.root}/Target Support Files/**/*.xcconfig").each do |path|
+      content = File.read(path)
+      if content.include?(wrong_path)
+        new_content = content.gsub(wrong_path, correct_path)
+        File.write(path, new_content)
+        fixed_count += 1
+      end
+    end
+    puts "[Podfile] Fixed gRPC-Core modulemap path in #{fixed_count} xcconfig files"
+
+    # ============================================
+    # FIX 2: Remove umbrella conflicts in modulemaps
+    # React Native 0.83+ generates conflicting umbrella headers
+    # ============================================
+    modulemap_fixes = [
+      "#{installer.sandbox.root}/Target Support Files/React-jsitooling/React-jsitooling.modulemap",
+      "#{installer.sandbox.root}/Target Support Files/React-RuntimeApple/React-RuntimeApple.modulemap",
+      "#{installer.sandbox.root}/Target Support Files/ReactCommon/ReactCommon.modulemap"
+    ]
+
+    # Module name mapping to avoid conflicts
+    module_renames = {
+      "React-jsitooling" => "React_jsitooling",
+      "React-RuntimeApple" => "React_RuntimeApple",
+      "ReactCommon" => "ReactCommon_Module"
+    }
+
+    modulemap_fixes.each do |path|
+      if File.exist?(path)
+        content = File.read(path)
+        basename = File.basename(path, ".modulemap")
+        new_module_name = module_renames[basename]
+
+        # Replace "umbrella header" with just "header" to avoid directory conflicts
+        new_content = content.gsub("umbrella header", "header")
+        # Remove "module * { export * }" which requires umbrella
+        new_content = new_content.gsub(/\s*module \* \{ export \* \}/, "")
+        # Remove exclude header lines
+        new_content = new_content.gsub(/\s*exclude header "[^"]*"/, "")
+        # Rename module to avoid conflicts
+        if new_module_name
+          new_content = new_content.gsub(/^module\s+\w+\s*\{/, "module #{new_module_name} {")
+        end
+
+        if new_content != content
+          File.write(path, new_content)
+          puts "[Podfile] Fixed modulemap: #{File.basename(path)}"
+        end
+      end
+    end
+
+    # ============================================
+    # FIX 3: Remove weak_framework FirebaseFirestoreInternal
+    # Firebase adds this but it's compiled as static library
+    # ============================================
+    xcconfig_files = [
+      "#{installer.sandbox.root}/Target Support Files/Pods-RaffleManiaApp/Pods-RaffleManiaApp.debug.xcconfig",
+      "#{installer.sandbox.root}/Target Support Files/Pods-RaffleManiaApp/Pods-RaffleManiaApp.release.xcconfig"
+    ]
+
+    xcconfig_files.each do |path|
+      if File.exist?(path)
+        content = File.read(path)
+        if content.include?('-weak_framework "FirebaseFirestoreInternal"')
+          new_content = content.gsub('-weak_framework "FirebaseFirestoreInternal"', '')
+          File.write(path, new_content)
+          puts "[Podfile] Removed weak_framework FirebaseFirestoreInternal from #{File.basename(path)}"
+        end
+      end
+    end
+
+    # ============================================
+    # FIX 4: Set deployment targets to avoid warnings
+    # ============================================
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        current_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+        if current_target && current_target.to_f < 12.0
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+        end
+      end
+    end
+    puts "[Podfile] Updated deployment targets to minimum 12.0"
   end
 end

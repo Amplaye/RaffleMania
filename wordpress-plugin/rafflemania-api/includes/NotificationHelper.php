@@ -107,6 +107,22 @@ class NotificationHelper {
     }
 
     /**
+     * Notify user of new support chat message
+     */
+    public static function notify_support_message($user_id, $message_text) {
+        $preview = strlen($message_text) > 100
+            ? substr($message_text, 0, 100) . '...'
+            : $message_text;
+
+        return self::send_to_user(
+            $user_id,
+            'Nuovo messaggio dal supporto',
+            $preview,
+            ['type' => 'support_chat', 'chatId' => (string)$user_id]
+        );
+    }
+
+    /**
      * Send HTTP request to OneSignal API
      */
     private static function send_request($payload, $api_key) {

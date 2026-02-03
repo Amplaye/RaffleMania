@@ -13,6 +13,7 @@ import {
   FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
+import {isAdminEmail} from '../../utils/adminConfig';
 
 // Animated Progress Bar Component
 const AnimatedProgressBar: React.FC<{
@@ -469,6 +470,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
         </View>
       </Card>
 
+      {/* Admin Panel Button - Only visible for admin emails */}
+      {isAdminEmail(user?.email) && (
+        <TouchableOpacity
+          style={styles.adminButton}
+          onPress={() => navigation.navigate('AdminChatList')}>
+          <Ionicons name="shield-checkmark" size={22} color="#FFFFFF" />
+          <Text style={styles.adminButtonText}>Pannello Admin - Chat Supporto</Text>
+          <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
+
       {/* Support Buttons */}
       <View style={styles.supportButtonsContainer}>
         <TouchableOpacity
@@ -863,6 +875,24 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+  },
+  adminButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.sm,
+    backgroundColor: '#E74C3C',
+    borderRadius: RADIUS.lg,
+    marginBottom: SPACING.md,
+  },
+  adminButtonText: {
+    flex: 1,
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: '#FFFFFF',
   },
   version: {
     textAlign: 'center',

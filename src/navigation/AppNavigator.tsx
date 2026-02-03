@@ -8,6 +8,7 @@ import {AuthNavigator} from './AuthNavigator';
 import {TabNavigator} from './TabNavigator';
 import {COLORS, FONT_SIZE, FONT_WEIGHT} from '../utils/constants';
 import {ScreenContainer, Button, UrgencyBorderEffect, ExtractionStartEffect, ExtractionResultModal} from '../components/common';
+import {navigationRef} from '../services/NavigationService';
 
 // Import actual screens
 import {CreditsScreen} from '../screens/credits';
@@ -23,6 +24,7 @@ import {LeaderboardScreen} from '../screens/leaderboard';
 import {EmailVerificationScreen} from '../screens/auth';
 import {StreakScreen} from '../screens/streak';
 import {SupportChatScreen} from '../screens/support';
+import {AdminChatListScreen, AdminChatDetailScreen} from '../screens/admin';
 
 // Stack param list
 export type RootStackParamList = {
@@ -41,6 +43,9 @@ export type RootStackParamList = {
   EmailVerification: {email?: string};
   Streak: undefined;
   SupportChat: undefined;
+  // Admin screens
+  AdminChatList: undefined;
+  AdminChatDetail: {userId: string; userName: string};
 };
 
 type PlaceholderProps = NativeStackScreenProps<RootStackParamList, keyof RootStackParamList>;
@@ -169,6 +174,17 @@ const MainStack: React.FC = () => {
         name="SupportChat"
         component={SupportChatScreen}
         options={{title: 'Assistenza'}}
+      />
+      {/* Admin Screens */}
+      <Stack.Screen
+        name="AdminChatList"
+        component={AdminChatListScreen}
+        options={{title: 'Chat Supporto'}}
+      />
+      <Stack.Screen
+        name="AdminChatDetail"
+        component={AdminChatDetailScreen}
+        options={{title: 'Chat'}}
       />
     </Stack.Navigator>
   );
@@ -307,7 +323,7 @@ export const AppNavigator: React.FC = () => {
 
   return (
     <View style={styles.appContainer}>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         {isAuthenticated ? <MainStack /> : <AuthNavigator />}
       </NavigationContainer>
 

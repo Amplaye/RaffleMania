@@ -16,3 +16,5 @@ export type {ReferredUser, ReferrerInfo} from './useReferralStore';
 export {useLevelUpStore} from './useLevelUpStore';
 export {useChatStore} from './useChatStore';
 export type {ChatMessage} from './useChatStore';
+export {useAdminChatStore} from './useAdminChatStore';
+export type {ChatRoom, ChatMessage as AdminChatMessage} from './useAdminChatStore';
