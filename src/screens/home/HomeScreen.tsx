@@ -41,7 +41,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const {fetchTickets, addTicket, addTicketsBatch, incrementAdsWatched, canPurchaseTicket, getTicketsPurchasedToday, getAdCooldownRemaining, getAdCooldownSeconds, checkAndResetDaily, resetDailyLimit} = useTicketsStore();
   const {prizes, fetchPrizes, fetchDraws, incrementAdsForPrize, fillPrizeToGoal, startTimerForPrize} = usePrizesStore();
   const {addXPForAd, addXPForTicket} = useLevelStore();
-  const {currentStreak, checkAndUpdateStreak, getNextMilestone, hasClaimedToday, _hasHydrated, checkDayChange, setupMidnightTimer, missedDays, shouldShowRecoveryPopup, markRecoveryPopupShown} = useStreakStore();
+  const {currentStreak, checkAndUpdateStreak, getNextMilestone, hasClaimedToday, _hasHydrated, checkDayChange, setupMidnightTimer, missedDays, shouldShowRecoveryPopup, markRecoveryPopupShown, resetStreak, recoverStreak} = useStreakStore();
   const {useCreditsForTickets: spendCreditsForTickets, addCredits} = useCreditsStore();
   const user = useAuthStore(state => state.user);
   const refreshUserData = useAuthStore(state => state.refreshUserData);

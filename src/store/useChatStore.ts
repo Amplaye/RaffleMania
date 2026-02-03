@@ -1,5 +1,26 @@
 import {create} from 'zustand';
 import firestore from '@react-native-firebase/firestore';
+import {API_CONFIG} from '../utils/constants';
+
+// Notify admin via WordPress when user sends a message
+const notifyAdminOfNewMessage = async (userId: string, userName: string, message: string) => {
+  try {
+    await fetch(`${API_CONFIG.BASE_URL}/rafflemania/v1/chat/notify-admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        user_name: userName,
+        message: message,
+      }),
+    });
+  } catch (error) {
+    // Non-critical: admin will still see the message in Firebase
+    console.log('Failed to notify admin (non-critical):', error);
+  }
+};
 
 export interface ChatMessage {
   id: string;
@@ -132,6 +153,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
           {merge: true}
         );
+
+      // Notify admin via email (non-blocking)
+      notifyAdminOfNewMessage(userId, userName, text.trim());
     } catch (error: any) {
       console.error('Error sending message:', error);
       set({error: error.message});

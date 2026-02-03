@@ -105,6 +105,11 @@ class Plugin {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/ReferralController.php';
         $referrals = new API\ReferralController();
         $referrals->register_routes();
+
+        // Chat/Support endpoints - v1.5
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/ChatController.php';
+        $chat = new API\ChatController();
+        $chat->register_routes();
     }
 
     public function add_admin_menu() {
