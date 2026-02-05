@@ -169,29 +169,13 @@ export const TicketSuccessModal: React.FC<TicketSuccessModalProps> = ({
             </LinearGradient>
           </Animated.View>
 
-          {/* Probability Info */}
-          {ticketInfo.totalUserNumbers && ticketInfo.totalPoolTickets && (
-            <View style={styles.probabilityContainer}>
-              <LinearGradient
-                colors={['#00B894', '#00A085']}
-                start={{x: 0, y: 0}}
-                end={{x: 1, y: 0}}
-                style={styles.probabilityGradient}>
-                <View style={styles.probabilityContent}>
-                  <Ionicons name="trending-up" size={18} color={COLORS.white} />
-                  <View style={styles.probabilityTextContainer}>
-                    <Text style={styles.probabilityTitle}>Le tue probabilita</Text>
-                    <Text style={styles.probabilitySubtitle}>
-                      {ticketInfo.totalUserNumbers.length} numer{ticketInfo.totalUserNumbers.length === 1 ? 'o' : 'i'} su {ticketInfo.totalPoolTickets} totali
-                    </Text>
-                  </View>
-                  <View style={styles.probabilityBadge}>
-                    <Text style={styles.probabilityValue}>
-                      {((ticketInfo.totalUserNumbers.length / ticketInfo.totalPoolTickets) * 100).toFixed(1)}%
-                    </Text>
-                  </View>
-                </View>
-              </LinearGradient>
+          {/* Total Numbers Info */}
+          {ticketInfo.totalUserNumbers && ticketInfo.totalUserNumbers.length > 0 && (
+            <View style={styles.totalNumbersContainer}>
+              <Ionicons name="ticket" size={16} color={COLORS.primary} />
+              <Text style={styles.totalNumbersText}>
+                Hai {ticketInfo.totalUserNumbers.length} numer{ticketInfo.totalUserNumbers.length === 1 ? 'o' : 'i'} per questo premio
+              </Text>
             </View>
           )}
 
@@ -340,46 +324,20 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHT.medium,
     color: COLORS.white,
   },
-  probabilityContainer: {
-    width: '100%',
-    marginBottom: SPACING.md,
-    borderRadius: RADIUS.lg,
-    overflow: 'hidden',
-  },
-  probabilityGradient: {
-    borderRadius: RADIUS.lg,
-  },
-  probabilityContent: {
+  totalNumbersContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.md,
     gap: SPACING.sm,
+    backgroundColor: `${COLORS.primary}10`,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.lg,
+    marginBottom: SPACING.md,
   },
-  probabilityTextContainer: {
-    flex: 1,
-  },
-  probabilityTitle: {
+  totalNumbersText: {
     fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
-  },
-  probabilitySubtitle: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.regular,
-    color: 'rgba(255,255,255,0.8)',
-  },
-  probabilityBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: RADIUS.sm,
-  },
-  probabilityValue: {
-    fontSize: FONT_SIZE.md,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
+    fontFamily: FONT_FAMILY.medium,
+    color: COLORS.primary,
   },
   luckContainer: {
     flexDirection: 'row',

@@ -5,8 +5,8 @@ import apiClient from '../services/apiClient';
 import axios from 'axios';
 
 // Base URL for direct PHP endpoints (bypasses REST API cache)
-const DIRECT_SETTINGS_URL = 'https://www.craftytraders.com/wp-content/plugins/rafflemania-api/get-settings.php';
-const AJAX_SETTINGS_URL = 'https://www.craftytraders.com/wp-admin/admin-ajax.php';
+const DIRECT_SETTINGS_URL = 'https://www.rafflemania.it/wp-content/plugins/rafflemania-api/get-settings.php';
+const AJAX_SETTINGS_URL = 'https://www.rafflemania.it/wp-admin/admin-ajax.php';
 
 // Default XP rewards - Sistema definitivo
 // WATCH_AD = 3 XP per pubblicità
@@ -44,15 +44,33 @@ interface CreditsSettings {
   REFERRAL_BONUS: number;
 }
 
+// Notification preferences
+export interface NotificationPreferences {
+  pushEnabled: boolean;
+  emailEnabled: boolean;
+  drawReminders: boolean;
+  winNotifications: boolean;
+}
+
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  pushEnabled: true,
+  emailEnabled: true,
+  drawReminders: true,
+  winNotifications: true,
+};
+
 interface SettingsState {
   xpRewards: XPRewards;
   credits: CreditsSettings;
+  notifications: NotificationPreferences;
   isLoaded: boolean;
   lastFetched: number | null;
 
   // Actions
   fetchSettings: () => Promise<void>;
   getXPReward: (type: keyof XPRewards) => number;
+  setNotificationPreference: (key: keyof NotificationPreferences, value: boolean) => Promise<void>;
+  getNotificationPreferences: () => NotificationPreferences;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -60,6 +78,7 @@ export const useSettingsStore = create<SettingsState>()(
     (set, get) => ({
       xpRewards: DEFAULT_XP_REWARDS,
       credits: DEFAULT_CREDITS,
+      notifications: DEFAULT_NOTIFICATION_PREFERENCES,
       isLoaded: false,
       lastFetched: null,
 
@@ -164,6 +183,89 @@ export const useSettingsStore = create<SettingsState>()(
       getXPReward: (type: keyof XPRewards) => {
         return get().xpRewards[type] ?? DEFAULT_XP_REWARDS[type];
       },
+
+      setNotificationPreference: async (key: keyof NotificationPreferences, value: boolean) => {
+        // Import OneSignal dynamically to avoid circular dependencies
+        const {OneSignal} = await import('react-native-onesignal');
+
+        // Handle push notifications - control OneSignal subscription
+        if (key === 'pushEnabled') {
+          try {
+            if (value) {
+              OneSignal.User.pushSubscription.optIn();
+              console.log('[Settings] Push notifications enabled');
+            } else {
+              OneSignal.User.pushSubscription.optOut();
+              console.log('[Settings] Push notifications disabled');
+            }
+          } catch (error) {
+            console.error('[Settings] Error toggling push notifications:', error);
+          }
+        }
+
+        // Handle email preference - sync to backend
+        if (key === 'emailEnabled') {
+          try {
+            // Get user ID from auth store
+            const {useAuthStore} = await import('./useAuthStore');
+            const user = useAuthStore.getState().user;
+            const token = useAuthStore.getState().token;
+            const isGuest = token?.startsWith('guest_token_');
+
+            if (user && !isGuest) {
+              // Sync email preference to WordPress backend
+              await apiClient.post('/users/preferences', {
+                email_notifications: value,
+              });
+              console.log('[Settings] Email preference synced to backend:', value);
+            }
+          } catch (error) {
+            console.log('[Settings] Email sync failed (non-critical):', error);
+          }
+        }
+
+        // Handle draw reminders - control OneSignal tags for targeted notifications
+        if (key === 'drawReminders') {
+          try {
+            if (value) {
+              OneSignal.User.addTag('draw_reminders', 'enabled');
+            } else {
+              OneSignal.User.removeTag('draw_reminders');
+            }
+            console.log('[Settings] Draw reminders tag updated:', value);
+          } catch (error) {
+            console.log('[Settings] Draw reminders tag update failed:', error);
+          }
+        }
+
+        // Handle win notifications - control OneSignal tags
+        if (key === 'winNotifications') {
+          try {
+            if (value) {
+              OneSignal.User.addTag('win_notifications', 'enabled');
+            } else {
+              OneSignal.User.removeTag('win_notifications');
+            }
+            console.log('[Settings] Win notifications tag updated:', value);
+          } catch (error) {
+            console.log('[Settings] Win notifications tag update failed:', error);
+          }
+        }
+
+        // Update state
+        set(state => ({
+          notifications: {
+            ...state.notifications,
+            [key]: value,
+          },
+        }));
+
+        console.log(`[Settings] ${key} set to ${value}`);
+      },
+
+      getNotificationPreferences: () => {
+        return get().notifications;
+      },
     }),
     {
       name: 'rafflemania-settings-storage',
@@ -171,12 +273,22 @@ export const useSettingsStore = create<SettingsState>()(
       partialize: (state) => ({
         xpRewards: state.xpRewards,
         credits: state.credits,
+        notifications: state.notifications,
         lastFetched: state.lastFetched,
       }),
       onRehydrateStorage: () => {
         return (state) => {
           if (state) {
             state.isLoaded = true;
+            // Ensure notifications has all required fields (for existing users upgrading)
+            if (!state.notifications) {
+              state.notifications = DEFAULT_NOTIFICATION_PREFERENCES;
+            } else {
+              state.notifications = {
+                ...DEFAULT_NOTIFICATION_PREFERENCES,
+                ...state.notifications,
+              };
+            }
           }
         };
       },

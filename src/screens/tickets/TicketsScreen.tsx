@@ -202,7 +202,7 @@ const PrizeGroupCard: React.FC<{
                 {group.prizeName}
               </Text>
               <Text style={[styles.prizeGroupSubtitle, {color: colors.text}]}>
-                {group.numbers.length} {group.numbers.length === 1 ? 'numero' : 'numeri'} • {((group.numbers.length / group.totalPoolTickets) * 100).toFixed(2)}% chance
+                {group.numbers.length} {group.numbers.length === 1 ? 'numero' : 'numeri'}
               </Text>
             </View>
           </View>

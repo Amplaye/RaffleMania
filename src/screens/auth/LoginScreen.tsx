@@ -12,7 +12,6 @@ import {
   Animated,
   StatusBar,
   ScrollView,
-  Image,
   Switch,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,8 +20,6 @@ import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useAuthStore} from '../../store';
 
-// Logo image
-const logoImage = require('../../../assets/images/logo.png');
 
 const {width, height} = Dimensions.get('window');
 
@@ -342,11 +339,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                     transform: [{translateY: slideAnim}, {scale: logoScale}],
                   },
                 ]}>
-                <Image
-                  source={logoImage}
-                  style={styles.logoImage}
-                  resizeMode="contain"
-                />
+                <Text style={styles.logoText}>RaffleMania</Text>
                 <Text style={styles.tagline}>Guarda, gioca, vinci.</Text>
               </Animated.View>
 
@@ -570,9 +563,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  logoImage: {
-    width: width * 0.7,
-    height: 120,
+  logoText: {
+    fontSize: 42,
+    fontWeight: '700',
+    color: COLORS.orange,
     marginBottom: 8,
   },
   tagline: {

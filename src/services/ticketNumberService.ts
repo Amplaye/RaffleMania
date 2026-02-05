@@ -24,31 +24,7 @@ interface DrawTicketRegistry {
 // In produzione questo è gestito dal database con lock
 const drawRegistries: Map<string, DrawTicketRegistry> = new Map();
 
-// Range per numeri casuali (1-999999)
-const MIN_TICKET_NUMBER = 1;
-const MAX_TICKET_NUMBER = 999999;
-
-/**
- * Genera un numero casuale univoco per un draw
- * Usa timestamp + random per massimizzare l'unicità tra dispositivi
- */
-const generateUniqueRandomNumber = (existingNumbers: Set<number>): number => {
-  // Usa timestamp (ultimi 6 digit) + componente random per unicità cross-device
-  const timestamp = Date.now() % 1000000;
-  const random = Math.floor(Math.random() * 1000);
-
-  // Combina per creare un numero nel range
-  let number = ((timestamp * 1000 + random) % (MAX_TICKET_NUMBER - MIN_TICKET_NUMBER + 1)) + MIN_TICKET_NUMBER;
-
-  // Se per caso esiste già (improbabile), genera uno nuovo
-  let attempts = 0;
-  while (existingNumbers.has(number) && attempts < 100) {
-    number = Math.floor(Math.random() * (MAX_TICKET_NUMBER - MIN_TICKET_NUMBER + 1)) + MIN_TICKET_NUMBER;
-    attempts++;
-  }
-
-  return number;
-};
+// I numeri partono da 1 e sono sequenziali per ogni draw
 
 /**
  * Genera un drawId unico basato su prizeId e timerStartedAt
@@ -80,8 +56,8 @@ const getOrCreateRegistry = (drawId: string, prizeId: string): DrawTicketRegistr
 };
 
 /**
- * Assegna numeri univoci per un draw (MODE: MOCK/OFFLINE)
- * Usa numeri casuali basati su timestamp per garantire unicità cross-device
+ * Assegna numeri univoci SEQUENZIALI per un draw (MODE: MOCK/OFFLINE)
+ * I numeri partono da 1 e incrementano: 1, 2, 3, 4, ...
  *
  * @param drawId - ID del draw/estrazione
  * @param prizeId - ID del premio
@@ -98,18 +74,16 @@ const assignNumbersLocal = (
   const registry = getOrCreateRegistry(drawId, prizeId);
   const assignedNumbers: number[] = [];
 
-  // Assegna numeri casuali univoci (basati su timestamp + random)
-  // Questo garantisce unicità anche tra dispositivi diversi
+  // Assegna numeri SEQUENZIALI partendo dal prossimo disponibile
   for (let i = 0; i < quantity; i++) {
-    // Aggiungi piccolo delay tra numeri per variare il timestamp
-    const number = generateUniqueRandomNumber(registry.assignedNumbers);
+    const number = registry.nextNumber;
     registry.assignedNumbers.add(number);
     assignedNumbers.push(number);
-    registry.nextNumber = Math.max(registry.nextNumber, number + 1);
+    registry.nextNumber++;
   }
 
-  console.log(`[TicketService] Assigned ${quantity} random numbers to user ${userId} for draw ${drawId}:`, assignedNumbers);
-  console.log(`[TicketService] Total numbers assigned for this draw: ${registry.assignedNumbers.size}`);
+  console.log(`[TicketService] Assigned ${quantity} sequential numbers to user ${userId} for draw ${drawId}:`, assignedNumbers);
+  console.log(`[TicketService] Next available number for this draw: ${registry.nextNumber}`);
 
   return assignedNumbers;
 };
@@ -200,13 +174,9 @@ export const requestTickets = async (
     assignedNumbers = assignNumbersLocal(drawId, prizeId, quantity, userId);
   } else {
     // Modalità API: il backend gestisce l'atomicità con transazioni
-    try {
-      assignedNumbers = await assignNumbersAPI(prizeId, quantity, source);
-    } catch {
-      // Fallback a locale se API fallisce (solo per errori di rete)
-      console.log('[TicketService] API failed, falling back to local assignment');
-      assignedNumbers = assignNumbersLocal(drawId, prizeId, quantity, userId);
-    }
+    // IMPORTANTE: NON fare fallback a locale per utenti autenticati!
+    // Il fallback causerebbe numeri duplicati tra dispositivi diversi.
+    assignedNumbers = await assignNumbersAPI(prizeId, quantity, source);
   }
 
   // Crea le assegnazioni

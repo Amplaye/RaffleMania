@@ -1,6 +1,22 @@
 import {create} from 'zustand';
-import firestore from '@react-native-firebase/firestore';
+import {
+  getFirestore,
+  collection,
+  doc,
+  addDoc,
+  setDoc,
+  getDocs,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  writeBatch,
+  serverTimestamp,
+} from '@react-native-firebase/firestore';
 import {API_CONFIG} from '../utils/constants';
+
+const db = getFirestore();
 
 // Send push notification to user via WordPress/OneSignal
 const notifyUserOfAdminReply = async (userId: string, message: string) => {
@@ -78,32 +94,33 @@ export const useAdminChatStore = create<AdminChatState>((set, get) => ({
     set({isLoading: true, error: null});
 
     // Subscribe to all chat rooms
-    const unsubscribe = firestore()
-      .collection('chats')
-      .orderBy('lastMessageTime', 'desc')
-      .onSnapshot(
-        snapshot => {
-          const rooms: ChatRoom[] = [];
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            rooms.push({
-              id: doc.id,
-              userId: doc.id,
-              userName: data.userName || 'Utente',
-              lastMessage: data.lastMessage || '',
-              lastMessageTime: data.lastMessageTime?.toDate() || new Date(),
-              lastMessageBy: data.lastMessageBy || 'user',
-              hasUnreadFromUser: data.hasUnreadFromUser || false,
-              createdAt: data.createdAt?.toDate() || new Date(),
-            });
+    const chatsRef = collection(db, 'chats');
+    const chatsQuery = query(chatsRef, orderBy('lastMessageTime', 'desc'));
+
+    const unsubscribe = onSnapshot(
+      chatsQuery,
+      snapshot => {
+        const rooms: ChatRoom[] = [];
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          rooms.push({
+            id: docSnap.id,
+            userId: docSnap.id,
+            userName: data.userName || 'Utente',
+            lastMessage: data.lastMessage || '',
+            lastMessageTime: data.lastMessageTime?.toDate() || new Date(),
+            lastMessageBy: data.lastMessageBy || 'user',
+            hasUnreadFromUser: data.hasUnreadFromUser || false,
+            createdAt: data.createdAt?.toDate() || new Date(),
           });
-          set({chatRooms: rooms, isLoading: false});
-        },
-        error => {
-          console.error('Admin chat rooms subscription error:', error);
-          set({error: error.message, isLoading: false});
-        }
-      );
+        });
+        set({chatRooms: rooms, isLoading: false});
+      },
+      error => {
+        console.error('Admin chat rooms subscription error:', error);
+        set({error: error.message, isLoading: false});
+      },
+    );
 
     set({unsubscribeRooms: unsubscribe});
   },
@@ -117,33 +134,32 @@ export const useAdminChatStore = create<AdminChatState>((set, get) => ({
     set({currentChatUserId: userId, isLoading: true});
 
     // Subscribe to messages for this chat
-    const unsubscribe = firestore()
-      .collection('chats')
-      .doc(userId)
-      .collection('messages')
-      .orderBy('timestamp', 'asc')
-      .onSnapshot(
-        snapshot => {
-          const messages: ChatMessage[] = [];
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            messages.push({
-              id: doc.id,
-              text: data.text,
-              senderId: data.senderId,
-              senderName: data.senderName,
-              senderType: data.senderType,
-              timestamp: data.timestamp?.toDate() || new Date(),
-              read: data.read || false,
-            });
+    const messagesRef = collection(db, 'chats', userId, 'messages');
+    const messagesQuery = query(messagesRef, orderBy('timestamp', 'asc'));
+
+    const unsubscribe = onSnapshot(
+      messagesQuery,
+      snapshot => {
+        const messages: ChatMessage[] = [];
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          messages.push({
+            id: docSnap.id,
+            text: data.text,
+            senderId: data.senderId,
+            senderName: data.senderName,
+            senderType: data.senderType,
+            timestamp: data.timestamp?.toDate() || new Date(),
+            read: data.read || false,
           });
-          set({currentChatMessages: messages, isLoading: false});
-        },
-        error => {
-          console.error('Admin chat messages subscription error:', error);
-          set({error: error.message, isLoading: false});
-        }
-      );
+        });
+        set({currentChatMessages: messages, isLoading: false});
+      },
+      error => {
+        console.error('Admin chat messages subscription error:', error);
+        set({error: error.message, isLoading: false});
+      },
+    );
 
     set({unsubscribeMessages: unsubscribe});
 
@@ -172,30 +188,26 @@ export const useAdminChatStore = create<AdminChatState>((set, get) => ({
         senderId: 'admin',
         senderName: adminName,
         senderType: 'support',
-        timestamp: firestore.FieldValue.serverTimestamp(),
+        timestamp: serverTimestamp(),
         read: false,
       };
 
       // Add message to subcollection
-      await firestore()
-        .collection('chats')
-        .doc(userId)
-        .collection('messages')
-        .add(messageData);
+      const messagesRef = collection(db, 'chats', userId, 'messages');
+      await addDoc(messagesRef, messageData);
 
       // Update chat room metadata
-      await firestore()
-        .collection('chats')
-        .doc(userId)
-        .set(
-          {
-            lastMessage: text.trim(),
-            lastMessageTime: firestore.FieldValue.serverTimestamp(),
-            lastMessageBy: 'support',
-            hasUnreadFromUser: false,
-          },
-          {merge: true}
-        );
+      const chatDocRef = doc(db, 'chats', userId);
+      await setDoc(
+        chatDocRef,
+        {
+          lastMessage: text.trim(),
+          lastMessageTime: serverTimestamp(),
+          lastMessageBy: 'support',
+          hasUnreadFromUser: false,
+        },
+        {merge: true},
+      );
 
       // Send push notification to user (non-blocking)
       notifyUserOfAdminReply(userId, text.trim());
@@ -209,29 +221,27 @@ export const useAdminChatStore = create<AdminChatState>((set, get) => ({
   markUserMessagesAsRead: async (userId: string) => {
     try {
       // Get all unread messages from user
-      const unreadMessages = await firestore()
-        .collection('chats')
-        .doc(userId)
-        .collection('messages')
-        .where('senderType', '==', 'user')
-        .where('read', '==', false)
-        .get();
+      const messagesRef = collection(db, 'chats', userId, 'messages');
+      const unreadQuery = query(
+        messagesRef,
+        where('senderType', '==', 'user'),
+        where('read', '==', false),
+      );
+      const unreadMessages = await getDocs(unreadQuery);
 
       if (unreadMessages.empty) return;
 
       // Batch update all unread messages
-      const batch = firestore().batch();
-      unreadMessages.forEach(doc => {
-        batch.update(doc.ref, {read: true});
+      const batch = writeBatch(db);
+      unreadMessages.forEach(docSnap => {
+        batch.update(docSnap.ref, {read: true});
       });
 
       await batch.commit();
 
       // Update chat room
-      await firestore()
-        .collection('chats')
-        .doc(userId)
-        .update({hasUnreadFromUser: false});
+      const chatDocRef = doc(db, 'chats', userId);
+      await updateDoc(chatDocRef, {hasUnreadFromUser: false});
     } catch (error: any) {
       console.error('Error marking messages as read:', error);
     }

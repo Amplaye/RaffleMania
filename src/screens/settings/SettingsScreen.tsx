@@ -18,6 +18,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer, Card} from '../../components/common';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {useAuthStore} from '../../store';
+import {useSettingsStore} from '../../store/useSettingsStore';
 import {
   COLORS,
   SPACING,
@@ -50,16 +51,11 @@ interface SettingLink {
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
   const {colors} = useThemeColors();
   const {logout, deleteAccount, isLoading, token} = useAuthStore();
+  const {notifications, setNotificationPreference} = useSettingsStore();
   const isGuestUser = token?.startsWith('guest_token_');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [password, setPassword] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
-  const [notifications, setNotifications] = useState({
-    pushEnabled: true,
-    emailEnabled: true,
-    drawReminders: true,
-    winNotifications: true,
-  });
 
   const toggleSettings: SettingToggle[] = [
     {
@@ -93,15 +89,17 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
   ];
 
   const handleToggle = (id: string) => {
-    setNotifications(prev => ({
-      ...prev,
-      [id === 'push' ? 'pushEnabled' :
-       id === 'email' ? 'emailEnabled' :
-       id === 'reminders' ? 'drawReminders' : 'winNotifications']:
-       !prev[id === 'push' ? 'pushEnabled' :
-             id === 'email' ? 'emailEnabled' :
-             id === 'reminders' ? 'drawReminders' : 'winNotifications'],
-    }));
+    const keyMap: Record<string, 'pushEnabled' | 'emailEnabled' | 'drawReminders' | 'winNotifications'> = {
+      push: 'pushEnabled',
+      email: 'emailEnabled',
+      reminders: 'drawReminders',
+      wins: 'winNotifications',
+    };
+    const key = keyMap[id];
+    if (key) {
+      const currentValue = notifications[key];
+      setNotificationPreference(key, !currentValue);
+    }
   };
 
   const linkSettings: SettingLink[] = [
@@ -109,13 +107,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
       id: 'privacy',
       icon: 'shield-checkmark',
       title: 'Privacy Policy',
-      onPress: () => Linking.openURL('https://rafflemania.app/privacy'),
+      onPress: () => Linking.openURL('https://www.rafflemania.it/privacy'),
     },
     {
       id: 'terms',
       icon: 'document-text',
       title: 'Termini di Servizio',
-      onPress: () => Linking.openURL('https://rafflemania.app/terms'),
+      onPress: () => Linking.openURL('https://www.rafflemania.it/terms'),
     },
     {
       id: 'support',

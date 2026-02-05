@@ -9,7 +9,7 @@ interface FlipCountdownTimerProps {
   isBettingLocked?: boolean;
 }
 
-// Slide digit card component with horizontal slide animation
+// Slide digit card component with vertical slide animation (bottom to top)
 const SlideDigitCard = memo(({digit, isUrgent, prevDigit}: {digit: string; isUrgent: boolean; prevDigit: string}) => {
   const slideAnim = useRef(new Animated.Value(0)).current;
   const textColor = isUrgent ? '#FF4444' : '#FFFFFF';
@@ -26,16 +26,16 @@ const SlideDigitCard = memo(({digit, isUrgent, prevDigit}: {digit: string; isUrg
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [digit, prevDigit]);
 
-  // New digit slides in from right
-  const newTranslateX = slideAnim.interpolate({
+  // New digit slides in from bottom
+  const newTranslateY = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, CARD_SIZE],
+    outputRange: [0, CARD_HEIGHT],
   });
 
-  // Old digit slides out to left
-  const oldTranslateX = slideAnim.interpolate({
+  // Old digit slides out to top
+  const oldTranslateY = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [-CARD_SIZE, 0],
+    outputRange: [-CARD_HEIGHT, 0],
   });
 
   const newOpacity = slideAnim.interpolate({
@@ -52,27 +52,27 @@ const SlideDigitCard = memo(({digit, isUrgent, prevDigit}: {digit: string; isUrg
     <View style={styles.digitCard}>
       {/* Static background */}
       <View style={styles.digitCardInner}>
-        {/* Current digit (slides in from right) */}
+        {/* Current digit (slides in from bottom) */}
         <Animated.Text
           style={[
             styles.digitText,
             {
               color: textColor,
               opacity: newOpacity,
-              transform: [{translateX: newTranslateX}],
+              transform: [{translateY: newTranslateY}],
             },
           ]}>
           {digit}
         </Animated.Text>
       </View>
 
-      {/* Previous digit (slides out to left) */}
+      {/* Previous digit (slides out to top) */}
       <Animated.View
         style={[
           styles.oldDigitOverlay,
           {
             opacity: oldOpacity,
-            transform: [{translateX: oldTranslateX}],
+            transform: [{translateY: oldTranslateY}],
           },
         ]}>
         <Text style={[styles.digitText, {color: textColor}]}>{prevDigit}</Text>
@@ -207,6 +207,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 4,
+    marginBottom: 12,
   },
   lockedContainer: {
     paddingVertical: 2,

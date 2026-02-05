@@ -431,11 +431,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               <View style={styles.progressTitleRow}>
                 <Ionicons name="trophy" size={16} color={COLORS.primary} />
                 <Text style={[styles.progressLabel, {color: colors.text}]}>
-                  {currentPrize?.timerStatus === 'countdown' ? 'Estrazione in corso!' : 'Progresso Premio'}
+                  {currentPrize?.timerStatus === 'countdown' ? 'Estrazione in corso!' : `Progresso ${percentage}%`}
                 </Text>
-              </View>
-              <View style={styles.progressStats}>
-                <Text style={styles.progressPercentage}>{percentage}%</Text>
               </View>
             </View>
             <View style={[styles.progressBarBg, {backgroundColor: `${COLORS.primary}15`}]}>
@@ -585,28 +582,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
                 snapToAlignment="start"
                 disableIntervalMomentum={true}
                 contentContainerStyle={styles.sliderContent}>
-                {activePrizes.map((prize) => (
-                  <TouchableOpacity
-                    key={prize.id}
-                    style={styles.prizeSlideWrapper}
-                    onPress={handlePrizePress}
-                    activeOpacity={0.95}>
-                    <View style={[styles.prizeSlide, {backgroundColor: colors.card}]}>
-                      <View style={styles.prizeImageContainer}>
-                        <Image
-                          source={{uri: prize.imageUrl}}
-                          style={styles.prizeImage}
-                          resizeMode="contain"
-                        />
+                {activePrizes.map((prize) => {
+                  const isTimerActive = currentPrize?.timerStatus === 'countdown';
+                  return (
+                    <TouchableOpacity
+                      key={prize.id}
+                      style={styles.prizeSlideWrapper}
+                      onPress={handlePrizePress}
+                      activeOpacity={0.95}>
+                      <View style={[styles.prizeSlide, {backgroundColor: colors.card}]}>
+                        <View style={[styles.prizeImageContainer, isTimerActive && styles.prizeImageContainerCompact]}>
+                          <Image
+                            source={{uri: prize.imageUrl}}
+                            style={styles.prizeImage}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <View style={styles.prizeNameContainer}>
+                          <Text style={[styles.prizeName, {color: colors.text}]} numberOfLines={2}>
+                            {prize.name}
+                          </Text>
+                        </View>
                       </View>
-                      <View style={styles.prizeNameContainer}>
-                        <Text style={[styles.prizeName, {color: colors.text}]} numberOfLines={2}>
-                          {prize.name}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
 
               {/* Pagination Dots */}
@@ -931,12 +931,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
+    alignSelf: 'stretch',
   },
   buyTicketGradient: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: RADIUS.lg,
-    minHeight: Platform.OS === 'ios' ? 56 : 48,
+    paddingHorizontal: SPACING.md,
     gap: 4,
   },
   buyTicketText: {
@@ -1045,6 +1047,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderTopLeftRadius: RADIUS.xl - 2,
     borderTopRightRadius: RADIUS.xl - 2,
+  },
+  prizeImageContainerCompact: {
+    height: height * 0.25,
   },
   prizeImage: {
     width: '80%',

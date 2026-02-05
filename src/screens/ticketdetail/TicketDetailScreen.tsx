@@ -36,7 +36,8 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
   const {prizes} = usePrizesStore();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
   const ticket = [...activeTickets, ...pastTickets].find(t => t.id === ticketId);
   const prize = ticket?.prizeId ? prizes.find(p => p.id === ticket.prizeId) : null;
@@ -45,19 +46,22 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
   const displayPrizeImage = ticket?.prizeImage || prize?.imageUrl;
   const displayPrizeDescription = prize?.description || '';
 
-  const imageBackgroundColors = ['#FFF8F0', '#FFF5E6', '#FFECD2'];
-
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 350,
+        duration: 400,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
         friction: 8,
         tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
         useNativeDriver: true,
       }),
     ]).start();
@@ -76,7 +80,7 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
         <AnimatedBackground />
         <View style={styles.header}>
           <TouchableOpacity
-            style={[styles.backButton, {backgroundColor: colors.card}]}
+            style={styles.backButton}
             onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>
@@ -104,127 +108,196 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          style={[styles.backButton, {backgroundColor: colors.card}]}
+          style={styles.backButton}
           onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color={colors.text} />
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, {color: colors.text}]}>
-          {isWinner ? 'Hai Vinto!' : 'Dettaglio'}
+          {isWinner ? 'Hai Vinto!' : 'Dettaglio Biglietto'}
         </Text>
         <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Animated.View style={{opacity: fadeAnim, transform: [{scale: scaleAnim}]}}>
+        {/* Winner Celebration Banner */}
+        {isWinner && (
+          <Animated.View
+            style={[
+              styles.winnerBanner,
+              {
+                opacity: fadeAnim,
+                transform: [{scale: scaleAnim}],
+              },
+            ]}>
+            <LinearGradient
+              colors={['#FFD700', '#FFA500', '#FF8C00']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}
+              style={styles.winnerBannerGradient}>
+              <Ionicons name="trophy" size={32} color="#FFFFFF" />
+              <Text style={styles.winnerBannerText}>Congratulazioni!</Text>
+              <Text style={styles.winnerBannerSubtext}>Hai vinto questo premio</Text>
+            </LinearGradient>
+          </Animated.View>
+        )}
 
-          {/* Main Card - Same style as PrizeCard */}
-          <View style={[styles.card, {backgroundColor: colors.card}]}>
+        {/* Prize Image Card */}
+        <Animated.View
+          style={[
+            styles.imageCard,
+            {
+              backgroundColor: colors.card,
+              opacity: fadeAnim,
+              transform: [{scale: scaleAnim}],
+              borderColor: isWinner ? '#FFD700' : `${COLORS.primary}50`,
+            },
+          ]}>
+          <View style={styles.imageContainer}>
+            {displayPrizeImage && (
+              <Image
+                source={{uri: displayPrizeImage}}
+                style={styles.prizeImage}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        </Animated.View>
 
-            {/* Image Section with cream gradient */}
-            <View style={styles.imageContainer}>
-              <LinearGradient
-                colors={imageBackgroundColors}
-                start={{x: 0, y: 0}}
-                end={{x: 0, y: 1}}
-                style={StyleSheet.absoluteFill}>
-                <View style={styles.imageWrapper}>
-                  {displayPrizeImage && (
-                    <Image
-                      source={{uri: displayPrizeImage}}
-                      style={styles.prizeImage}
-                      resizeMode="contain"
-                    />
-                  )}
-                </View>
-              </LinearGradient>
+        {/* Prize Info Card */}
+        <Animated.View
+          style={[
+            styles.infoCard,
+            {
+              backgroundColor: colors.card,
+              opacity: fadeAnim,
+              transform: [{translateY: slideAnim}],
+            },
+          ]}>
+          <Text style={[styles.prizeName, {color: colors.text}]}>{displayPrizeName}</Text>
+          {displayPrizeDescription && (
+            <Text style={[styles.prizeDescription, {color: colors.textMuted}]}>
+              {displayPrizeDescription}
+            </Text>
+          )}
 
-              <View style={styles.imageSeparator} />
+          {/* Ticket Number Section */}
+          <View style={[styles.ticketNumberSection, {backgroundColor: isWinner ? '#FFF8E1' : `${COLORS.primary}08`}]}>
+            <View style={styles.ticketNumberHeader}>
+              <View style={[styles.ticketIconContainer, {backgroundColor: isWinner ? '#FFE082' : `${COLORS.primary}15`}]}>
+                <Ionicons name="ticket" size={20} color={isWinner ? '#FF8C00' : COLORS.primary} />
+              </View>
+              <Text style={[styles.ticketNumberLabel, {color: isWinner ? '#F57C00' : colors.textMuted}]}>
+                {isWinner ? 'Numero Vincente' : 'Il tuo numero'}
+              </Text>
+            </View>
+            <Text style={[styles.ticketNumber, {color: isWinner ? '#FF8C00' : COLORS.primary}]}>
+              #{ticket.ticketNumber}
+            </Text>
+          </View>
+
+          {/* Info Row */}
+          <View style={styles.infoRow}>
+            <View style={styles.infoItem}>
+              <Ionicons name="calendar-outline" size={18} color={colors.textMuted} />
+              <View style={styles.infoTextContainer}>
+                <Text style={[styles.infoLabel, {color: colors.textMuted}]}>
+                  {isWinner ? 'Vinto il' : 'Partecipazione'}
+                </Text>
+                <Text style={[styles.infoValue, {color: colors.text}]}>
+                  {formatDate(isWinner ? (ticket.wonAt || ticket.createdAt) : ticket.createdAt)}
+                </Text>
+              </View>
             </View>
 
-            {/* Info Section */}
-            <View style={styles.infoContainer}>
-              {/* Prize Name */}
-              <Text style={[styles.prizeName, {color: colors.text}]}>
-                {displayPrizeName}
-              </Text>
+            <View style={[styles.infoDivider, {backgroundColor: colors.border}]} />
 
-              {/* Description */}
-              {displayPrizeDescription && (
-                <Text style={[styles.prizeDescription, {color: colors.textMuted}]} numberOfLines={2}>
-                  {displayPrizeDescription}
-                </Text>
-              )}
-
-              {/* Ticket Number Box */}
-              <View style={[styles.numberBox, {backgroundColor: isWinner ? '#FFF8E1' : `${COLORS.primary}10`}]}>
-                <View style={styles.numberHeader}>
-                  <Ionicons
-                    name="ticket"
-                    size={14}
-                    color={isWinner ? '#FF8C00' : COLORS.primary}
-                  />
-                  <Text style={[styles.numberLabel, {color: isWinner ? '#F57C00' : colors.textMuted}]}>
-                    {isWinner ? 'Numero Vincente' : 'Il tuo numero'}
-                  </Text>
-                </View>
-                <Text style={[styles.ticketNumber, {color: isWinner ? '#FF8C00' : COLORS.primary}]}>
-                  #{ticket.ticketNumber}
-                </Text>
-              </View>
-
-              {/* Date */}
-              <View style={styles.dateRow}>
-                <Ionicons name="calendar-outline" size={14} color={isWinner ? '#000000' : colors.textMuted} />
-                <Text style={[
-                  styles.dateText,
-                  {color: isWinner ? '#000000' : colors.textMuted},
-                  isWinner && styles.dateTextBold
-                ]}>
-                  {isWinner
-                    ? `Vinto il ${formatDate(ticket.wonAt || ticket.createdAt)}`
-                    : `Partecipazione: ${formatDate(ticket.createdAt)}`
-                  }
-                </Text>
-              </View>
-
-              {/* Status */}
-              <View style={[styles.statusRow, {backgroundColor: isWinner ? '#E8F5E9' : `${colors.success}10`}]}>
-                <Ionicons
-                  name={isWinner ? 'trophy' : 'checkmark-circle'}
-                  size={16}
-                  color={isWinner ? '#4CAF50' : colors.success}
-                />
-                <Text style={[styles.statusText, {color: isWinner ? '#4CAF50' : colors.success}]}>
-                  {isWinner ? 'Premio Vinto!' : 'Estrazione completata'}
+            <View style={styles.infoItem}>
+              <Ionicons
+                name={isWinner ? 'trophy' : 'checkmark-circle'}
+                size={18}
+                color={isWinner ? '#FFD700' : COLORS.success}
+              />
+              <View style={styles.infoTextContainer}>
+                <Text style={[styles.infoLabel, {color: colors.textMuted}]}>Stato</Text>
+                <Text style={[styles.infoValue, {color: isWinner ? '#FF8C00' : COLORS.success}]}>
+                  {isWinner ? 'Vincitore!' : 'Completato'}
                 </Text>
               </View>
             </View>
           </View>
+        </Animated.View>
 
-          {/* Shipping Card - Winners Only */}
-          {isWinner && (
-            <View style={[styles.shippingCard, {backgroundColor: colors.card}]}>
-              <View style={styles.shippingHeader}>
-                <View style={styles.shippingIconContainer}>
-                  <LinearGradient
-                    colors={['#FFD700', '#FFA500']}
-                    style={styles.shippingIconGradient}>
-                    <Ionicons name="cube" size={18} color="#FFFFFF" />
-                  </LinearGradient>
-                </View>
-                <Text style={[styles.shippingTitle, {color: colors.text}]}>Spedizione</Text>
+        {/* Shipping Card - Winners Only */}
+        {isWinner && (
+          <Animated.View
+            style={[
+              styles.shippingCard,
+              {
+                backgroundColor: colors.card,
+                opacity: fadeAnim,
+                transform: [{translateY: slideAnim}],
+              },
+            ]}>
+            <View style={styles.shippingHeader}>
+              <View style={styles.shippingIconContainer}>
+                <LinearGradient
+                  colors={['#4CAF50', '#45A049']}
+                  style={styles.shippingIconGradient}>
+                  <Ionicons name="cube" size={20} color="#FFFFFF" />
+                </LinearGradient>
               </View>
-              <Text style={[styles.shippingText, {color: colors.textSecondary}]}>
-                Il premio verrà spedito all'indirizzo registrato. Riceverai un'email con il tracking.
-              </Text>
-              <View style={styles.shippingStatusRow}>
-                <View style={styles.shippingDot} />
-                <Text style={styles.shippingStatusText}>In preparazione</Text>
+              <View style={styles.shippingTitleContainer}>
+                <Text style={[styles.shippingTitle, {color: colors.text}]}>Spedizione</Text>
+                <Text style={[styles.shippingSubtitle, {color: colors.textMuted}]}>
+                  Traccia il tuo premio
+                </Text>
               </View>
             </View>
-          )}
 
-        </Animated.View>
+            <View style={styles.shippingTimeline}>
+              <View style={styles.timelineItem}>
+                <View style={[styles.timelineDot, styles.timelineDotCompleted]} />
+                <View style={styles.timelineContent}>
+                  <Text style={[styles.timelineTitle, {color: colors.text}]}>Ordine confermato</Text>
+                  <Text style={[styles.timelineDate, {color: colors.textMuted}]}>
+                    {formatDate(ticket.wonAt || ticket.createdAt)}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.timelineLine, {backgroundColor: '#FFA500'}]} />
+
+              <View style={styles.timelineItem}>
+                <View style={[styles.timelineDot, styles.timelineDotActive]} />
+                <View style={styles.timelineContent}>
+                  <Text style={[styles.timelineTitle, {color: colors.text}]}>In preparazione</Text>
+                  <Text style={[styles.timelineDate, {color: colors.textMuted}]}>
+                    In lavorazione
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.timelineLine, {backgroundColor: colors.border}]} />
+
+              <View style={styles.timelineItem}>
+                <View style={[styles.timelineDot, styles.timelineDotPending]} />
+                <View style={styles.timelineContent}>
+                  <Text style={[styles.timelineTitle, {color: colors.textMuted}]}>Spedito</Text>
+                  <Text style={[styles.timelineDate, {color: colors.textMuted}]}>
+                    In attesa
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={[styles.shippingNote, {backgroundColor: `${COLORS.primary}08`}]}>
+              <Ionicons name="information-circle" size={18} color={COLORS.primary} />
+              <Text style={[styles.shippingNoteText, {color: colors.textSecondary}]}>
+                Riceverai un'email con il tracking non appena il pacco sarà spedito.
+              </Text>
+            </View>
+          </Animated.View>
+        )}
       </ScrollView>
     </LinearGradient>
   );
@@ -242,11 +315,13 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.md,
   },
   headerTitle: {
     flex: 1,
@@ -274,28 +349,50 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
 
-  // Main Card - Same as PrizeCard
-  card: {
-    borderRadius: RADIUS.xl,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 8},
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 10,
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
+  // Winner Banner
+  winnerBanner: {
     marginBottom: SPACING.lg,
+    borderRadius: RADIUS.xl,
+    overflow: 'hidden',
+    shadowColor: '#FFD700',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  winnerBannerGradient: {
+    padding: SPACING.lg,
+    alignItems: 'center',
+  },
+  winnerBannerText: {
+    fontSize: FONT_SIZE.xxl,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: '#FFFFFF',
+    marginTop: SPACING.sm,
+  },
+  winnerBannerSubtext: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.medium,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 4,
+  },
+
+  // Image Card
+  imageCard: {
+    borderRadius: RADIUS.xl,
+    overflow: 'hidden',
+    marginBottom: SPACING.lg,
+    borderWidth: 2,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
   },
   imageContainer: {
     height: 220,
-    position: 'relative',
-    borderTopLeftRadius: RADIUS.xl,
-    borderTopRightRadius: RADIUS.xl,
-    overflow: 'hidden',
-  },
-  imageWrapper: {
-    flex: 1,
+    backgroundColor: '#FFF8F0',
     alignItems: 'center',
     justifyContent: 'center',
     padding: SPACING.lg,
@@ -304,21 +401,20 @@ const styles = StyleSheet.create({
     width: '85%',
     height: '100%',
   },
-  imageSeparator: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.08)',
-  },
 
-  // Info Section
-  infoContainer: {
+  // Info Card
+  infoCard: {
+    borderRadius: RADIUS.xl,
     padding: SPACING.lg,
+    marginBottom: SPACING.lg,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   prizeName: {
-    fontSize: FONT_SIZE.xl,
+    fontSize: FONT_SIZE.xxl,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     marginBottom: SPACING.xs,
@@ -326,61 +422,67 @@ const styles = StyleSheet.create({
   prizeDescription: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.regular,
-    lineHeight: 18,
-    marginBottom: SPACING.md,
+    lineHeight: 20,
+    marginBottom: SPACING.lg,
   },
 
-  // Number Box
-  numberBox: {
+  // Ticket Number Section
+  ticketNumberSection: {
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.lg,
   },
-  numberHeader: {
+  ticketNumberHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
-  numberLabel: {
-    fontSize: FONT_SIZE.xs,
+  ticketIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ticketNumberLabel: {
+    fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.medium,
   },
   ticketNumber: {
-    fontSize: 32,
+    fontSize: 42,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
   },
 
-  // Date
-  dateRow: {
+  // Info Row
+  infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: SPACING.md,
   },
-  dateText: {
-    fontSize: FONT_SIZE.sm,
+  infoItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  infoTextContainer: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.regular,
   },
-  dateTextBold: {
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-  },
-
-  // Status
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: RADIUS.lg,
-  },
-  statusText: {
+  infoValue: {
     fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.medium,
-    fontWeight: FONT_WEIGHT.medium,
+    fontFamily: FONT_FAMILY.semibold,
+    fontWeight: FONT_WEIGHT.semibold,
+  },
+  infoDivider: {
+    width: 1,
+    height: 40,
+    marginHorizontal: SPACING.md,
   },
 
   // Shipping Card
@@ -391,18 +493,18 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.08,
     shadowRadius: 12,
-    elevation: 6,
+    elevation: 4,
   },
   shippingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.md,
+    gap: SPACING.md,
+    marginBottom: SPACING.lg,
   },
   shippingIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     overflow: 'hidden',
   },
   shippingIconGradient: {
@@ -410,33 +512,80 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  shippingTitleContainer: {
+    flex: 1,
+  },
   shippingTitle: {
     fontSize: FONT_SIZE.lg,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
   },
-  shippingText: {
-    fontSize: FONT_SIZE.sm,
+  shippingSubtitle: {
+    fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.regular,
-    lineHeight: 20,
-    marginBottom: SPACING.md,
   },
-  shippingStatusRow: {
+
+  // Timeline
+  shippingTimeline: {
+    paddingLeft: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  timelineItem: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    alignItems: 'flex-start',
+    gap: SPACING.md,
   },
-  shippingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  timelineDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginTop: 2,
+  },
+  timelineDotCompleted: {
+    backgroundColor: '#4CAF50',
+  },
+  timelineDotActive: {
     backgroundColor: '#FFA500',
+    borderWidth: 3,
+    borderColor: '#FFE082',
   },
-  shippingStatusText: {
+  timelineDotPending: {
+    backgroundColor: '#E0E0E0',
+  },
+  timelineLine: {
+    width: 2,
+    height: 24,
+    marginLeft: 6,
+    marginVertical: 4,
+  },
+  timelineContent: {
+    flex: 1,
+    paddingBottom: SPACING.xs,
+  },
+  timelineTitle: {
     fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.medium,
-    fontWeight: FONT_WEIGHT.medium,
-    color: '#FFA500',
+    fontFamily: FONT_FAMILY.semibold,
+    fontWeight: FONT_WEIGHT.semibold,
+  },
+  timelineDate: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.regular,
+    marginTop: 2,
+  },
+
+  // Shipping Note
+  shippingNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+  },
+  shippingNoteText: {
+    flex: 1,
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.regular,
+    lineHeight: 18,
   },
 });
 

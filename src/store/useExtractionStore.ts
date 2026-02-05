@@ -1,5 +1,6 @@
 import {create} from 'zustand';
 import {ExtractionResult} from './useTicketsStore';
+import {useSettingsStore} from './useSettingsStore';
 
 interface ExtractionState {
   // State
@@ -29,9 +30,21 @@ export const useExtractionStore = create<ExtractionState>((set, _get) => ({
   },
 
   showResult: (result: ExtractionResult) => {
+    // Check if win notifications are enabled
+    const {notifications} = useSettingsStore.getState();
+    const shouldShowModal = notifications.winNotifications;
+
+    // If user won but has disabled win notifications, don't show modal
+    // But always show for losing (so they know the result)
+    const showModal = result.isWinner ? shouldShowModal : true;
+
+    if (!showModal) {
+      console.log('[Extraction] Win notification suppressed - user disabled in settings');
+    }
+
     set({
       showExtractionEffect: false,
-      showResultModal: true,
+      showResultModal: showModal,
       extractionResult: result,
       isExtractionInProgress: false,
     });

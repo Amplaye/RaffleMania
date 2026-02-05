@@ -239,7 +239,7 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `Unisciti a RaffleMania e vinci premi incredibili! \n\nUsa il mio codice: ${referralCode}\n\nSe resti attivo per ${REFERRAL_REWARDS.DAYS_REQUIRED} giorni, entrambi riceveremo ${REFERRAL_REWARDS.REFERRER_CREDITS} crediti bonus!\n\nScarica ora: https://rafflemania.app`,
+        message: `Unisciti a RaffleMania e vinci premi incredibili! \n\nUsa il mio codice: ${referralCode}\n\nSe resti attivo per ${REFERRAL_REWARDS.DAYS_REQUIRED} giorni, entrambi riceveremo ${REFERRAL_REWARDS.REFERRER_CREDITS} crediti bonus!\n\nScarica ora: https://www.rafflemania.it`,
       });
     } catch (error) {
       console.log('Share error:', error);

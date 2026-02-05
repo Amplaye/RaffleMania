@@ -1,5 +1,18 @@
 import {create} from 'zustand';
-import firestore from '@react-native-firebase/firestore';
+import {
+  getFirestore,
+  collection,
+  doc,
+  addDoc,
+  setDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  writeBatch,
+  serverTimestamp,
+} from '@react-native-firebase/firestore';
 import apiClient from '../services/apiClient';
 
 export interface ChatMessage {
@@ -26,6 +39,8 @@ interface ChatState {
   cleanup: () => void;
 }
 
+const db = getFirestore();
+
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isLoading: false,
@@ -43,22 +58,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({isLoading: true, error: null});
 
     // Create or get chat room for this user
-    const chatRef = firestore()
-      .collection('chats')
-      .doc(userId)
-      .collection('messages')
-      .orderBy('timestamp', 'asc');
+    const messagesRef = collection(db, 'chats', userId, 'messages');
+    const chatQuery = query(messagesRef, orderBy('timestamp', 'asc'));
 
     // Subscribe to real-time updates
-    const unsubscribe = chatRef.onSnapshot(
+    const unsubscribe = onSnapshot(
+      chatQuery,
       snapshot => {
         const messages: ChatMessage[] = [];
         let unreadCount = 0;
 
-        snapshot.forEach(doc => {
-          const data = doc.data();
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
           const message: ChatMessage = {
-            id: doc.id,
+            id: docSnap.id,
             text: data.text,
             senderId: data.senderId,
             senderName: data.senderName,
@@ -79,23 +92,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error => {
         console.error('Chat subscription error:', error);
         set({error: error.message, isLoading: false});
-      }
+      },
     );
 
     // Update chat room metadata
-    firestore()
-      .collection('chats')
-      .doc(userId)
-      .set(
-        {
-          userId,
-          userName,
-          lastActivity: firestore.FieldValue.serverTimestamp(),
-          createdAt: firestore.FieldValue.serverTimestamp(),
-        },
-        {merge: true}
-      )
-      .catch(err => console.error('Error updating chat metadata:', err));
+    const chatDocRef = doc(db, 'chats', userId);
+    setDoc(
+      chatDocRef,
+      {
+        userId,
+        userName,
+        lastActivity: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      },
+      {merge: true},
+    ).catch(err => console.error('Error updating chat metadata:', err));
 
     set({unsubscribe});
   },
@@ -109,39 +120,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
         senderId: userId,
         senderName: userName,
         senderType: 'user',
-        timestamp: firestore.FieldValue.serverTimestamp(),
+        timestamp: serverTimestamp(),
         read: false,
       };
 
       // Add message to subcollection
-      await firestore()
-        .collection('chats')
-        .doc(userId)
-        .collection('messages')
-        .add(messageData);
+      const messagesRef = collection(db, 'chats', userId, 'messages');
+      await addDoc(messagesRef, messageData);
 
       // Update chat room last activity and last message
-      await firestore()
-        .collection('chats')
-        .doc(userId)
-        .set(
-          {
-            lastMessage: text.trim(),
-            lastMessageTime: firestore.FieldValue.serverTimestamp(),
-            lastMessageBy: 'user',
-            hasUnreadFromUser: true,
-          },
-          {merge: true}
-        );
+      const chatDocRef = doc(db, 'chats', userId);
+      await setDoc(
+        chatDocRef,
+        {
+          lastMessage: text.trim(),
+          lastMessageTime: serverTimestamp(),
+          lastMessageBy: 'user',
+          hasUnreadFromUser: true,
+        },
+        {merge: true},
+      );
 
       // Notify admin about new message (fire and forget)
-      apiClient.post('/support/notify-admin', {
-        user_id: userId,
-        user_name: userName,
-        message: text.trim().substring(0, 100),
-      }).catch(() => {
-        // Silently ignore - admin notification is optional
-      });
+      apiClient
+        .post('/support/notify-admin', {
+          user_id: userId,
+          user_name: userName,
+          message: text.trim().substring(0, 100),
+        })
+        .catch(() => {
+          // Silently ignore - admin notification is optional
+        });
     } catch (error: any) {
       console.error('Error sending message:', error);
       set({error: error.message});
@@ -152,18 +161,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   markAsRead: async (userId: string) => {
     try {
       // Get all unread messages from support
-      const unreadMessages = await firestore()
-        .collection('chats')
-        .doc(userId)
-        .collection('messages')
-        .where('senderType', '==', 'support')
-        .where('read', '==', false)
-        .get();
+      const messagesRef = collection(db, 'chats', userId, 'messages');
+      const unreadQuery = query(
+        messagesRef,
+        where('senderType', '==', 'support'),
+        where('read', '==', false),
+      );
+      const unreadMessages = await getDocs(unreadQuery);
 
       // Batch update all unread messages
-      const batch = firestore().batch();
-      unreadMessages.forEach(doc => {
-        batch.update(doc.ref, {read: true});
+      const batch = writeBatch(db);
+      unreadMessages.forEach(docSnap => {
+        batch.update(docSnap.ref, {read: true});
       });
 
       await batch.commit();

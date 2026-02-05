@@ -440,18 +440,6 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
             />
           </View>
 
-          {/* Value Badge */}
-          <View style={styles.valueBadge}>
-            <LinearGradient
-              colors={[COLORS.primary, '#FF8500']}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 0}}
-              style={styles.valueBadgeGradient}>
-              <View style={styles.valueBadgeContent}>
-                <Text style={styles.valueBadgeText}>€{prize.value}</Text>
-              </View>
-            </LinearGradient>
-          </View>
         </Animated.View>
 
         {/* Prize Info */}
@@ -483,21 +471,21 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
             <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
 
             <View style={styles.statItem}>
-              <View style={[styles.statIconContainer, {backgroundColor: 'rgba(0, 184, 148, 0.1)'}]}>
-                <Ionicons name="trending-up-outline" size={20} color={COLORS.success} />
+              <View style={[styles.statIconContainer, {backgroundColor: 'rgba(253, 203, 110, 0.1)'}]}>
+                <Ionicons name="trophy-outline" size={20} color={COLORS.warning} />
               </View>
-              <Text style={[styles.statValue, {color: colors.text}]}>{myTicketCount > 0 ? ((myTicketCount / totalPoolTickets) * 100).toFixed(2) : '0'}%</Text>
-              <Text style={[styles.statLabel, {color: colors.textMuted}]}>Probabilità</Text>
+              <Text style={[styles.statValue, {color: colors.text}]}>€{prize.value}</Text>
+              <Text style={[styles.statLabel, {color: colors.textMuted}]}>Valore</Text>
             </View>
 
             <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
 
             <View style={styles.statItem}>
               <View style={[styles.statIconContainer, {backgroundColor: 'rgba(253, 203, 110, 0.1)'}]}>
-                <Ionicons name="trophy-outline" size={20} color={COLORS.warning} />
+                <Ionicons name="people-outline" size={20} color={COLORS.warning} />
               </View>
-              <Text style={[styles.statValue, {color: colors.text}]}>€{prize.value}</Text>
-              <Text style={[styles.statLabel, {color: colors.textMuted}]}>Valore</Text>
+              <Text style={[styles.statValue, {color: colors.text}]}>{totalPoolTickets}</Text>
+              <Text style={[styles.statLabel, {color: colors.textMuted}]}>Partecipanti</Text>
             </View>
           </View>
         </Animated.View>
@@ -543,41 +531,6 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
           </Animated.View>
         )}
 
-        {/* Probability Info Card */}
-        {myTicketCount > 0 && (
-          <Animated.View
-            style={[
-              styles.probabilityCard,
-              neon.glowSubtle,
-              {
-                opacity: fadeAnim,
-                transform: [{translateY: slideAnim}],
-              },
-            ]}>
-            <LinearGradient
-              colors={['#00B894', '#00A085']}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 0}}
-              style={styles.probabilityGradient}>
-              <View style={styles.probabilityContentWrapper}>
-                <View style={styles.probabilityContent}>
-                  <View style={styles.probabilityLeft}>
-                    <Ionicons name="trending-up" size={24} color={COLORS.white} />
-                    <View style={styles.probabilityTextContainer}>
-                      <Text style={styles.probabilityTitle}>Le tue probabilità</Text>
-                      <Text style={styles.probabilitySubtitle}>
-                        {myTicketCount} {myTicketCount === 1 ? 'numero' : 'numeri'} su {totalPoolTickets} totali
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.probabilityBadge}>
-                    <Text style={styles.probabilityValue}>{((myTicketCount / totalPoolTickets) * 100).toFixed(2)}%</Text>
-                  </View>
-                </View>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-        )}
 
         {/* Countdown Timer - above progress bar */}
         <FlipCountdownTimer
@@ -641,9 +594,9 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
                 <Text style={styles.stepNumberText}>3</Text>
               </View>
               <View style={styles.stepContent}>
-                <Text style={[styles.stepTitle, {color: colors.text}]}>Aumenta le Probabilita</Text>
+                <Text style={[styles.stepTitle, {color: colors.text}]}>Aspetta l'Estrazione</Text>
                 <Text style={[styles.stepDescription, {color: colors.textMuted}]}>
-                  Ogni biglietto ti da +0.5% di probabilita di vincita!
+                  Quando la barra si riempie parte il countdown!
                 </Text>
               </View>
             </View>
@@ -655,15 +608,15 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
               <View style={styles.stepContent}>
                 <Text style={[styles.stepTitle, {color: colors.text}]}>Vinci il Premio</Text>
                 <Text style={[styles.stepDescription, {color: colors.textMuted}]}>
-                  Piu biglietti hai, piu chance di vincere!
+                  Se il tuo numero viene estratto, vinci!
                 </Text>
               </View>
             </View>
           </View>
         </Animated.View>
 
-        {/* Spacer for button */}
-        <View style={{height: 100}} />
+        {/* Spacer for sticky bottom buttons */}
+        <View style={{height: 160}} />
       </ScrollView>
 
       {/* Fixed Bottom Buttons */}
@@ -778,31 +731,6 @@ const styles = StyleSheet.create({
   prizeImage: {
     width: '100%',
     height: '100%',
-  },
-  valueBadge: {
-    position: 'absolute',
-    top: SPACING.md,
-    right: SPACING.md,
-    borderRadius: RADIUS.lg,
-    overflow: 'hidden',
-    shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  valueBadgeGradient: {
-    borderRadius: RADIUS.lg,
-  },
-  valueBadgeContent: {
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.md,
-  },
-  valueBadgeText: {
-    fontSize: FONT_SIZE.lg,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
   },
   // Info Card
   infoCard: {
@@ -1059,6 +987,7 @@ const styles = StyleSheet.create({
   howItWorksCard: {
     borderRadius: RADIUS.xl,
     padding: SPACING.lg,
+    marginBottom: SPACING.md,
     shadowColor: '#FF6B00',
     shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.2,
