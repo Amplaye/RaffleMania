@@ -8,7 +8,7 @@ import {AuthNavigator} from './AuthNavigator';
 import {TabNavigator} from './TabNavigator';
 import {COLORS, FONT_SIZE, FONT_WEIGHT} from '../utils/constants';
 import {ScreenContainer, Button, UrgencyBorderEffect, ExtractionStartEffect, ExtractionResultModal} from '../components/common';
-import {navigationRef} from '../services/NavigationService';
+import {navigationRef, processPendingNavigation} from '../services/NavigationService';
 
 // Import actual screens
 import {CreditsScreen} from '../screens/credits';
@@ -323,7 +323,7 @@ export const AppNavigator: React.FC = () => {
 
   return (
     <View style={styles.appContainer}>
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer ref={navigationRef} onReady={processPendingNavigation}>
         {isAuthenticated ? <MainStack /> : <AuthNavigator />}
       </NavigationContainer>
 

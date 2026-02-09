@@ -1,11 +1,14 @@
 import React, {useEffect} from 'react';
-import {StatusBar, View} from 'react-native';
+import {StatusBar, View, AppState, Platform, Alert, Linking, LogBox} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {OneSignal, NotificationClickEvent} from 'react-native-onesignal';
 import {AppNavigator} from './src/navigation';
 import {LevelUpOverlay} from './src/components/common';
 import {COLORS} from './src/utils/constants';
 import {navigate} from './src/services/NavigationService';
+
+// Suppress all development-only yellow box warnings
+LogBox.ignoreAllLogs(true);
 
 // OneSignal App ID
 const ONESIGNAL_APP_ID = '7d7f743b-3dac-472e-b05d-e4445842dc0a';
@@ -16,33 +19,62 @@ const App: React.FC = () => {
     OneSignal.initialize(ONESIGNAL_APP_ID);
 
     // Request notification permissions
-    OneSignal.Notifications.requestPermission(true);
+    OneSignal.Notifications.requestPermission(true).then((accepted: boolean) => {
+      // If permission denied on iOS, prompt user to enable in Settings
+      if (!accepted && Platform.OS === 'ios') {
+        setTimeout(() => {
+          Alert.alert(
+            'Notifiche Disabilitate',
+            'Per ricevere le notifiche di RaffleMania (vincite, messaggi di supporto, ecc.), attiva le notifiche nelle impostazioni del dispositivo.',
+            [
+              {text: 'Dopo', style: 'cancel'},
+              {
+                text: 'Apri Impostazioni',
+                onPress: () => Linking.openURL('app-settings:'),
+              },
+            ],
+          );
+        }, 1000);
+      }
+    });
+
+    // Re-check permission when app comes back from Settings
+    const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        const hasPermission = OneSignal.Notifications.hasPermission();
+        if (hasPermission) {
+          OneSignal.User.pushSubscription.optIn();
+        }
+      }
+    });
+
+    // Show notifications even when app is in foreground
+    OneSignal.Notifications.addEventListener('foregroundWillDisplay', (event: any) => {
+      event.getNotification().display();
+    });
 
     // Handle notification click
+    // navigate() automatically queues and retries if navigator isn't ready (cold start)
     OneSignal.Notifications.addEventListener('click', (event: NotificationClickEvent) => {
       const data = event.notification.additionalData as Record<string, string> | undefined;
 
       if (data?.type === 'support_chat') {
-        // Navigate to support chat when user taps on support notification
-        setTimeout(() => {
-          navigate('SupportChat');
-        }, 500); // Small delay to ensure navigation is ready
+        navigate('SupportChat');
+      } else if (data?.type === 'admin_support_message' && data?.user_id) {
+        navigate('AdminChatDetail', {
+          userId: data.user_id,
+          userName: data.user_name || 'Utente',
+        });
       } else if (data?.type === 'winner') {
-        // Navigate to MyWins when user taps on winner notification
-        setTimeout(() => {
-          navigate('MyWins');
-        }, 500);
+        navigate('MyWins');
       } else if (data?.type === 'new_prize' && data?.prize_id) {
-        // Navigate to prize detail when user taps on new prize notification
-        setTimeout(() => {
-          navigate('PrizeDetail', {prizeId: data.prize_id});
-        }, 500);
+        navigate('PrizeDetail', {prizeId: data.prize_id});
       }
     });
 
-    // Cleanup listener on unmount
+    // Cleanup listeners on unmount
     return () => {
-      OneSignal.Notifications.removeEventListener('click', () => {});
+      appStateSubscription.remove();
     };
   }, []);
 

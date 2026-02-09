@@ -3,7 +3,6 @@ import {persist, createJSONStorage} from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Platform} from 'react-native';
 
-console.log('useAuthStore: MODULE LOADED');
 import {
   GoogleSignin,
   isSuccessResponse,
@@ -288,7 +287,6 @@ export const useAuthStore = create<AuthState>()(
     try {
       // Store referral code temporarily for after verification
       if (referralCode) {
-        console.log('[AuthStore] Storing referral code:', referralCode);
         await AsyncStorage.setItem('pending_referral_code', referralCode);
         await AsyncStorage.setItem('pending_referral_username', username);
       }
@@ -342,7 +340,6 @@ export const useAuthStore = create<AuthState>()(
       // Unlink user from OneSignal
       OneSignal.logout();
     } catch (error) {
-      console.error('Logout error:', error);
     } finally {
       set({
         user: null,
@@ -435,44 +432,32 @@ export const useAuthStore = create<AuthState>()(
   refreshUserData: async () => {
     try {
       if (API_CONFIG.USE_MOCK_DATA) {
-        console.log('refreshUserData: skipping (mock mode)');
         return;
       }
 
       // Don't refresh from API for guest users - their data is local only
       const token = get().token;
       if (token?.startsWith('guest_token_')) {
-        console.log('refreshUserData: skipping (guest user)');
         return;
       }
 
-      console.log('refreshUserData: calling /users/me');
       const response = await apiClient.get('/users/me');
       if (response.data.success) {
         const userData = response.data.data.user;
-        console.log('refreshUserData: got data', {
-          watchedAds: userData.watchedAds,
-          winsCount: userData.winsCount,
-        });
         set({user: mapApiUserToUser(response.data.data.user)});
       }
     } catch (error) {
-      console.error('refreshUserData: Error', error);
     }
   },
 
   updateUser: (userData: Partial<User>) => {
     const currentUser = get().user;
     if (currentUser) {
-      console.log('[AuthStore] updateUser called with:', userData);
-      console.log('[AuthStore] Before update - XP:', currentUser.xp, 'Credits:', currentUser.credits);
       const newUser = {...currentUser, ...userData};
-      console.log('[AuthStore] After update - XP:', newUser.xp, 'Credits:', newUser.credits);
       set({
         user: newUser,
       });
     } else {
-      console.log('[AuthStore] updateUser failed - no current user');
     }
   },
 
@@ -537,7 +522,6 @@ export const useAuthStore = create<AuthState>()(
 
         // Process referral if code was provided
         if (pendingReferralCode) {
-          console.log('[AuthStore] Processing referral code after verification:', pendingReferralCode);
           // Import referral store dynamically to avoid circular dependency
           const {useReferralStore} = await import('./useReferralStore');
           // Set the referrer for this user (mock: we create a fake referrer)
@@ -613,42 +597,11 @@ export const useAuthStore = create<AuthState>()(
       name: 'rafflemania-auth-storage',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => {
-        // Only persist data for guest users (their data is local-only)
-        const isGuestUser = state.token?.startsWith('guest_token_');
-        console.log('Auth persist: checking', {
-          isGuestUser,
-          hasUser: !!state.user,
-          token: state.token?.substring(0, 20),
-        });
-        if (isGuestUser && state.user) {
-          console.log('Auth persist: saving guest user data', {
-            watchedAdsCount: state.user.watchedAdsCount,
-            winsCount: state.user.winsCount,
-          });
-          return {
-            user: state.user,
-            token: state.token,
-            isAuthenticated: state.isAuthenticated,
-          };
-        }
-        // For authenticated users, don't persist - data comes fresh from backend on login
-        console.log('Auth persist: NOT saving (not guest or no user)');
-        return {};
-      },
-      onRehydrateStorage: () => {
-        console.log('Auth rehydrate: STARTING');
-        return (state) => {
-          console.log('Auth rehydrate: CALLBACK', {
-            hasState: !!state,
-            hasUser: !!state?.user,
-          });
-          if (state?.user) {
-            console.log('Auth rehydrate: loaded user data', {
-              watchedAdsCount: state.user.watchedAdsCount,
-              winsCount: state.user.winsCount,
-              isGuest: state.token?.startsWith('guest_token_'),
-            });
-          }
+        if (!state.user || !state.isAuthenticated) return {};
+        return {
+          user: state.user,
+          token: state.token,
+          isAuthenticated: state.isAuthenticated,
         };
       },
     }
