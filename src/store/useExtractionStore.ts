@@ -1,6 +1,22 @@
 import {create} from 'zustand';
 import {ExtractionResult} from './useTicketsStore';
 import {useSettingsStore} from './useSettingsStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import apiClient from '../services/apiClient';
+import {useAuthStore} from './useAuthStore';
+
+const LAST_SEEN_DRAW_KEY = 'rafflemania_last_seen_draw_timestamp';
+
+export interface MissedExtraction {
+  drawId: string;
+  prizeId: string;
+  prizeName: string;
+  prizeImage?: string;
+  winningNumber: number;
+  userNumbers: number[];
+  isWinner: boolean;
+  extractedAt: string;
+}
 
 interface ExtractionState {
   // State
@@ -9,18 +25,32 @@ interface ExtractionState {
   extractionResult: ExtractionResult | null;
   isExtractionInProgress: boolean;
 
+  // Missed extractions
+  missedExtractions: MissedExtraction[];
+  currentMissedIndex: number;
+  showMissedModal: boolean;
+
   // Actions
   startExtraction: () => void;
   showResult: (result: ExtractionResult) => void;
   hideResult: () => void;
   reset: () => void;
+
+  // Missed extraction actions
+  fetchMissedExtractions: () => Promise<void>;
+  dismissMissedExtraction: () => void;
 }
 
-export const useExtractionStore = create<ExtractionState>((set, _get) => ({
+export const useExtractionStore = create<ExtractionState>((set, get) => ({
   showExtractionEffect: false,
   showResultModal: false,
   extractionResult: null,
   isExtractionInProgress: false,
+
+  // Missed extractions
+  missedExtractions: [],
+  currentMissedIndex: 0,
+  showMissedModal: false,
 
   startExtraction: () => {
     set({
@@ -64,5 +94,106 @@ export const useExtractionStore = create<ExtractionState>((set, _get) => ({
       extractionResult: null,
       isExtractionInProgress: false,
     });
+  },
+
+  fetchMissedExtractions: async () => {
+    const authStore = useAuthStore.getState();
+    const user = authStore.user;
+    const token = authStore.token;
+
+    if (!token || token.startsWith('guest_token_') || !user?.id) {
+      return;
+    }
+
+    try {
+      // Get last seen timestamp
+      const lastSeenStr = await AsyncStorage.getItem(LAST_SEEN_DRAW_KEY);
+      const lastSeenTimestamp = lastSeenStr ? new Date(lastSeenStr).getTime() : 0;
+
+      // Fetch recent draws from server
+      const drawsResponse = await apiClient.get('/draws?limit=10');
+      const draws = drawsResponse.data?.data?.draws || [];
+
+      if (draws.length === 0) {
+        return;
+      }
+
+      // Filter draws that happened after last seen timestamp
+      const newDraws = draws.filter((draw: any) => {
+        const drawTime = new Date(draw.extracted_at || draw.created_at).getTime();
+        return drawTime > lastSeenTimestamp && draw.status === 'completed';
+      });
+
+      if (newDraws.length === 0) {
+        return;
+      }
+
+      console.log(`[Extraction] Found ${newDraws.length} missed extractions`);
+
+      // For each missed draw, get user's tickets for that prize
+      const missed: MissedExtraction[] = [];
+
+      for (const draw of newDraws) {
+        const prizeId = draw.prize_id;
+        const winningNumber = draw.winning_number;
+        let userNumbers: number[] = [];
+
+        // Try to get user's ticket numbers for this prize
+        try {
+          const ticketsResponse = await apiClient.get(`/tickets/prize/${prizeId}`);
+          userNumbers = ticketsResponse.data?.data?.numbers || [];
+        } catch {
+          console.log(`[Extraction] Could not fetch tickets for prize ${prizeId}`);
+        }
+
+        const isWinner = userNumbers.includes(winningNumber);
+
+        // Only show if user had tickets for this prize
+        if (userNumbers.length > 0) {
+          missed.push({
+            drawId: String(draw.id),
+            prizeId: String(prizeId),
+            prizeName: draw.prize?.name || draw.prize_name || 'Premio',
+            prizeImage: draw.prize?.image_url || draw.prize_image || undefined,
+            winningNumber,
+            userNumbers,
+            isWinner,
+            extractedAt: draw.extracted_at || draw.created_at,
+          });
+        }
+      }
+
+      if (missed.length > 0) {
+        set({
+          missedExtractions: missed,
+          currentMissedIndex: 0,
+          showMissedModal: true,
+        });
+      }
+
+      // Update last seen timestamp to the most recent draw
+      const mostRecentDraw = draws[0];
+      const mostRecentTime = mostRecentDraw.extracted_at || mostRecentDraw.created_at;
+      await AsyncStorage.setItem(LAST_SEEN_DRAW_KEY, mostRecentTime);
+    } catch (error) {
+      console.log('[Extraction] Error fetching missed extractions:', error);
+    }
+  },
+
+  dismissMissedExtraction: () => {
+    const state = get();
+    const nextIndex = state.currentMissedIndex + 1;
+
+    if (nextIndex < state.missedExtractions.length) {
+      // Show next missed extraction
+      set({currentMissedIndex: nextIndex});
+    } else {
+      // All done - close modal
+      set({
+        showMissedModal: false,
+        missedExtractions: [],
+        currentMissedIndex: 0,
+      });
+    }
   },
 }));

@@ -235,9 +235,9 @@ class TicketsController extends WP_REST_Controller {
             ? 'draw_' . $prize_id . '_' . str_replace(['-', ':', ' '], '', substr($prize->timer_started_at, 0, 19))
             : 'draw_' . $prize_id . '_pending';
 
-        // Get next ticket number for this prize
+        // Get next ticket number for this prize (only active tickets, so numbers reset after extraction)
         $max_number = $wpdb->get_var($wpdb->prepare(
-            "SELECT COALESCE(MAX(ticket_number), 0) FROM {$table_tickets} WHERE prize_id = %d",
+            "SELECT COALESCE(MAX(ticket_number), 0) FROM {$table_tickets} WHERE prize_id = %d AND status = 'active'",
             $prize_id
         ));
         $ticket_number = $max_number + 1;
@@ -511,8 +511,9 @@ class TicketsController extends WP_REST_Controller {
                 : 'draw_' . $prize_id . '_pending';
 
             // Lock and get next ticket number atomically
+            // Only count ACTIVE tickets so numbers reset to 1 after extraction
             $max_number = $wpdb->get_var($wpdb->prepare(
-                "SELECT COALESCE(MAX(ticket_number), 0) FROM {$table_tickets} WHERE prize_id = %d FOR UPDATE",
+                "SELECT COALESCE(MAX(ticket_number), 0) FROM {$table_tickets} WHERE prize_id = %d AND status = 'active' FOR UPDATE",
                 $prize_id
             ));
 

@@ -72,7 +72,7 @@ class DrawsController extends WP_REST_Controller {
                         'type' => 'integer'
                     ],
                     'winning_number' => [
-                        'required' => true,
+                        'required' => false,
                         'type' => 'integer'
                     ],
                     'user_ticket_id' => [
@@ -101,6 +101,15 @@ class DrawsController extends WP_REST_Controller {
                         'default' => false
                     ]
                 ]
+            ]
+        ]);
+
+        // Debug: check DB state (no auth) - REMOVE IN PRODUCTION
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/debug-db', [
+            [
+                'methods' => 'GET',
+                'callback' => [$this, 'debug_db_state'],
+                'permission_callback' => '__return_true'
             ]
         ]);
 
@@ -305,6 +314,7 @@ class DrawsController extends WP_REST_Controller {
         $table_winners = $wpdb->prefix . 'rafflemania_winners';
         $table_users = $wpdb->prefix . 'rafflemania_users';
 
+        try {
         $user_id = $request->get_attribute('user_id');
         $prize_id = $request->get_param('prize_id');
         $winning_number = $request->get_param('winning_number');
@@ -319,6 +329,27 @@ class DrawsController extends WP_REST_Controller {
 
         if (!$prize) {
             return new WP_Error('prize_not_found', 'Premio non trovato', ['status' => 404]);
+        }
+
+        // CRITICAL: Check if a draw already exists for this prize (created in last 10 min)
+        // This ensures ALL devices get the same winning number regardless of draw_id differences
+        $recent_draw = $wpdb->get_row($wpdb->prepare(
+            "SELECT d.*, p.name as prize_name, p.image_url as prize_image, p.value as prize_value
+             FROM {$table_draws} d
+             LEFT JOIN {$table_prizes} p ON d.prize_id = p.id
+             WHERE d.prize_id = %d AND d.extracted_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE)
+             ORDER BY d.extracted_at DESC LIMIT 1",
+            $prize_id
+        ));
+
+        if ($recent_draw) {
+            return new WP_REST_Response([
+                'success' => true,
+                'data' => [
+                    'draw' => $this->format_draw($recent_draw),
+                    'already_exists' => true
+                ]
+            ]);
         }
 
         // Use app-provided timer_started_at if DB doesn't have it
@@ -336,17 +367,20 @@ class DrawsController extends WP_REST_Controller {
             ], ['id' => $prize_id]);
         }
 
-        // Generate draw_id
-        $draw_id = 'draw_' . $prize_id . '_' . str_replace(['-', ':', ' '], '', substr($timer_started_at ?: current_time('mysql'), 0, 19));
+        // Generate draw_id - add microseconds to ensure uniqueness
+        $timestamp_part = str_replace(['-', ':', ' '], '', substr($timer_started_at ?: current_time('mysql'), 0, 19));
+        $draw_id = 'draw_' . $prize_id . '_' . $timestamp_part;
 
-        // Check if draw already exists
+        // Double-check by draw_id too
         $existing_draw = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$table_draws} WHERE draw_id = %s",
+            "SELECT d.*, p.name as prize_name, p.image_url as prize_image, p.value as prize_value
+             FROM {$table_draws} d
+             LEFT JOIN {$table_prizes} p ON d.prize_id = p.id
+             WHERE d.draw_id = %s",
             $draw_id
         ));
 
         if ($existing_draw) {
-            // Return existing draw
             return new WP_REST_Response([
                 'success' => true,
                 'data' => [
@@ -357,10 +391,44 @@ class DrawsController extends WP_REST_Controller {
         }
 
         // Get total tickets for this prize
-        $total_tickets = $wpdb->get_var($wpdb->prepare(
+        $total_tickets = (int) $wpdb->get_var($wpdb->prepare(
             "SELECT COUNT(*) FROM {$table_tickets} WHERE prize_id = %d AND status = 'active'",
             $prize_id
         ));
+
+        // If no winning_number provided, pick one randomly from existing active tickets
+        if (!$winning_number || $winning_number <= 0) {
+            $random_ticket = $wpdb->get_row($wpdb->prepare(
+                "SELECT ticket_number FROM {$table_tickets} WHERE prize_id = %d AND status = 'active' ORDER BY RAND() LIMIT 1",
+                $prize_id
+            ));
+            if ($random_ticket) {
+                $winning_number = (int) $random_ticket->ticket_number;
+            } else {
+                // No active tickets exist - return error instead of fake number
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'Nessun biglietto attivo per questo premio',
+                    'data' => [
+                        'draw' => [
+                            'id' => '0',
+                            'drawId' => $draw_id,
+                            'prizeId' => (string) $prize_id,
+                            'prizeName' => $prize->name,
+                            'prizeImage' => $prize->image_url,
+                            'prizeValue' => (float) $prize->value,
+                            'winningNumber' => 0,
+                            'winnerUserId' => null,
+                            'totalTickets' => 0,
+                            'status' => 'no_tickets',
+                            'extractedAt' => current_time('mysql'),
+                            'createdAt' => current_time('mysql')
+                        ],
+                        'no_tickets' => true
+                    ]
+                ]);
+            }
+        }
 
         // Find winner ticket
         $winner_ticket = $wpdb->get_row($wpdb->prepare(
@@ -373,7 +441,7 @@ class DrawsController extends WP_REST_Controller {
         $winner_ticket_id = $winner_ticket ? $winner_ticket->id : null;
 
         // Create draw
-        $wpdb->insert($table_draws, [
+        $insert_result = $wpdb->insert($table_draws, [
             'draw_id' => $draw_id,
             'prize_id' => $prize_id,
             'winning_number' => $winning_number,
@@ -383,6 +451,27 @@ class DrawsController extends WP_REST_Controller {
             'status' => 'completed',
             'extracted_at' => current_time('mysql')
         ]);
+
+        if ($insert_result === false) {
+            // If insert fails due to duplicate draw_id, try to fetch the existing one
+            $existing = $wpdb->get_row($wpdb->prepare(
+                "SELECT d.*, p.name as prize_name, p.image_url as prize_image, p.value as prize_value
+                 FROM {$table_draws} d
+                 LEFT JOIN {$table_prizes} p ON d.prize_id = p.id
+                 WHERE d.draw_id = %s",
+                $draw_id
+            ));
+            if ($existing) {
+                return new WP_REST_Response([
+                    'success' => true,
+                    'data' => [
+                        'draw' => $this->format_draw($existing),
+                        'already_exists' => true
+                    ]
+                ]);
+            }
+            return new WP_Error('draw_insert_failed', 'Impossibile creare estrazione: ' . $wpdb->last_error, ['status' => 500]);
+        }
 
         $draw_db_id = $wpdb->insert_id;
 
@@ -444,6 +533,36 @@ class DrawsController extends WP_REST_Controller {
                 ] : null
             ]
         ], 201);
+
+        } catch (\Exception $e) {
+            return new WP_Error('draw_error', 'Errore estrazione: ' . $e->getMessage(), ['status' => 500]);
+        }
+    }
+
+    public function debug_db_state(WP_REST_Request $request) {
+        global $wpdb;
+        $table_tickets = $wpdb->prefix . 'rafflemania_tickets';
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+        $table_draws = $wpdb->prefix . 'rafflemania_draws';
+
+        $ticket_stats = $wpdb->get_results(
+            "SELECT prize_id, status, COUNT(*) as cnt FROM {$table_tickets} GROUP BY prize_id, status ORDER BY prize_id DESC LIMIT 30"
+        );
+        $users = $wpdb->get_results(
+            "SELECT id, username, credits, level FROM {$table_users} LIMIT 10"
+        );
+        $recent_draws = $wpdb->get_results(
+            "SELECT id, draw_id, prize_id, winning_number, total_tickets, status, extracted_at FROM {$table_draws} ORDER BY id DESC LIMIT 5"
+        );
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => [
+                'ticket_stats' => $ticket_stats,
+                'users' => $users,
+                'recent_draws' => $recent_draws
+            ]
+        ]);
     }
 
     public function check_auth(WP_REST_Request $request) {

@@ -14,3 +14,4 @@ export {FlipCountdownTimer} from './FlipCountdownTimer';
 export {TicketSuccessModal} from './TicketSuccessModal';
 export type {TicketSuccessInfo} from './TicketSuccessModal';
 export {LevelUpOverlay} from './LevelUpOverlay';
+export {MissedExtractionModal} from './MissedExtractionModal';

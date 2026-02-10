@@ -49,8 +49,9 @@ interface ReferralState {
   // Actions
   setHasHydrated: (state: boolean) => void;
 
-  // Fetch referrals from API
-  fetchReferrals: () => Promise<void>;
+  // Fetch referrals from API (returns false if API auth failed)
+  // silent = true skips isLoading indicator (used by internal calls)
+  fetchReferrals: (silent?: boolean) => Promise<boolean>;
 
   // Add a new referred user (called when someone uses your code)
   addReferredUser: (user: {id: string; displayName: string}) => void;
@@ -125,21 +126,27 @@ export const useReferralStore = create<ReferralState>()(
         set({_hasHydrated: state});
       },
 
-      fetchReferrals: async () => {
+      fetchReferrals: async (silent = false) => {
         const authStore = useAuthStore.getState();
+        const user = authStore.user;
         const token = authStore.token;
 
         // Skip for guest users or if not authenticated
-        if (!token || token.startsWith('guest_token_')) {
-          console.log('[ReferralStore] Skipping fetch (guest or no token)');
-          return;
+        if (!token || token.startsWith('guest_token_') || !user?.id || !user?.email) {
+          console.log('[ReferralStore] Skipping fetch (guest or no user)');
+          return false;
         }
 
-        set({isLoading: true});
+        // Auth params as fallback when JWT fails
+        const authParams = `user_id=${user.id}&email=${encodeURIComponent(user.email)}`;
+
+        if (!silent) {
+          set({isLoading: true});
+        }
 
         try {
           // Fetch my referred users (people who used my code)
-          const referralsResponse = await apiClient.get('/referrals');
+          const referralsResponse = await apiClient.get(`/referrals?${authParams}`);
           console.log('[ReferralStore] Fetched referrals:', referralsResponse.data);
 
           if (referralsResponse.data.success && referralsResponse.data.data) {
@@ -152,12 +159,11 @@ export const useReferralStore = create<ReferralState>()(
           }
         } catch (error: any) {
           console.log('[ReferralStore] Error fetching referrals:', error.response?.data || error.message);
-          // Keep local data on error
         }
 
         try {
           // Fetch who referred me (if anyone)
-          const referrerResponse = await apiClient.get('/referrals/my-referrer');
+          const referrerResponse = await apiClient.get(`/referrals/my-referrer?${authParams}`);
           console.log('[ReferralStore] Fetched my referrer:', referrerResponse.data);
 
           if (referrerResponse.data.success && referrerResponse.data.data) {
@@ -168,10 +174,12 @@ export const useReferralStore = create<ReferralState>()(
           }
         } catch (error: any) {
           console.log('[ReferralStore] Error fetching my referrer:', error.response?.data || error.message);
-          // Keep local data on error
         }
 
-        set({isLoading: false});
+        if (!silent) {
+          set({isLoading: false});
+        }
+        return true;
       },
 
       addReferredUser: (user: {id: string; displayName: string}) => {
@@ -223,16 +231,17 @@ export const useReferralStore = create<ReferralState>()(
         const state = get();
         const authStore = useAuthStore.getState();
         const token = authStore.token;
+        const user = authStore.user;
         const today = formatDate(new Date());
 
         // Try to send activity to backend
-        if (token && !token.startsWith('guest_token_')) {
+        if (token && !token.startsWith('guest_token_') && user?.id && user?.email) {
           try {
-            await apiClient.post('/referrals/activity');
+            await apiClient.post('/referrals/activity', {user_id: user.id, email: user.email});
             console.log('[ReferralStore] Sent daily activity to backend');
 
-            // Refetch to get updated data
-            await get().fetchReferrals();
+            // Refetch to get updated data (silent - no loading indicator)
+            await get().fetchReferrals(true);
             return;
           } catch (error: any) {
             console.log('[ReferralStore] Error sending activity:', error.response?.data || error.message);
@@ -331,13 +340,14 @@ export const useReferralStore = create<ReferralState>()(
         const state = get();
         const authStore = useAuthStore.getState();
         const token = authStore.token;
+        const user = authStore.user;
         let referrerReward = 0;
         let referredReward = 0;
 
         // Try to claim via API first
-        if (token && !token.startsWith('guest_token_')) {
+        if (token && !token.startsWith('guest_token_') && user?.id && user?.email) {
           try {
-            const response = await apiClient.post('/referrals/claim');
+            const response = await apiClient.post('/referrals/claim', {user_id: user.id, email: user.email});
             console.log('[ReferralStore] Claim rewards response:', response.data);
 
             if (response.data.success && response.data.data) {
@@ -345,8 +355,8 @@ export const useReferralStore = create<ReferralState>()(
               referrerReward = claimed.referrer_credits || claimed.referrerCredits || 0;
               referredReward = claimed.referred_credits || claimed.referredCredits || 0;
 
-              // Refetch to get updated state
-              await get().fetchReferrals();
+              // Refetch to get updated state (silent - no loading indicator)
+              await get().fetchReferrals(true);
 
               // Refresh user credits
               if ((referrerReward > 0 || referredReward > 0) && authStore.user) {

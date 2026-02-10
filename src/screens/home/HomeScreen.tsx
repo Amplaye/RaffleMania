@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useRef} from 'react';
+import React, {useEffect, useState, useRef, useCallback} from 'react';
 import {
   View,
   Text,
@@ -16,8 +16,9 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
-import {AnimatedBackground, StreakModal, StreakRecoveryModal, ExtractionResultModal, UrgencyBorderEffect, ExtractionStartEffect, FlipCountdownTimer, TicketSuccessModal, TicketSuccessInfo} from '../../components/common';
+import {AnimatedBackground, StreakModal, StreakRecoveryModal, ExtractionResultModal, UrgencyBorderEffect, FlipCountdownTimer, TicketSuccessModal, TicketSuccessInfo} from '../../components/common';
 import {getTotalPoolTickets} from '../../services/mock';
+import apiClient from '../../services/apiClient';
 import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, useExtractionStore, useLevelUpStore, DAILY_LIMITS, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS, setMidnightStreakCallback} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
@@ -46,9 +47,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const user = useAuthStore(state => state.user);
   const refreshUserData = useAuthStore(state => state.refreshUserData);
   const {fetchSettings} = useSettingsStore();
-  const {simulateExtraction, getTicketNumbersForPrize} = useTicketsStore();
-  const {showResultModal, extractionResult, showResult, hideResult} = useExtractionStore();
-  const {markPrizeAsExtracting, completePrizeExtraction, resetPrizeAfterExtraction} = usePrizesStore();
+  const {getTicketNumbersForPrize} = useTicketsStore();
+  const {showResultModal, extractionResult, hideResult, startExtraction, showResult} = useExtractionStore();
 
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
@@ -61,7 +61,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [canBuyTicket, setCanBuyTicket] = useState(true);
   const [showTicketModal, setShowTicketModal] = useState(false);
-  const [showExtractionEffect, setShowExtractionEffect] = useState(false);
+  // Extraction effects are handled globally by AppNavigator
   const [showTicketSuccessModal, setShowTicketSuccessModal] = useState(false);
   const [ticketSuccessInfo, setTicketSuccessInfo] = useState<TicketSuccessInfo | null>(null);
   const [showStreakRecoveryModal, setShowStreakRecoveryModal] = useState(false);
@@ -78,6 +78,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     fetchPrizes();
     fetchDraws();
     fetchSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Poll prizes every 15s to keep timer/extraction state in sync across all users
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchPrizes();
+    }, 15000);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -149,7 +158,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Countdown timer effect
+  // Countdown timer effect (display only - extraction is handled by AppNavigator)
   useEffect(() => {
     if (!currentPrize || currentPrize.timerStatus !== 'countdown' || !currentPrize.scheduledAt) {
       setCountdownSeconds(null);
@@ -161,11 +170,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       const scheduledTime = new Date(currentPrize.scheduledAt!).getTime();
       const diff = Math.max(0, Math.floor((scheduledTime - now) / 1000));
       setCountdownSeconds(diff);
-
-      // When countdown reaches 0, trigger extraction
-      if (diff <= 0) {
-        handleExtraction();
-      }
     };
 
     updateCountdown();
@@ -173,43 +177,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPrize?.timerStatus, currentPrize?.scheduledAt, currentPrize?.id]);
-
-  // Handle extraction when timer ends
-  const handleExtraction = () => {
-    if (!currentPrize) return;
-
-    // Mark prize as extracting and show full-screen effect
-    markPrizeAsExtracting(currentPrize.id);
-    setShowExtractionEffect(true);
-  };
-
-  // Called when extraction animation completes
-  const onExtractionAnimationComplete = () => {
-    if (!currentPrize) return;
-
-    // Hide the extraction effect
-    setShowExtractionEffect(false);
-
-    // Simulate the extraction
-    const result = simulateExtraction(currentPrize.id, currentPrize.name, currentPrize.imageUrl);
-
-    // Get user numbers for display
-    const userNumbers = getTicketNumbersForPrize(currentPrize.id);
-
-    // Show result with all data
-    showResult({
-      ...result,
-      userNumbers: userNumbers.length > 0 ? userNumbers : result.userNumbers,
-    });
-
-    // Complete the extraction in prizes store
-    if (result.isWinner) {
-      completePrizeExtraction(currentPrize.id, result.winningNumber || 0);
-    } else {
-      // Reset prize for new round
-      resetPrizeAfterExtraction(currentPrize.id);
-    }
-  };
 
 
   // Format ad cooldown in mm:ss
@@ -280,6 +247,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   // Riscatta biglietti con crediti (quantità variabile) - ATOMIC BATCH
   const handleBuyTicketsWithCredits = async (quantity: number) => {
     if (!currentPrize || !canBuyTicket) return;
+    // Block purchases in last 30 seconds of countdown
+    if (countdownSeconds !== null && countdownSeconds <= BETTING_LOCK_SECONDS && currentPrize.timerStatus === 'countdown') {
+      Alert.alert('Puntate Chiuse', 'Le puntate sono chiuse. Attendi l\'estrazione.');
+      return;
+    }
     if ((user?.credits ?? 0) < quantity) {
       Alert.alert('Crediti insufficienti', `Hai bisogno di almeno ${quantity} crediti per riscattare ${quantity} biglietti.`);
       return;
@@ -333,14 +305,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         totalPoolTickets: totalPool,
       });
       setShowTicketSuccessModal(true);
-
-      // Attiva il cooldown di 20 minuti anche per acquisti con crediti
-      incrementAdsWatched();
     } catch (error) {
       console.error('[HomeScreen] Batch ticket purchase failed:', error);
-      // Refund credits if batch purchase failed
+      // Refund credits locally if batch purchase failed
       addCredits(quantity, 'other');
-      Alert.alert('Errore', 'Impossibile riscattare i biglietti.');
+      Alert.alert('Errore', 'Impossibile riscattare i biglietti. I crediti sono stati ripristinati.');
+      setIsBuyingTicket(false);
+      return;
     }
 
     setIsBuyingTicket(false);
@@ -350,6 +321,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   // Guarda pubblicità
   const handleWatchAd = async () => {
     if (!currentPrize || !canBuyTicket) return;
+    // Block ad watching in last 30 seconds of countdown
+    if (countdownSeconds !== null && countdownSeconds <= BETTING_LOCK_SECONDS && currentPrize.timerStatus === 'countdown') {
+      Alert.alert('Puntate Chiuse', 'Le puntate sono chiuse. Attendi l\'estrazione.');
+      return;
+    }
 
     setIsWatchingAd(true);
     await new Promise<void>(resolve => setTimeout(resolve, 2000));
@@ -504,12 +480,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               style={[styles.debugButton, {backgroundColor: colors.card}]}
               onPress={() => {
                 if (currentPrize) {
-                  startTimerForPrize(currentPrize.id, 10);
-                  Alert.alert('Debug', 'Timer impostato a 10 secondi e avviato!');
+                  startTimerForPrize(currentPrize.id, 20);
+                  Alert.alert('Debug', 'Timer impostato a 20 secondi e avviato!');
                 }
               }}
               activeOpacity={0.7}>
-              <Text style={[styles.debugButtonText, {color: colors.text}]}>TIMER 10s</Text>
+              <Text style={[styles.debugButtonText, {color: colors.text}]}>TIMER 20s</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -805,11 +781,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         intensity={countdownSeconds !== null && countdownSeconds <= 5 ? 'high' : 'medium'}
       />
 
-      {/* Full-screen Extraction Effect */}
-      <ExtractionStartEffect
-        visible={showExtractionEffect}
-        onAnimationComplete={onExtractionAnimationComplete}
-      />
+      {/* Extraction effects handled globally by AppNavigator */}
     </LinearGradient>
   );
 };
