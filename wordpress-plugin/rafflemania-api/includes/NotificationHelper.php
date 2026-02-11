@@ -195,6 +195,15 @@ class NotificationHelper {
      * Send HTTP request to OneSignal API
      */
     private static function send_request($payload, $api_key) {
+        $icon_url = 'https://www.rafflemania.it/wp-content/uploads/2026/02/rafflemania-icon.png';
+
+        // Android: large_icon shows as notification image, small_icon for status bar
+        $payload['large_icon'] = $icon_url;
+        $payload['small_icon'] = 'ic_launcher';
+
+        // iOS: add icon as attachment for rich notification
+        $payload['ios_attachments'] = ['icon' => $icon_url];
+
         $response = wp_remote_post('https://api.onesignal.com/notifications', [
             'headers' => [
                 'Content-Type' => 'application/json',

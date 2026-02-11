@@ -299,11 +299,10 @@ class Plugin {
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
         $table_draws = $wpdb->prefix . 'rafflemania_draws';
 
-        // Send "extraction imminent" for long timers (12h) approaching last 5 minutes
+        // Send "extraction imminent" for timers approaching last 5 minutes
         $approaching_prizes = $wpdb->get_results(
             "SELECT * FROM {$table_prizes}
              WHERE timer_status = 'countdown'
-             AND timer_duration > 300
              AND scheduled_at IS NOT NULL
              AND scheduled_at > NOW()
              AND scheduled_at <= DATE_ADD(NOW(), INTERVAL 6 MINUTE)"
