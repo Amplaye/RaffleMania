@@ -53,6 +53,25 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>rafflemania</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>it.rafflemania</string>
+		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.1084147654031-dt7n18hdi4i28dvksnk6drrtmhr27qhe</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>google-signin</string>
+		</dict>
+	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 	<key>UIAppFonts</key>

@@ -15,6 +15,13 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Force opcache invalidation of critical files
+if (function_exists('opcache_invalidate')) {
+    opcache_invalidate(plugin_dir_path(__FILE__) . 'includes/API/AuthController.php', true);
+    opcache_invalidate(plugin_dir_path(__FILE__) . 'includes/API/ReferralController.php', true);
+    opcache_invalidate(plugin_dir_path(__FILE__) . 'includes/Plugin.php', true);
+}
+
 // Define plugin constants
 define('RAFFLEMANIA_VERSION', '1.0.0');
 define('RAFFLEMANIA_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -71,6 +78,25 @@ add_action('rest_api_init', function() {
     $referrals = new RaffleMania\API\ReferralController();
     $referrals->register_routes();
 }, 99);
+
+// TEMP: AJAX endpoint for DB referral check - DELETE AFTER DEBUGGING
+add_action('wp_ajax_nopriv_rafflemania_dbcheck', 'rafflemania_ajax_dbcheck_handler');
+add_action('wp_ajax_rafflemania_dbcheck', 'rafflemania_ajax_dbcheck_handler');
+
+function rafflemania_ajax_dbcheck_handler() {
+    global $wpdb;
+    $table_referrals = $wpdb->prefix . 'rafflemania_referrals';
+    $table_users = $wpdb->prefix . 'rafflemania_users';
+
+    $referrals = $wpdb->get_results("SELECT * FROM {$table_referrals} ORDER BY created_at DESC LIMIT 20");
+    $all_users = $wpdb->get_results("SELECT id, username, email, referral_code, referred_by, email_verified FROM {$table_users} ORDER BY id DESC LIMIT 20");
+
+    wp_send_json_success([
+        'referrals' => $referrals,
+        'users' => $all_users,
+        'count' => count($referrals),
+    ]);
+}
 
 function rafflemania_ajax_settings_handler() {
     $xp_watch_ad = (int) get_option('rafflemania_xp_watch_ad', 10);

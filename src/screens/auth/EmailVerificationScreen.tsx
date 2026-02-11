@@ -10,6 +10,7 @@ interface EmailVerificationScreenProps {
   route: {
     params?: {
       email?: string;
+      token?: string;
     };
   };
 }
@@ -19,9 +20,32 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
   route,
 }) => {
   const email = route.params?.email || useAuthStore.getState().pendingVerificationEmail || '';
-  const {resendVerificationEmail, clearPendingVerification, isLoading} = useAuthStore();
+  const token = route.params?.token;
+  const {verifyEmail, resendVerificationEmail, clearPendingVerification, isLoading} = useAuthStore();
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendCount, setResendCount] = useState(0);
+  const [verifying, setVerifying] = useState(false);
+
+  // Auto-verify when token is received via deep link
+  useEffect(() => {
+    if (token && !verifying) {
+      setVerifying(true);
+      verifyEmail(token)
+        .then(() => {
+          Alert.alert(
+            'Email Verificata!',
+            'Il tuo account è stato verificato con successo.',
+          );
+        })
+        .catch((error: any) => {
+          Alert.alert(
+            'Errore di Verifica',
+            error.message || 'Impossibile verificare l\'email. Riprova.',
+          );
+          setVerifying(false);
+        });
+    }
+  }, [token, verifyEmail, verifying]);
 
   // Countdown timer for resend button
   useEffect(() => {

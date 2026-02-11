@@ -12,6 +12,8 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {AnimatedBackground} from '../../components/common';
+import apiClient from '../../services/apiClient';
+import {API_CONFIG} from '../../utils/constants';
 import {useAuthStore, useCreditsStore, useTicketsStore} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
@@ -80,8 +82,9 @@ const CreditPackageCard: React.FC<CreditPackageProps> = ({package_, onPress}) =>
 export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
   const user = useAuthStore(state => state.user);
+  const token = useAuthStore(state => state.token);
   const {addCredits} = useCreditsStore();
-  const {getAdCooldownSeconds} = useTicketsStore();
+  const {getAdCooldownSeconds, incrementAdsWatched} = useTicketsStore();
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
@@ -129,9 +132,22 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
         {text: 'Annulla', style: 'cancel'},
         {
           text: 'Acquista',
-          onPress: () => {
-            // Mock purchase - in production this would go through payment provider
+          onPress: async () => {
+            // Update locally
             addCredits(package_.credits, 'purchase');
+
+            // Sync to server for authenticated users
+            const isGuestUser = token?.startsWith('guest_token_');
+            if (!API_CONFIG.USE_MOCK_DATA && !isGuestUser) {
+              try {
+                await apiClient.post('/users/me/credits/purchase', {
+                  credits: package_.credits,
+                });
+              } catch (e) {
+                console.log('[Shop] Server credit sync failed:', e);
+              }
+            }
+
             Alert.alert('Successo!', `Hai acquistato ${package_.credits} crediti!`);
           },
         },
@@ -144,6 +160,18 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
     // Simulate watching ad
     await new Promise<void>(resolve => setTimeout(resolve, 2000));
     addCredits(1, 'other');
+    incrementAdsWatched();
+
+    // Sync to server for authenticated users
+    const isGuestUser = token?.startsWith('guest_token_');
+    if (!API_CONFIG.USE_MOCK_DATA && !isGuestUser) {
+      try {
+        await apiClient.post('/users/me/credits/purchase', {credits: 1});
+      } catch (e) {
+        console.log('[Shop] Server ad credit sync failed:', e);
+      }
+    }
+
     setIsWatchingAd(false);
     Alert.alert('Credito Guadagnato!', 'Hai ricevuto 1 credito gratuito!');
   };

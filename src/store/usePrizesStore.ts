@@ -208,17 +208,25 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
         }
       }
 
-      // Merge API prizes - DON'T preserve old timer state to avoid auto-extraction on login
-      // Timer state should only be active when user explicitly starts it in current session
+      // Use server timer state - trust the server as source of truth for sync across users
+      // But reset stale countdown prizes where scheduledAt is far in the past (>2 min)
+      // to avoid false extraction triggers on app start
+      const now = Date.now();
       const mergedPrizes = apiPrizes.map((newPrize: Prize) => {
-        // Always use fresh API data - reset any stale timer state
-        return {
-          ...newPrize,
-          timerStatus: 'waiting' as PrizeTimerStatus,
-          timerStartedAt: undefined,
-          scheduledAt: undefined,
-          extractedAt: undefined,
-        };
+        if (
+          newPrize.timerStatus === 'countdown' &&
+          newPrize.scheduledAt &&
+          new Date(newPrize.scheduledAt).getTime() < now - 120000
+        ) {
+          // scheduledAt is more than 2 minutes in the past - extraction already happened
+          return {
+            ...newPrize,
+            timerStatus: 'waiting' as PrizeTimerStatus,
+            scheduledAt: undefined,
+            timerStartedAt: undefined,
+          };
+        }
+        return newPrize;
       });
 
       console.log('Loaded prizes from API:', mergedPrizes.length);

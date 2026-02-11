@@ -96,8 +96,12 @@ class UsersController extends WP_REST_Controller {
                 'permission_callback' => [$this, 'check_auth'],
                 'args' => [
                     'package_id' => [
-                        'required' => true,
+                        'required' => false,
                         'type' => 'string'
+                    ],
+                    'credits' => [
+                        'required' => false,
+                        'type' => 'integer'
                     ],
                     'receipt' => [
                         'required' => false,
@@ -172,9 +176,10 @@ class UsersController extends WP_REST_Controller {
                 'permission_callback' => [$this, 'check_auth'],
                 'args' => [
                     'password' => [
-                        'required' => true,
+                        'required' => false,
                         'type' => 'string',
-                        'description' => 'Current password for confirmation'
+                        'default' => '',
+                        'description' => 'Current password for confirmation (not required for social accounts)'
                     ],
                     'confirm' => [
                         'required' => true,
@@ -523,27 +528,40 @@ class UsersController extends WP_REST_Controller {
 
         $user_id = $request->get_param('_auth_user_id');
         $package_id = $request->get_param('package_id');
+        $credits_amount = (int) $request->get_param('credits');
 
-        // Credit packages - aligned with mobile app
-        $packages = [
-            'credits_100' => ['credits' => 100, 'price' => 0.99],
-            'credits_500' => ['credits' => 500, 'price' => 3.99],
-            'credits_1000' => ['credits' => 1000, 'price' => 6.99],
-            'credits_2500' => ['credits' => 2500, 'price' => 14.99],
-        ];
+        // Accept either a package_id or a direct credits amount
+        if ($credits_amount > 0) {
+            // Direct credits amount from app
+            $credits_to_add = $credits_amount;
+            $description = 'Acquisto ' . $credits_to_add . ' crediti';
+            $ref_id = 'credits_' . $credits_to_add;
+        } else if ($package_id) {
+            // Legacy package IDs
+            $packages = [
+                'credits_100' => ['credits' => 100, 'price' => 0.99],
+                'credits_500' => ['credits' => 500, 'price' => 3.99],
+                'credits_1000' => ['credits' => 1000, 'price' => 6.99],
+                'credits_2500' => ['credits' => 2500, 'price' => 14.99],
+            ];
 
-        if (!isset($packages[$package_id])) {
-            return new WP_Error('invalid_package', 'Pacchetto non valido', ['status' => 400]);
+            if (!isset($packages[$package_id])) {
+                return new WP_Error('invalid_package', 'Pacchetto non valido', ['status' => 400]);
+            }
+
+            $credits_to_add = $packages[$package_id]['credits'];
+            $description = 'Acquisto ' . $credits_to_add . ' crediti';
+            $ref_id = $package_id;
+        } else {
+            return new WP_Error('missing_params', 'Specificare package_id o credits', ['status' => 400]);
         }
-
-        $package = $packages[$package_id];
 
         // In production, verify receipt with App Store / Google Play here
         // For now, just add credits
 
         $wpdb->query($wpdb->prepare(
             "UPDATE {$table_users} SET credits = credits + %d WHERE id = %d",
-            $package['credits'],
+            $credits_to_add,
             $user_id
         ));
 
@@ -551,9 +569,9 @@ class UsersController extends WP_REST_Controller {
         $wpdb->insert($table_transactions, [
             'user_id' => $user_id,
             'type' => 'purchase',
-            'amount' => $package['credits'],
-            'description' => 'Acquisto ' . $package['credits'] . ' crediti',
-            'reference_id' => $package_id
+            'amount' => $credits_to_add,
+            'description' => $description,
+            'reference_id' => $ref_id
         ]);
 
         $user = $wpdb->get_row($wpdb->prepare(
@@ -564,7 +582,7 @@ class UsersController extends WP_REST_Controller {
         return new WP_REST_Response([
             'success' => true,
             'data' => [
-                'creditsAdded' => $package['credits'],
+                'creditsAdded' => $credits_to_add,
                 'totalCredits' => (int) $user->credits
             ]
         ]);
@@ -737,7 +755,7 @@ class UsersController extends WP_REST_Controller {
         // Get user and verify password
         $table_users = $wpdb->prefix . 'rafflemania_users';
         $user = $wpdb->get_row($wpdb->prepare(
-            "SELECT id, email, password_hash FROM {$table_users} WHERE id = %d",
+            "SELECT id, email, password_hash, social_provider FROM {$table_users} WHERE id = %d",
             $user_id
         ));
 
@@ -745,9 +763,12 @@ class UsersController extends WP_REST_Controller {
             return new WP_Error('user_not_found', 'Utente non trovato', ['status' => 404]);
         }
 
-        // Verify password
-        if (!password_verify($password, $user->password_hash)) {
-            return new WP_Error('invalid_password', 'Password non corretta', ['status' => 401]);
+        // Social users (Google/Apple) don't have a real password, skip verification
+        if (empty($user->social_provider)) {
+            // Regular user - verify password
+            if (!password_verify($password, $user->password_hash)) {
+                return new WP_Error('invalid_password', 'Password non corretta', ['status' => 401]);
+            }
         }
 
         // Begin deletion process - delete all related data

@@ -153,6 +153,16 @@ const LevelItem: React.FC<{
           ))}
         </View>
 
+        {/* Credit Reward */}
+        {levelInfo.creditReward > 0 && (
+          <View style={[styles.creditRewardContainer, {backgroundColor: COLORS.primary + '15', borderColor: COLORS.primary + '30'}]}>
+            <Ionicons name="gift" size={18} color={COLORS.primary} />
+            <Text style={[styles.creditRewardText, {color: isUnlocked ? colors.text : colors.textMuted}]}>
+              +{levelInfo.creditReward} crediti bonus al raggiungimento
+            </Text>
+          </View>
+        )}
+
         {/* Progress to this level (if not yet reached) */}
         {!isUnlocked && (
           <View style={styles.progressToLevel}>
@@ -458,6 +468,21 @@ const styles = StyleSheet.create({
   benefitText: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.regular,
+    flex: 1,
+  },
+  creditRewardContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginTop: SPACING.sm,
+    gap: SPACING.xs,
+  },
+  creditRewardText: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.semibold,
+    fontWeight: FONT_WEIGHT.medium,
     flex: 1,
   },
   // Progress to level

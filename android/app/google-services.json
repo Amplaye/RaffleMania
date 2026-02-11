@@ -12,7 +12,20 @@
           "package_name": "com.rafflemaniaapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1084147654031-2qrgko6bfll0vuetam0p4hu9h0e5040h.apps.googleusercontent.com",
+          "client_type": 3
+        },
+        {
+          "client_id": "1084147654031-9rg9vfgveepdqfl1tckq4369bdsmsnjj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rafflemaniaapp",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBVTYAcM11D30E3Skzm0mBR8NA2OQZkovM"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1084147654031-2qrgko6bfll0vuetam0p4hu9h0e5040h.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

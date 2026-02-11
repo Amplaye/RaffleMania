@@ -2,6 +2,7 @@ import React, {useState, useEffect, useRef} from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   TouchableOpacity,
   Alert,
@@ -19,6 +20,7 @@ import * as Keychain from 'react-native-keychain';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useAuthStore} from '../../store';
+import {GoogleSigninButton} from '@react-native-google-signin/google-signin';
 
 
 const {width, height} = Dimensions.get('window');
@@ -121,6 +123,78 @@ const FloatingParticle: React.FC<ParticleProps> = ({
         },
       ]}
     />
+  );
+};
+
+// Logo-themed tagline with golden shimmer effect
+const TAGLINE_WORDS = [
+  {text: 'Guarda', color: '#FF8C00'},  // Orange dorato (come "Raffle")
+  {text: ', ', color: '#E8720C'},
+  {text: 'gioca', color: '#3BB8E8'},   // Azzurro (come "Mania")
+  {text: ', ', color: '#E8720C'},
+  {text: 'vinci', color: '#FFB800'},   // Oro (come le monete)
+  {text: '.', color: '#E8720C'},
+];
+
+const RainbowTagline: React.FC = () => {
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const shimmer = () => {
+      shimmerAnim.setValue(0);
+      Animated.sequence([
+        Animated.delay(800),
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => shimmer());
+    };
+    shimmer();
+  }, [shimmerAnim]);
+
+  const shimmerTranslateX = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-80, 280],
+  });
+
+  const shimmerOpacity = shimmerAnim.interpolate({
+    inputRange: [0, 0.1, 0.5, 0.9, 1],
+    outputRange: [0, 0.6, 0.9, 0.6, 0],
+  });
+
+  return (
+    <View style={styles.rainbowContainer}>
+      <View style={styles.rainbowTextRow}>
+        {TAGLINE_WORDS.map((word, index) => (
+          <Text
+            key={index}
+            style={[
+              styles.rainbowChar,
+              {
+                color: word.color,
+                textShadowColor: word.color,
+                textShadowOffset: {width: 0, height: 0},
+                textShadowRadius: 4,
+              },
+            ]}>
+            {word.text}
+          </Text>
+        ))}
+      </View>
+      {/* Shimmer light sweep */}
+      <Animated.View
+        style={[
+          styles.shimmerOverlay,
+          {
+            opacity: shimmerOpacity,
+            transform: [{translateX: shimmerTranslateX}, {rotate: '20deg'}, {scaleY: 1.5}],
+          },
+        ]}
+        pointerEvents="none"
+      />
+    </View>
   );
 };
 
@@ -269,10 +343,46 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     }
   };
 
+  const showReferralInput = () => {
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Codice Referral',
+        'Hai un codice referral? Inseriscilo per ottenere bonus!',
+        [
+          {text: 'Salta', style: 'cancel'},
+          {
+            text: 'Applica',
+            onPress: async (code?: string) => {
+              if (code && code.trim()) {
+                try {
+                  const api = require('../../services/apiClient').default;
+                  await api.post('/auth/apply-referral', {referral_code: code.trim()});
+                  Alert.alert('Successo!', 'Codice referral applicato!');
+                } catch (e: any) {
+                  Alert.alert('Errore', e?.response?.data?.message || 'Codice non valido');
+                }
+              }
+            },
+          },
+        ],
+        'plain-text',
+      );
+    } else {
+      Alert.alert(
+        'Codice Referral',
+        'Hai un codice referral? Puoi inserirlo dalla sezione Referral nel tuo profilo.',
+        [{text: 'OK'}],
+      );
+    }
+  };
+
   const handleGoogleLogin = async () => {
     setSocialLoading('google');
     try {
-      await loginWithGoogle();
+      const result = await loginWithGoogle();
+      if (result?.isNewUser) {
+        setTimeout(() => showReferralInput(), 500);
+      }
     } catch (error: any) {
       Alert.alert('Errore', error.message || 'Errore durante il login con Google');
     } finally {
@@ -283,7 +393,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const handleAppleLogin = async () => {
     setSocialLoading('apple');
     try {
-      await loginWithApple();
+      const result = await loginWithApple();
+      if (result?.isNewUser) {
+        setTimeout(() => showReferralInput(), 500);
+      }
     } catch (error: any) {
       Alert.alert('Errore', error.message || 'Errore durante il login con Apple');
     } finally {
@@ -339,8 +452,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                     transform: [{translateY: slideAnim}, {scale: logoScale}],
                   },
                 ]}>
-                <Text style={styles.logoText}>RaffleMania</Text>
-                <Text style={styles.tagline}>Guarda, gioca, vinci.</Text>
+                <Image
+                  source={require('../../../assets/images/logo.png')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
+                <RainbowTagline />
               </Animated.View>
 
               {/* Form Section */}
@@ -480,33 +597,30 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                     onPress={handleGoogleLogin}
                     disabled={socialLoading !== null}
                     activeOpacity={0.8}>
-                    <View style={styles.googleIconContainer}>
-                      <Text style={styles.googleIconG}>G</Text>
-                    </View>
+                    <Image
+                      source={require('../../../assets/images/google_logo.png')}
+                      style={styles.googleLogo}
+                    />
                   </TouchableOpacity>
 
-                  {/* Apple Button */}
-                  <TouchableOpacity
-                    style={[styles.socialButtonSquare, styles.appleButton]}
-                    onPress={handleAppleLogin}
-                    disabled={socialLoading !== null}
-                    activeOpacity={0.8}>
-                    <Ionicons name="logo-apple" size={24} color="#FFFFFF" />
-                  </TouchableOpacity>
+                  {/* Apple Button - iOS only */}
+                  {Platform.OS === 'ios' && (
+                    <TouchableOpacity
+                      style={[styles.socialButtonSquare, styles.appleButton]}
+                      onPress={handleAppleLogin}
+                      disabled={socialLoading !== null}
+                      activeOpacity={0.8}>
+                      <Ionicons name="logo-apple" size={24} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  )}
 
                   {/* Guest Button */}
                   <TouchableOpacity
-                    style={styles.guestButton}
+                    style={[styles.socialButtonSquare, styles.guestButtonSquare]}
                     onPress={handleGuestLogin}
                     disabled={socialLoading !== null}
                     activeOpacity={0.8}>
-                    <LinearGradient
-                      colors={[COLORS.orange, COLORS.orangeDark]}
-                      start={{x: 0, y: 0}}
-                      end={{x: 1, y: 1}}
-                      style={styles.guestButtonGradient}>
-                      <Ionicons name="person" size={22} color="#FFFFFF" />
-                    </LinearGradient>
+                    <Ionicons name="person" size={24} color={COLORS.orange} />
                   </TouchableOpacity>
                 </View>
               </Animated.View>
@@ -563,6 +677,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
+  logoImage: {
+    width: '100%',
+    height: 150,
+    marginBottom: 30,
+    transform: [{scale: 1.2}],
+  },
   logoText: {
     fontSize: 42,
     fontWeight: '700',
@@ -571,9 +691,35 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontSize: 16,
-    color: COLORS.textSecondary,
+    color: '#000000',
     marginTop: 8,
-    fontWeight: '400',
+    fontWeight: '700',
+  },
+  rainbowContainer: {
+    marginTop: 8,
+    overflow: 'hidden',
+    position: 'relative',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  rainbowTextRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rainbowChar: {
+    fontSize: 19,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  shimmerOverlay: {
+    position: 'absolute',
+    top: -15,
+    left: 0,
+    width: 25,
+    height: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    borderRadius: 12,
   },
   formSection: {
     marginBottom: 24,
@@ -668,10 +814,10 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: COLORS.border,
+    backgroundColor: '#000000',
   },
   dividerText: {
-    color: COLORS.textMuted,
+    color: '#000000',
     fontSize: 14,
     marginHorizontal: 16,
   },
@@ -695,41 +841,17 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  guestButton: {
-    width: Platform.OS === 'ios' ? 60 : 56,
-    height: Platform.OS === 'ios' ? 60 : 56,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: COLORS.orange,
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 4,
+  googleLogo: {
+    width: 24,
+    height: 24,
   },
-  guestButtonGradient: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 16,
+  guestButtonSquare: {
+    borderColor: COLORS.orange,
+    borderWidth: 1.5,
   },
   appleButton: {
     backgroundColor: '#000000',
     borderColor: '#000000',
-  },
-  googleIconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  googleIconG: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#4285F4',
   },
   registerSection: {
     flexDirection: 'row',

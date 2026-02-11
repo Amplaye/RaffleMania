@@ -186,7 +186,7 @@ export const StreakScreen: React.FC<StreakScreenProps> = ({navigation}) => {
   // Handle button press - go to Shop if no credits, otherwise recover
   const handleRecoverButtonPress = () => {
     if (!canAffordRecovery) {
-      navigation.navigate('Credits');
+      navigation.navigate('MainTabs', {screen: 'Shop'});
     } else {
       handleRecoverOneDay();
     }

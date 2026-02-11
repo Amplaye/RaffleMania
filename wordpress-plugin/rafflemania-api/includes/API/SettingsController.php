@@ -1,4 +1,5 @@
 <?php
+// opcache-bust: 1739109000-settings-debug
 namespace RaffleMania\API;
 
 use WP_REST_Controller;
@@ -28,6 +29,24 @@ class SettingsController extends WP_REST_Controller {
      * Get app settings
      */
     public function get_settings(WP_REST_Request $request) {
+        // TEMP DEBUG: Return referral data when debug param is passed - REMOVE AFTER DEBUGGING
+        if ($request->get_param('debug_ref') === '2026check') {
+            global $wpdb;
+            $table_referrals = $wpdb->prefix . 'rafflemania_referrals';
+            $table_users = $wpdb->prefix . 'rafflemania_users';
+
+            $referrals = $wpdb->get_results("SELECT * FROM {$table_referrals} ORDER BY created_at DESC LIMIT 20");
+            $referred_users = $wpdb->get_results("SELECT id, username, email, referral_code, referred_by, email_verified FROM {$table_users} WHERE referred_by IS NOT NULL ORDER BY id DESC LIMIT 20");
+            $all_users = $wpdb->get_results("SELECT id, username, email, referral_code, referred_by, email_verified FROM {$table_users} ORDER BY id DESC LIMIT 20");
+
+            return new WP_REST_Response([
+                'referrals_table' => $referrals,
+                'users_with_referral' => $referred_users,
+                'recent_users' => $all_users,
+                'referrals_count' => count($referrals),
+            ]);
+        }
+
         // XP rewards from WordPress settings
         $xp_watch_ad = (int) get_option('rafflemania_xp_watch_ad', 10);
         $xp_daily_streak = (int) get_option('rafflemania_xp_daily_streak', 10);

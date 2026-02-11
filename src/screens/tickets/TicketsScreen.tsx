@@ -10,11 +10,12 @@ import {
   Dimensions,
   LayoutAnimation,
   Platform,
+  Alert,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {AnimatedBackground} from '../../components/common';
-import {useTicketsStore, usePrizesStore} from '../../store';
+import {useTicketsStore, usePrizesStore, useCreditsStore} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {Ticket} from '../../types';
 import {getTotalPoolTickets} from '../../services/mock';
@@ -307,7 +308,8 @@ const WinningTicketCard: React.FC<{
 export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
   const [activeTab, setActiveTab] = useState<TabType>('active');
-  const {activeTickets, pastTickets, fetchTickets, getAdCooldownSeconds} = useTicketsStore();
+  const {activeTickets, pastTickets, fetchTickets, getAdCooldownSeconds, incrementAdsWatched} = useTicketsStore();
+  const {addCredits} = useCreditsStore();
   const {prizes} = usePrizesStore();
   const [refreshing, setRefreshing] = useState(false);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
@@ -419,12 +421,15 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
     );
   };
 
-  const handleWatchAd = () => {
+  const handleWatchAd = async () => {
+    if (cooldownSeconds > 0) return;
     setIsWatchingAd(true);
-    setTimeout(() => {
-      setIsWatchingAd(false);
-      navigation.navigate('Home');
-    }, 500);
+    // Simulate watching ad
+    await new Promise<void>(resolve => setTimeout(resolve, 2000));
+    addCredits(1, 'other');
+    incrementAdsWatched();
+    setIsWatchingAd(false);
+    Alert.alert('Credito Guadagnato!', 'Hai ricevuto 1 credito gratuito!');
   };
 
   const renderEmpty = () => (

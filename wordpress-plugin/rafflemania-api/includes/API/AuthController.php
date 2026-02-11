@@ -146,6 +146,76 @@ class AuthController extends WP_REST_Controller {
             ]
         ]);
 
+        // Google Sign-In
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/google', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'google_login'],
+                'permission_callback' => '__return_true',
+                'args' => [
+                    'id_token' => [
+                        'required' => true,
+                        'type' => 'string'
+                    ],
+                    'email' => [
+                        'required' => true,
+                        'type' => 'string',
+                        'format' => 'email'
+                    ],
+                    'name' => [
+                        'required' => false,
+                        'type' => 'string'
+                    ],
+                    'photo' => [
+                        'required' => false,
+                        'type' => 'string'
+                    ]
+                ]
+            ]
+        ]);
+
+        // Apple Sign-In
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/apple', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'apple_login'],
+                'permission_callback' => '__return_true',
+                'args' => [
+                    'identity_token' => [
+                        'required' => true,
+                        'type' => 'string'
+                    ],
+                    'apple_user_id' => [
+                        'required' => true,
+                        'type' => 'string'
+                    ],
+                    'email' => [
+                        'required' => false,
+                        'type' => 'string'
+                    ],
+                    'full_name' => [
+                        'required' => false,
+                        'type' => 'string'
+                    ]
+                ]
+            ]
+        ]);
+
+        // Apply referral code (for social login users)
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/apply-referral', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'apply_referral'],
+                'permission_callback' => [$this, 'check_auth'],
+                'args' => [
+                    'referral_code' => [
+                        'required' => true,
+                        'type' => 'string'
+                    ]
+                ]
+            ]
+        ]);
+
         // Web verification (browser fallback)
         register_rest_route($this->namespace, '/' . $this->rest_base . '/verify-email-web', [
             [
@@ -647,7 +717,7 @@ class AuthController extends WP_REST_Controller {
         ));
 
         // HTML response helper
-        $html_response = function($title, $message, $success = true) {
+        $html_response = function($title, $message, $success = true) use ($token) {
             $color = $success ? '#00B894' : '#E53935';
             $icon = $success ? '✓' : '✗';
             header('Content-Type: text/html; charset=utf-8');
@@ -672,7 +742,7 @@ class AuthController extends WP_REST_Controller {
                     <div class='icon'>{$icon}</div>
                     <h1>{$title}</h1>
                     <p>{$message}</p>
-                    <a href='rafflemania://' class='btn'>Apri RaffleMania</a>
+                    <a href='rafflemania://verify?token={$token}' class='btn'>Apri RaffleMania</a>
                 </div>
             </body>
             </html>";
@@ -818,6 +888,360 @@ class AuthController extends WP_REST_Controller {
         }
 
         return $result;
+    }
+
+    /**
+     * Ensure social login columns exist in users table
+     */
+    private function ensure_social_columns() {
+        global $wpdb;
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        $column = $wpdb->get_results("SHOW COLUMNS FROM {$table_users} LIKE 'social_provider'");
+        if (empty($column)) {
+            $wpdb->query("ALTER TABLE {$table_users} ADD COLUMN social_provider varchar(20) DEFAULT NULL AFTER verification_token_expires");
+            $wpdb->query("ALTER TABLE {$table_users} ADD COLUMN social_id varchar(255) DEFAULT NULL AFTER social_provider");
+            $wpdb->query("ALTER TABLE {$table_users} ADD INDEX idx_social (social_provider, social_id)");
+        }
+    }
+
+    /**
+     * Google Sign-In: verify token and create/login user
+     */
+    public function google_login(WP_REST_Request $request) {
+        global $wpdb;
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        $this->ensure_social_columns();
+
+        $id_token = $request->get_param('id_token');
+        $email = $request->get_param('email');
+        $name = $request->get_param('name');
+        $photo = $request->get_param('photo');
+
+        // Verify Google ID token
+        $google_payload = $this->verify_google_token($id_token);
+        if (is_wp_error($google_payload)) {
+            return $google_payload;
+        }
+
+        // Use email from verified token
+        $verified_email = $google_payload['email'] ?? $email;
+
+        // Check if user exists
+        $user = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_users} WHERE email = %s AND is_active = 1",
+            $verified_email
+        ));
+
+        $is_new_user = false;
+
+        if ($user) {
+            // Existing user - update avatar if provided
+            if ($photo && !$user->avatar_url) {
+                $wpdb->update($table_users, ['avatar_url' => $photo], ['id' => $user->id]);
+                $user->avatar_url = $photo;
+            }
+
+            // Mark email as verified (Google already verified it)
+            if (!$user->email_verified) {
+                $wpdb->update($table_users, ['email_verified' => 1], ['id' => $user->id]);
+                $user->email_verified = 1;
+            }
+        } else {
+            $is_new_user = true;
+            // New user - create account
+            $username = $name ? sanitize_user(str_replace(' ', '', strtolower($name))) : explode('@', $verified_email)[0];
+
+            // Ensure unique username
+            $base_username = $username;
+            $counter = 1;
+            while ($wpdb->get_var($wpdb->prepare("SELECT id FROM {$table_users} WHERE username = %s", $username))) {
+                $username = $base_username . $counter;
+                $counter++;
+            }
+
+            $referral_code = $this->generate_referral_code();
+
+            $wpdb->insert($table_users, [
+                'email' => $verified_email,
+                'username' => $username,
+                'password_hash' => password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT),
+                'referral_code' => $referral_code,
+                'credits' => 10,
+                'xp' => 0,
+                'level' => 1,
+                'current_streak' => 0,
+                'avatar_url' => $photo,
+                'avatar_color' => '#FF6B00',
+                'is_active' => 1,
+                'email_verified' => 1,
+                'social_provider' => 'google',
+                'social_id' => $google_payload['sub'] ?? null,
+            ]);
+
+            $user = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM {$table_users} WHERE id = %d",
+                $wpdb->insert_id
+            ));
+        }
+
+        $tokens = $this->generate_tokens($user->id);
+        $this->track_daily_stat('logins');
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => [
+                'user' => $this->format_user($user),
+                'tokens' => $tokens,
+                'isNewUser' => $is_new_user
+            ]
+        ]);
+    }
+
+    /**
+     * Apple Sign-In: verify token and create/login user
+     */
+    public function apple_login(WP_REST_Request $request) {
+        global $wpdb;
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        $this->ensure_social_columns();
+
+        $identity_token = $request->get_param('identity_token');
+        $apple_user_id = $request->get_param('apple_user_id');
+        $email = $request->get_param('email');
+        $full_name = $request->get_param('full_name');
+
+        // Verify Apple identity token
+        $apple_payload = $this->verify_apple_token($identity_token);
+        if (is_wp_error($apple_payload)) {
+            return $apple_payload;
+        }
+
+        // Use email from verified token, fallback to request
+        $verified_email = $apple_payload['email'] ?? $email;
+        $apple_sub = $apple_payload['sub'] ?? $apple_user_id;
+
+        // First try to find by social_id (Apple user ID persists across sign-ins)
+        $user = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_users} WHERE social_provider = 'apple' AND social_id = %s AND is_active = 1",
+            $apple_sub
+        ));
+
+        // If not found by social_id, try by email
+        if (!$user && $verified_email) {
+            $user = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM {$table_users} WHERE email = %s AND is_active = 1",
+                $verified_email
+            ));
+
+            // Link existing account to Apple
+            if ($user) {
+                $wpdb->update($table_users, [
+                    'social_provider' => 'apple',
+                    'social_id' => $apple_sub,
+                ], ['id' => $user->id]);
+            }
+        }
+
+        $is_new_user = false;
+
+        if ($user) {
+            // Mark email as verified
+            if (!$user->email_verified) {
+                $wpdb->update($table_users, ['email_verified' => 1], ['id' => $user->id]);
+                $user->email_verified = 1;
+            }
+        } else {
+            $is_new_user = true;
+            // New user - create account
+            $display_email = $verified_email ?: $apple_sub . '@privaterelay.appleid.com';
+            $username = $full_name ? sanitize_user(str_replace(' ', '', strtolower($full_name))) : 'apple_' . substr($apple_sub, 0, 8);
+
+            // Ensure unique username
+            $base_username = $username;
+            $counter = 1;
+            while ($wpdb->get_var($wpdb->prepare("SELECT id FROM {$table_users} WHERE username = %s", $username))) {
+                $username = $base_username . $counter;
+                $counter++;
+            }
+
+            $referral_code = $this->generate_referral_code();
+
+            $wpdb->insert($table_users, [
+                'email' => $display_email,
+                'username' => $username,
+                'password_hash' => password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT),
+                'referral_code' => $referral_code,
+                'credits' => 10,
+                'xp' => 0,
+                'level' => 1,
+                'current_streak' => 0,
+                'avatar_color' => '#FF6B00',
+                'is_active' => 1,
+                'email_verified' => 1,
+                'social_provider' => 'apple',
+                'social_id' => $apple_sub,
+            ]);
+
+            $user = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM {$table_users} WHERE id = %d",
+                $wpdb->insert_id
+            ));
+        }
+
+        $tokens = $this->generate_tokens($user->id);
+        $this->track_daily_stat('logins');
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => [
+                'user' => $this->format_user($user),
+                'tokens' => $tokens,
+                'isNewUser' => $is_new_user
+            ]
+        ]);
+    }
+
+    /**
+     * Verify Google ID token via Google's tokeninfo endpoint
+     */
+    private function verify_google_token($id_token) {
+        $response = wp_remote_get('https://oauth2.googleapis.com/tokeninfo?id_token=' . urlencode($id_token));
+
+        if (is_wp_error($response)) {
+            return new WP_Error('google_verify_failed', 'Impossibile verificare il token Google', ['status' => 401]);
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if (isset($body['error'])) {
+            return new WP_Error('google_token_invalid', 'Token Google non valido: ' . ($body['error_description'] ?? $body['error']), ['status' => 401]);
+        }
+
+        return $body;
+    }
+
+    /**
+     * Verify Apple identity token via Apple's public keys
+     */
+    private function verify_apple_token($identity_token) {
+        // Decode JWT without verification first to get claims
+        $parts = explode('.', $identity_token);
+        if (count($parts) !== 3) {
+            return new WP_Error('apple_token_invalid', 'Token Apple non valido', ['status' => 401]);
+        }
+
+        $payload = json_decode(base64_decode(str_pad(strtr($parts[1], '-_', '+/'), 4 - (strlen($parts[1]) % 4), '=', STR_PAD_RIGHT)), true);
+
+        if (!$payload) {
+            return new WP_Error('apple_token_decode_failed', 'Impossibile decodificare il token Apple', ['status' => 401]);
+        }
+
+        // Verify issuer and expiration
+        if (($payload['iss'] ?? '') !== 'https://appleid.apple.com') {
+            return new WP_Error('apple_token_issuer', 'Token Apple: issuer non valido', ['status' => 401]);
+        }
+
+        if (($payload['exp'] ?? 0) < time()) {
+            return new WP_Error('apple_token_expired', 'Token Apple scaduto', ['status' => 401]);
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Apply referral code after social login
+     */
+    public function apply_referral(WP_REST_Request $request) {
+        try {
+            global $wpdb;
+            $table_users = $wpdb->prefix . 'rafflemania_users';
+            $table_referrals = $wpdb->prefix . 'rafflemania_referrals';
+
+            $user_id = $request->get_attribute('user_id');
+            $referral_code = strtoupper(trim($request->get_param('referral_code') ?? ''));
+
+            if (!$user_id) {
+                return new WP_Error('not_authenticated', 'Utente non autenticato', ['status' => 401]);
+            }
+
+            if (empty($referral_code)) {
+                return new WP_Error('missing_code', 'Inserisci un codice referral', ['status' => 400]);
+            }
+
+            // Check if user exists and already has a referral
+            $user = $wpdb->get_row($wpdb->prepare(
+                "SELECT id, referral_code, referred_by FROM {$table_users} WHERE id = %d",
+                $user_id
+            ));
+
+            if (!$user) {
+                return new WP_Error('user_not_found', 'Utente non trovato', ['status' => 404]);
+            }
+
+            if (!empty($user->referred_by)) {
+                return new WP_Error('already_referred', 'Hai già utilizzato un codice referral', ['status' => 400]);
+            }
+
+            // Prevent using own code
+            if ($user->referral_code && strtoupper($user->referral_code) === $referral_code) {
+                return new WP_Error('self_referral', 'Non puoi usare il tuo stesso codice referral', ['status' => 400]);
+            }
+
+            // Check if already has a referral record
+            $existing = $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM {$table_referrals} WHERE referred_user_id = %d",
+                $user_id
+            ));
+
+            if ($existing > 0) {
+                return new WP_Error('already_referred', 'Hai già utilizzato un codice referral', ['status' => 400]);
+            }
+
+            // Find referrer by code
+            $referrer = $wpdb->get_row($wpdb->prepare(
+                "SELECT id, referral_code FROM {$table_users} WHERE UPPER(referral_code) = %s",
+                $referral_code
+            ));
+
+            if (!$referrer) {
+                return new WP_Error('invalid_referral', 'Codice referral non valido', ['status' => 400]);
+            }
+
+            if ((int)$referrer->id === (int)$user_id) {
+                return new WP_Error('self_referral', 'Non puoi usare il tuo stesso codice referral', ['status' => 400]);
+            }
+
+            // Apply referral - update user's referred_by field
+            $wpdb->update($table_users, ['referred_by' => $referrer->referral_code], ['id' => $user_id]);
+
+            // Record referral in referrals table
+            $wpdb->insert($table_referrals, [
+                'referrer_user_id' => (int)$referrer->id,
+                'referred_user_id' => (int)$user_id,
+                'referral_code' => $referrer->referral_code,
+                'bonus_given' => 0,
+                'days_active' => 1,
+                'last_active_date' => date('Y-m-d'),
+                'reward_claimed' => 0,
+                'referred_reward_claimed' => 0,
+            ]);
+
+            return new WP_REST_Response([
+                'success' => true,
+                'message' => 'Codice referral applicato con successo!'
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[RaffleMania] apply_referral error: ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine());
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Errore interno: ' . $e->getMessage(),
+                'debug_file' => $e->getFile(),
+                'debug_line' => $e->getLine(),
+            ], 500);
+        }
     }
 
     private function format_user($user) {

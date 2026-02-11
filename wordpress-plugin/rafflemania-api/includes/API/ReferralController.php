@@ -1,5 +1,4 @@
 <?php
-// Cache bust: 1769980015
 namespace RaffleMania\API;
 
 use WP_REST_Request;
@@ -21,7 +20,7 @@ class ReferralController {
             [
                 'methods' => 'GET',
                 'callback' => [$this, 'get_referrals'],
-                'permission_callback' => '__return_true',
+                'permission_callback' => [$this, 'check_auth'],
             ]
         ]);
 
@@ -30,7 +29,7 @@ class ReferralController {
             [
                 'methods' => 'GET',
                 'callback' => [$this, 'get_my_referrer'],
-                'permission_callback' => '__return_true',
+                'permission_callback' => [$this, 'check_auth'],
             ]
         ]);
 
@@ -39,7 +38,7 @@ class ReferralController {
             [
                 'methods' => 'POST',
                 'callback' => [$this, 'track_activity'],
-                'permission_callback' => '__return_true',
+                'permission_callback' => [$this, 'check_auth'],
             ]
         ]);
 
@@ -48,9 +47,72 @@ class ReferralController {
             [
                 'methods' => 'POST',
                 'callback' => [$this, 'claim_rewards'],
-                'permission_callback' => '__return_true',
+                'permission_callback' => [$this, 'check_auth'],
             ]
         ]);
+
+    }
+
+    /**
+     * Authenticate request and set _auth_user_id param
+     */
+    public function check_auth(WP_REST_Request $request) {
+        $auth_header = $request->get_header('Authorization');
+
+        if (!$auth_header || !preg_match('/Bearer\s+(.*)$/i', $auth_header, $matches)) {
+            return false;
+        }
+
+        $token = $matches[1];
+        $payload = $this->verify_jwt($token);
+
+        if (is_wp_error($payload)) {
+            return false;
+        }
+
+        // Store user_id in request params for later retrieval
+        $request->set_param('_auth_user_id', $payload['user_id']);
+        return true;
+    }
+
+    /**
+     * Verify JWT token
+     */
+    private function verify_jwt($token) {
+        $secret = get_option('rafflemania_jwt_secret');
+        if (!$secret) {
+            return new WP_Error('no_secret', 'JWT secret not configured', ['status' => 500]);
+        }
+
+        $parts = explode('.', $token);
+        if (count($parts) !== 3) {
+            return new WP_Error('invalid_token', 'Token non valido', ['status' => 401]);
+        }
+
+        list($base64_header, $base64_payload, $base64_signature) = $parts;
+
+        $signature = $this->base64url_decode($base64_signature);
+        $expected_signature = hash_hmac('sha256', $base64_header . '.' . $base64_payload, $secret, true);
+
+        if (!hash_equals($signature, $expected_signature)) {
+            return new WP_Error('invalid_signature', 'Firma non valida', ['status' => 401]);
+        }
+
+        $payload = json_decode($this->base64url_decode($base64_payload), true);
+
+        if ($payload['exp'] < time()) {
+            return new WP_Error('token_expired', 'Token scaduto', ['status' => 401]);
+        }
+
+        if (isset($payload['type']) && $payload['type'] !== 'access') {
+            return new WP_Error('invalid_token_type', 'Tipo di token non valido', ['status' => 401]);
+        }
+
+        return $payload;
+    }
+
+    private function base64url_decode($data) {
+        return base64_decode(strtr($data, '-_', '+/'));
     }
 
     /**

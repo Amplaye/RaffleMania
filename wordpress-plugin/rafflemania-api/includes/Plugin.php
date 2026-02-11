@@ -1,5 +1,5 @@
 <?php
-// Force opcache refresh: 2026-02-02-support-chat-v2
+// Force opcache refresh: 2026-02-09-referral-auth-fix-v3
 namespace RaffleMania;
 
 /**
@@ -28,6 +28,9 @@ class Plugin {
 
         // Add CORS headers
         add_action('rest_api_init', [$this, 'add_cors_headers'], 15);
+
+        // Inject JWT auth for referral endpoints (workaround for opcache)
+        add_filter('rest_request_before_callbacks', [$this, 'inject_referral_auth'], 10, 3);
 
         // Admin menu
         add_action('admin_menu', [$this, 'add_admin_menu']);
@@ -218,6 +221,69 @@ class Plugin {
 
     public function render_shipments_page() {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/shipments.php';
+    }
+
+    /**
+     * Inject JWT auth for referral endpoints
+     * This is needed because opcache may cache the old ReferralController
+     * that doesn't have its own check_auth method
+     */
+    public function inject_referral_auth($response, $handler, $request) {
+        // Only for referral endpoints
+        $route = $request->get_route();
+        if (strpos($route, '/rafflemania/v1/referrals') === false) {
+            return $response;
+        }
+
+        // Skip if already authenticated
+        if ($request->get_param('_auth_user_id')) {
+            return $response;
+        }
+
+        // Get auth header
+        $auth_header = $request->get_header('Authorization');
+        if (!$auth_header || !preg_match('/Bearer\s+(.*)$/i', $auth_header, $matches)) {
+            return $response;
+        }
+
+        $token = $matches[1];
+
+        // Verify JWT
+        $secret = get_option('rafflemania_jwt_secret');
+        if (!$secret) {
+            return $response;
+        }
+
+        $parts = explode('.', $token);
+        if (count($parts) !== 3) {
+            return $response;
+        }
+
+        list($base64_header, $base64_payload, $base64_signature) = $parts;
+
+        $signature = base64_decode(strtr($base64_signature, '-_', '+/'));
+        $expected_signature = hash_hmac('sha256', $base64_header . '.' . $base64_payload, $secret, true);
+
+        if (!hash_equals($signature, $expected_signature)) {
+            return $response;
+        }
+
+        $payload = json_decode(base64_decode(strtr($base64_payload, '-_', '+/')), true);
+
+        if (!$payload) {
+            return $response;
+        }
+        // Note: not checking expiry here since the callback itself handles auth errors
+        // and the token refresh mechanism should handle expired tokens
+
+        if (isset($payload['type']) && $payload['type'] !== 'access') {
+            return $response;
+        }
+
+        // Set user_id in request
+        $request->set_param('_auth_user_id', $payload['user_id']);
+
+        return $response;
     }
 
     public function check_scheduled_extractions() {

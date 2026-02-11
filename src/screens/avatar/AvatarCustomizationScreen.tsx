@@ -401,6 +401,14 @@ export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
 
         {activeTab === 'photo' && (
           <View style={styles.photoSection}>
+            {/* Content Policy Warning */}
+            <View style={[styles.disclaimerCard, {backgroundColor: colors.card, borderColor: COLORS.error + '40'}]}>
+              <Ionicons name="warning" size={20} color={COLORS.error} />
+              <Text style={[styles.disclaimerText, {color: colors.textMuted}]}>
+                Contenuti inappropriati, osceni o vietati ai minori di 18 anni verranno rimossi e l'account potrebbe essere sospeso.
+              </Text>
+            </View>
+
             {/* Current Photo Preview */}
             {customPhotoUri && (
               <View style={[styles.currentPhotoContainer, {backgroundColor: colors.card}]}>
@@ -457,7 +465,7 @@ export const AvatarCustomizationScreen: React.FC<Props> = ({navigation}) => {
         <View style={[styles.infoCard, {backgroundColor: colors.card}, neon.glowSubtle]}>
           <Ionicons name="information-circle" size={24} color={COLORS.primary} />
           <Text style={[styles.infoText, {color: colors.textMuted}]}>
-            Sali di livello per sbloccare nuovi avatar e cornici!
+            Personalizza il tuo profilo con avatar, cornici e foto!
           </Text>
         </View>
       </ScrollView>
@@ -651,6 +659,21 @@ const styles = StyleSheet.create({
   },
 
   // Info Card
+  disclaimerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  disclaimerText: {
+    flex: 1,
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.regular,
+    lineHeight: 16,
+  },
   infoCard: {
     flexDirection: 'row',
     alignItems: 'center',

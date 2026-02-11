@@ -82,6 +82,8 @@ class Activator {
             email_verified tinyint(1) DEFAULT 0,
             verification_token varchar(64) DEFAULT NULL,
             verification_token_expires datetime DEFAULT NULL,
+            social_provider varchar(20) DEFAULT NULL,
+            social_id varchar(255) DEFAULT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),

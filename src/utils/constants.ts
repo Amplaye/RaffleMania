@@ -234,7 +234,6 @@ export const SCREENS = {
   // Stack Screens
   TICKET_DETAIL: 'TicketDetail',
   PRIZE_DETAIL: 'PrizeDetail',
-  CREDITS: 'Credits',
   WINNERS: 'Winners',
   REFERRAL: 'Referral',
   SETTINGS: 'Settings',

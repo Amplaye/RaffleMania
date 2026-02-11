@@ -15,6 +15,8 @@ import {
   requestTickets,
   generateDrawId,
   getTotalAssignedForDraw,
+  getAllAssignedNumbersForDraw,
+  resetDrawRegistry,
 } from '../services/ticketNumberService';
 
 export interface ExtractionResult {
@@ -89,6 +91,9 @@ interface TicketsState {
   forceWinExtraction: (prizeId: string, prizeName: string, prizeImage: string) => ExtractionResult;
   checkDrawResult: (drawId: string, prizeId: string, prizeName: string, prizeImage: string) => Promise<ExtractionResult>;
   syncExtractionToBackend: (prizeId: string, winningNumber: number, userTicketId?: string) => Promise<void>;
+
+  // Pulizia biglietti per nuovo round
+  clearTicketsForPrize: (prizeId: string) => void;
 }
 
 export const useTicketsStore = create<TicketsState>()(
@@ -412,23 +417,27 @@ export const useTicketsStore = create<TicketsState>()(
     // Ottieni il drawId dai biglietti dell'utente (se esistono)
     const drawId = userTickets.length > 0 ? userTickets[0].drawId : undefined;
 
-    // Ottieni il totale dei biglietti assegnati per questo draw
-    // Usa il nuovo sistema che traccia numeri univoci
-    let totalPoolTickets: number;
+    // Ottieni tutti i numeri realmente assegnati per questo draw
+    // Il vincitore DEVE essere un numero che esiste nel pool
+    let allAssignedNumbers: number[] = [];
     if (drawId) {
-      totalPoolTickets = getTotalAssignedForDraw(drawId);
-      // Se non ci sono biglietti tracciati, usa il fallback
-      if (totalPoolTickets === 0) {
-        totalPoolTickets = getTotalPoolTickets(prizeId);
-      }
-    } else {
-      totalPoolTickets = getTotalPoolTickets(prizeId);
+      allAssignedNumbers = getAllAssignedNumbersForDraw(drawId);
     }
 
-    console.log(`[Extraction] Draw ${drawId}, total pool: ${totalPoolTickets}, user numbers:`, userNumbers);
+    // Fallback: se il registry locale è vuoto (es. utente autenticato con biglietti da API),
+    // costruisci il pool dai biglietti attivi dell'utente + un range simulato
+    if (allAssignedNumbers.length === 0) {
+      const totalPool = getTotalPoolTickets(prizeId);
+      // Genera numeri sequenziali 1..totalPool come pool di biglietti esistenti
+      for (let i = 1; i <= totalPool; i++) {
+        allAssignedNumbers.push(i);
+      }
+    }
 
-    // Estrai un numero casuale dal pentolone (1 a totalPoolTickets)
-    const winningNumber = Math.floor(Math.random() * totalPoolTickets) + 1;
+    console.log(`[Extraction] Draw ${drawId}, pool size: ${allAssignedNumbers.length}, user numbers:`, userNumbers);
+
+    // Seleziona il vincitore SOLO tra i numeri realmente esistenti
+    const winningNumber = allAssignedNumbers[Math.floor(Math.random() * allAssignedNumbers.length)];
 
     if (userNumbers.length === 0) {
       // L'utente non ha biglietti, perde automaticamente ma mostra comunque il numero vincente
@@ -623,6 +632,23 @@ export const useTicketsStore = create<TicketsState>()(
     } catch (error) {
       console.log('Stats tracking failed (non-critical):', getErrorMessage(error));
     }
+  },
+
+  clearTicketsForPrize: (prizeId: string) => {
+    const {activeTickets} = get();
+    // Ottieni il drawId prima di cancellare per resettare anche il registry locale
+    const prizeTickets = activeTickets.filter(t => t.prizeId === prizeId);
+    if (prizeTickets.length > 0) {
+      const drawId = prizeTickets[0].drawId;
+      if (drawId) {
+        resetDrawRegistry(drawId);
+      }
+    }
+    // Rimuovi tutti i biglietti attivi per questo premio
+    set({
+      activeTickets: activeTickets.filter(t => t.prizeId !== prizeId),
+    });
+    console.log(`[TicketsStore] Cleared all active tickets for prize ${prizeId}`);
   },
 }),
     {

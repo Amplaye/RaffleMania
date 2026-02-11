@@ -316,6 +316,7 @@
 					"-ObjC",
 					"-lc++",
 				);
+				CODE_SIGN_ENTITLEMENTS = RaffleManiaApp/RaffleManiaApp.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = RaffleManiaApp;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -344,6 +345,7 @@
 					"-ObjC",
 					"-lc++",
 				);
+				CODE_SIGN_ENTITLEMENTS = RaffleManiaApp/RaffleManiaApp.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = RaffleManiaApp;
 				SWIFT_VERSION = 5.0;

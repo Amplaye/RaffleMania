@@ -210,6 +210,14 @@ export const getTotalAssignedForDraw = (drawId: string): number => {
 };
 
 /**
+ * Ottiene tutti i numeri assegnati per un draw (per selezionare il vincitore)
+ */
+export const getAllAssignedNumbersForDraw = (drawId: string): number[] => {
+  const registry = drawRegistries.get(drawId);
+  return registry ? Array.from(registry.assignedNumbers) : [];
+};
+
+/**
  * Ottiene il prossimo numero disponibile per un draw (senza assegnarlo)
  */
 export const getNextAvailableNumber = (drawId: string, prizeId: string): number => {
@@ -257,6 +265,7 @@ export default {
   generateDrawId,
   isNumberAssigned,
   getTotalAssignedForDraw,
+  getAllAssignedNumbersForDraw,
   getNextAvailableNumber,
   resetDrawRegistry,
   resetAllRegistries,

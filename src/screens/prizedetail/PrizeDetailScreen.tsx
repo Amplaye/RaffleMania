@@ -656,7 +656,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
         {/* Buy Credits Button */}
         <TouchableOpacity
           style={[styles.buyCreditsButton, {backgroundColor: colors.card, borderColor: COLORS.primary}]}
-          onPress={() => navigation.navigate('Credits')}
+          onPress={() => navigation.navigate('MainTabs', {screen: 'Shop'})}
           activeOpacity={0.8}>
           <Ionicons name="cart" size={20} color={COLORS.primary} />
           <Text style={styles.buyCreditsText}>COMPRA CREDITI</Text>

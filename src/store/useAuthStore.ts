@@ -9,17 +9,19 @@ import {
   isErrorWithCode,
   statusCodes,
 } from '@react-native-google-signin/google-signin';
+import {appleAuth} from '@invertase/react-native-apple-authentication';
 import {OneSignal} from 'react-native-onesignal';
 import {User} from '../types';
 import {API_CONFIG} from '../utils/constants';
+import * as Keychain from 'react-native-keychain';
 import apiClient, {tokenManager, getErrorMessage} from '../services/apiClient';
 
 // Configure Google Sign-In
 GoogleSignin.configure({
   // Web client ID from Google Cloud Console
-  webClientId: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com',
+  webClientId: '1084147654031-2qrgko6bfll0vuetam0p4hu9h0e5040h.apps.googleusercontent.com',
   // iOS client ID (required for iOS)
-  iosClientId: 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com',
+  iosClientId: '1084147654031-dt7n18hdi4i28dvksnk6drrtmhr27qhe.apps.googleusercontent.com',
   offlineAccess: true,
 });
 
@@ -33,8 +35,8 @@ interface AuthState {
   // Actions
   login: (email: string, password: string) => Promise<void>;
   loginAsGuest: () => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
-  loginWithApple: () => Promise<void>;
+  loginWithGoogle: () => Promise<{isNewUser: boolean}>;
+  loginWithApple: () => Promise<{isNewUser: boolean}>;
   register: (email: string, password: string, username: string, referralCode?: string) => Promise<{requiresVerification: boolean}>;
   logout: () => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
@@ -168,6 +170,8 @@ export const useAuthStore = create<AuthState>()(
 
     try {
       await GoogleSignin.hasPlayServices();
+      // Sign out first to force account picker
+      await GoogleSignin.signOut().catch(() => {});
       const response = await GoogleSignin.signIn();
 
       if (isSuccessResponse(response)) {
@@ -197,7 +201,11 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
-          return;
+
+          // Save credentials for login form
+          await AsyncStorage.setItem('@rafflemania_remember_me', 'true');
+          await AsyncStorage.setItem('@rafflemania_saved_email', googleUser.email);
+          return {isNewUser: true};
         }
 
         // Send Google token to backend for verification/registration
@@ -208,8 +216,12 @@ export const useAuthStore = create<AuthState>()(
           photo: googleUser.photo,
         });
 
-        const {user, tokens} = apiResponse.data.data;
+        const {user, tokens, isNewUser} = apiResponse.data.data;
         await tokenManager.setTokens(tokens.access_token, tokens.refresh_token);
+
+        // Save credentials for login form
+        await AsyncStorage.setItem('@rafflemania_remember_me', 'true');
+        await AsyncStorage.setItem('@rafflemania_saved_email', user.email);
 
         // Link user to OneSignal for targeted push notifications
         OneSignal.login(String(user.id));
@@ -220,12 +232,19 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
           isLoading: false,
         });
+        return {isNewUser: !!isNewUser};
       } else {
         set({isLoading: false});
         throw new Error('Login con Google annullato');
       }
     } catch (error: any) {
       set({isLoading: false});
+      console.log('[GoogleSignIn] Error:', JSON.stringify({
+        code: error.code,
+        message: error.message,
+        name: error.name,
+        full: String(error),
+      }));
 
       if (isErrorWithCode(error)) {
         switch (error.code) {
@@ -233,8 +252,10 @@ export const useAuthStore = create<AuthState>()(
             throw new Error('Login gia in corso');
           case statusCodes.PLAY_SERVICES_NOT_AVAILABLE:
             throw new Error('Google Play Services non disponibile');
+          case statusCodes.SIGN_IN_CANCELLED:
+            throw new Error('Login con Google annullato');
           default:
-            throw new Error('Errore durante il login con Google');
+            throw new Error('Errore Google (code: ' + error.code + '): ' + error.message);
         }
       }
       throw new Error(getErrorMessage(error));
@@ -250,33 +271,88 @@ export const useAuthStore = create<AuthState>()(
         throw new Error('Apple Sign-In disponibile solo su iOS');
       }
 
-      // TODO: Implement Apple Sign-In with @invertase/react-native-apple-authentication
-      await new Promise<void>(resolve => setTimeout(() => resolve(), 1500));
+      // Perform Apple Sign-In request
+      const appleAuthRequestResponse = await appleAuth.performRequest({
+        requestedOperation: appleAuth.Operation.LOGIN,
+        requestedScopes: [appleAuth.Scope.EMAIL, appleAuth.Scope.FULL_NAME],
+      });
 
-      const mockUser: User = {
-        id: `apple_${Date.now()}`,
-        email: 'apple.user@privaterelay.appleid.com',
-        displayName: 'Utente Apple',
-        avatarColor: '#FF6B00',
-        credits: 0,
-        xp: 0,
-        level: 1,
-        totalTickets: 0,
-        watchedAdsCount: 0,
-        winsCount: 0,
-        currentStreak: 0,
-        referralCode: 'APPLE' + Date.now().toString(36).toUpperCase(),
-        createdAt: new Date().toISOString(),
-      };
+      // Get credential state
+      const credentialState = await appleAuth.getCredentialStateForUser(appleAuthRequestResponse.user);
+
+      if (credentialState !== appleAuth.State.AUTHORIZED) {
+        set({isLoading: false});
+        throw new Error('Apple Sign-In non autorizzato');
+      }
+
+      const {identityToken, email, fullName, user: appleUserId} = appleAuthRequestResponse;
+
+      if (!identityToken) {
+        set({isLoading: false});
+        throw new Error('Token Apple non ricevuto');
+      }
+
+      if (API_CONFIG.USE_MOCK_DATA) {
+        const displayName = fullName
+          ? [fullName.givenName, fullName.familyName].filter(Boolean).join(' ')
+          : 'Utente Apple';
+        const mockUser: User = {
+          id: `apple_${appleUserId}`,
+          email: email || 'apple.user@privaterelay.appleid.com',
+          displayName: displayName,
+          avatarColor: '#FF6B00',
+          credits: 0,
+          xp: 0,
+          level: 1,
+          totalTickets: 0,
+          watchedAdsCount: 0,
+          winsCount: 0,
+          currentStreak: 0,
+          referralCode: 'APPLE' + Date.now().toString(36).toUpperCase(),
+          createdAt: new Date().toISOString(),
+        };
+        set({
+          user: mockUser,
+          token: identityToken,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        await AsyncStorage.setItem('@rafflemania_remember_me', 'true');
+        await AsyncStorage.setItem('@rafflemania_saved_email', email || '');
+        return {isNewUser: true};
+      }
+
+      // Send Apple token to backend for verification/registration
+      const apiResponse = await apiClient.post('/auth/apple', {
+        identity_token: identityToken,
+        apple_user_id: appleUserId,
+        email: email,
+        full_name: fullName
+          ? [fullName.givenName, fullName.familyName].filter(Boolean).join(' ')
+          : null,
+      });
+
+      const {user, tokens, isNewUser} = apiResponse.data.data;
+      await tokenManager.setTokens(tokens.access_token, tokens.refresh_token);
+
+      await AsyncStorage.setItem('@rafflemania_remember_me', 'true');
+      await AsyncStorage.setItem('@rafflemania_saved_email', user.email);
+
+      // Link user to OneSignal for targeted push notifications
+      OneSignal.login(String(user.id));
 
       set({
-        user: mockUser,
-        token: 'apple_token_' + Date.now(),
+        user: mapApiUserToUser(user),
+        token: tokens.access_token,
         isAuthenticated: true,
         isLoading: false,
       });
+      return {isNewUser: !!isNewUser};
     } catch (error: any) {
       set({isLoading: false});
+      if (error.code === appleAuth.Error.CANCELED) {
+        throw new Error('Login con Apple annullato');
+      }
       throw error;
     }
   },
@@ -337,6 +413,10 @@ export const useAuthStore = create<AuthState>()(
       }
       await tokenManager.clearTokens();
       await GoogleSignin.signOut().catch(() => {});
+      // Clear saved login credentials
+      await AsyncStorage.removeItem('@rafflemania_remember_me').catch(() => {});
+      await AsyncStorage.removeItem('@rafflemania_saved_email').catch(() => {});
+      await Keychain.resetGenericPassword({service: 'rafflemania_saved_password'}).catch(() => {});
       // Unlink user from OneSignal
       OneSignal.logout();
     } catch (error) {
@@ -385,7 +465,10 @@ export const useAuthStore = create<AuthState>()(
           'rafflemania-referral-storage',
           'pending_referral_code',
           'pending_referral_username',
+          '@rafflemania_remember_me',
+          '@rafflemania_saved_email',
         ]);
+        await Keychain.resetGenericPassword({service: 'rafflemania_saved_password'}).catch(() => {});
         await GoogleSignin.signOut().catch(() => {});
         OneSignal.logout();
 

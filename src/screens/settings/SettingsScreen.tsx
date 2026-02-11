@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useRef} from 'react';
 import {
   View,
   Text,
@@ -55,7 +55,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
   const isGuestUser = token?.startsWith('guest_token_');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [password, setPassword] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const passwordRef = useRef<TextInput>(null);
 
   const toggleSettings: SettingToggle[] = [
     {
@@ -216,8 +218,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
           text: 'Continua',
           style: 'destructive',
           onPress: () => {
-            // Show password modal
             setPassword('');
+            setShowDeletePassword(false);
             setShowPasswordModal(true);
           },
         },
@@ -338,20 +340,36 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
               Inserisci la tua password per confermare l'eliminazione definitiva dell'account
             </Text>
 
-            <TextInput
-              style={[styles.passwordInput, {
-                backgroundColor: colors.background,
-                color: colors.text,
-                borderColor: colors.border,
-              }]}
-              placeholder="Password"
-              placeholderTextColor={colors.textMuted}
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-              autoCapitalize="none"
-              editable={!deletingAccount}
-            />
+            <View style={[styles.passwordInputContainer, {
+              backgroundColor: colors.background,
+              borderColor: colors.border,
+            }]}>
+              <TextInput
+                ref={passwordRef}
+                style={[styles.passwordInputField, {color: colors.text}]}
+                placeholder="Password"
+                placeholderTextColor={colors.textMuted}
+                secureTextEntry={!showDeletePassword}
+                value={password}
+                onChangeText={setPassword}
+                onChange={(e) => setPassword(e.nativeEvent.text)}
+                autoCapitalize="none"
+                autoComplete="off"
+                importantForAutofill="no"
+                textContentType="none"
+                editable={!deletingAccount}
+              />
+              <TouchableOpacity
+                onPress={() => setShowDeletePassword(!showDeletePassword)}
+                style={styles.eyeButton}
+                hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                <Ionicons
+                  name={showDeletePassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color={colors.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
@@ -553,6 +571,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: SPACING.lg,
     lineHeight: 20,
+  },
+  passwordInputContainer: {
+    width: '100%',
+    height: 50,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  passwordInputField: {
+    flex: 1,
+    height: '100%',
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.regular,
+  },
+  eyeButton: {
+    padding: 8,
+    marginLeft: 4,
   },
   passwordInput: {
     width: '100%',

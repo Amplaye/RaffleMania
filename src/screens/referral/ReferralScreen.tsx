@@ -11,11 +11,13 @@ import {
   Clipboard,
   RefreshControl,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer} from '../../components/common';
 import {useAuthStore, useReferralStore, REFERRAL_REWARDS} from '../../store';
+import apiClient from '../../services/apiClient';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -197,17 +199,22 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
     checkAndClaimRewards,
     updateDailyActivity,
     fetchReferrals,
-    simulateNewReferral,
-    simulateDaysActive,
   } = useReferralStore();
 
   const referralCode = user?.referralCode || 'RAFFLE2024';
+  const [friendCode, setFriendCode] = useState('');
+  const [applyingCode, setApplyingCode] = useState(false);
 
   // Fetch referrals, update daily activity and check for rewards on mount
   useEffect(() => {
     const initReferrals = async () => {
       // First fetch from API to get latest data
-      await fetchReferrals();
+      const apiAvailable = await fetchReferrals();
+
+      // Skip further API calls if referral endpoints returned auth error
+      if (!apiAvailable) {
+        return;
+      }
 
       // Then update activity
       await updateDailyActivity();
@@ -249,6 +256,50 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
   const handleCopyCode = () => {
     Clipboard.setString(referralCode);
     Alert.alert('Copiato!', 'Il codice e stato copiato negli appunti');
+  };
+
+  const handleApplyFriendCode = async () => {
+    const code = friendCode.trim();
+    if (!code) {
+      Alert.alert('Errore', 'Inserisci un codice referral');
+      return;
+    }
+
+    if (code.toUpperCase() === referralCode.toUpperCase()) {
+      Alert.alert('Errore', 'Non puoi usare il tuo stesso codice referral');
+      return;
+    }
+
+    if (!user?.id || !user?.email) {
+      Alert.alert('Errore', 'Devi essere autenticato per applicare un codice referral');
+      return;
+    }
+
+    setApplyingCode(true);
+    try {
+      const response = await apiClient.post('/auth/apply-referral', {
+        referral_code: code,
+        user_id: user.id,
+        email: user.email,
+      });
+      if (response.data?.success) {
+        Alert.alert(
+          'Codice Applicato!',
+          `Codice referral "${code}" applicato con successo! Resta attivo per ${REFERRAL_REWARDS.DAYS_REQUIRED} giorni per ricevere ${REFERRAL_REWARDS.REFERRED_CREDITS} crediti bonus.`,
+          [{text: 'Fantastico!'}],
+        );
+        setFriendCode('');
+        // Refresh referral data to show the referrer (ignore errors)
+        try { await fetchReferrals(); } catch (_) {}
+      } else {
+        Alert.alert('Errore', response.data?.message || 'Errore durante l\'applicazione del codice');
+      }
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Codice non valido o già utilizzato';
+      Alert.alert('Errore', msg);
+    } finally {
+      setApplyingCode(false);
+    }
   };
 
   const steps = [
@@ -323,6 +374,45 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
             </View>
           </LinearGradient>
         </View>
+
+        {/* Apply Friend's Referral Code - only if user doesn't have a referrer already */}
+        {!referrer && (
+          <View style={[styles.applyCodeSection, {backgroundColor: colors.card}]}>
+            <View style={styles.applyCodeHeader}>
+              <Ionicons name="ticket-outline" size={22} color={COLORS.primary} />
+              <Text style={[styles.applyCodeTitle, {color: colors.text}]}>Hai un codice referral?</Text>
+            </View>
+            <Text style={[styles.applyCodeSubtitle, {color: colors.textMuted}]}>
+              Inserisci il codice di un amico per ottenere {REFERRAL_REWARDS.REFERRED_CREDITS} crediti bonus
+            </Text>
+            <View style={styles.applyCodeRow}>
+              <TextInput
+                style={[styles.applyCodeInput, {
+                  backgroundColor: isDark ? '#2A2A2A' : '#F5F5F5',
+                  color: colors.text,
+                }]}
+                placeholder="Inserisci codice"
+                placeholderTextColor={colors.textMuted}
+                value={friendCode}
+                onChangeText={setFriendCode}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                editable={!applyingCode}
+              />
+              <TouchableOpacity
+                style={[styles.applyCodeButton, applyingCode && {opacity: 0.6}]}
+                onPress={handleApplyFriendCode}
+                disabled={applyingCode}
+                activeOpacity={0.8}>
+                {applyingCode ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.applyCodeButtonText}>Applica</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* My Progress (if I was referred) */}
         {referrer && (
@@ -420,42 +510,6 @@ export const ReferralScreen: React.FC<ReferralScreenProps> = ({navigation}) => {
             <Text style={[styles.emptyStateText, {color: colors.textMuted}]}>
               Condividi il tuo codice e inizia a guadagnare crediti!
             </Text>
-          </View>
-        )}
-
-        {/* Debug/Test Section - only in development */}
-        {__DEV__ && (
-          <View style={[styles.debugSection, {backgroundColor: colors.card}]}>
-            <Text style={[styles.debugTitle, {color: colors.textMuted}]}>Test Referral</Text>
-            <View style={styles.debugButtons}>
-              <TouchableOpacity
-                style={[styles.debugButton, {backgroundColor: `${COLORS.primary}20`}]}
-                onPress={() => {
-                  const names = ['Marco', 'Giulia', 'Luca', 'Anna', 'Pietro', 'Sofia'];
-                  const randomName = names[Math.floor(Math.random() * names.length)];
-                  simulateNewReferral(randomName);
-                  Alert.alert('Test', `Simulato nuovo referral: ${randomName}`);
-                }}>
-                <Ionicons name="person-add" size={18} color={COLORS.primary} />
-                <Text style={[styles.debugButtonText, {color: COLORS.primary}]}>+ Nuovo Amico</Text>
-              </TouchableOpacity>
-              {referredUsers.length > 0 && (
-                <TouchableOpacity
-                  style={[styles.debugButton, {backgroundColor: `${COLORS.primary}20`}]}
-                  onPress={() => {
-                    const pendingUser = referredUsers.find(u => !u.isCompleted);
-                    if (pendingUser) {
-                      simulateDaysActive(pendingUser.id, REFERRAL_REWARDS.DAYS_REQUIRED);
-                      Alert.alert('Test', `${pendingUser.displayName} ha completato i 7 giorni!`);
-                    } else {
-                      Alert.alert('Test', 'Tutti gli amici hanno gia completato');
-                    }
-                  }}>
-                  <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} />
-                  <Text style={[styles.debugButtonText, {color: COLORS.primary}]}>Completa Amico</Text>
-                </TouchableOpacity>
-              )}
-            </View>
           </View>
         )}
 
@@ -862,39 +916,61 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.regular,
     textAlign: 'center',
   },
-  // Debug Section
-  debugSection: {
-    marginTop: SPACING.lg,
-    padding: SPACING.md,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderStyle: 'dashed',
+  // Apply Friend Code Section
+  applyCodeSection: {
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  debugTitle: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.medium,
-    textAlign: 'center',
-    marginBottom: SPACING.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  debugButtons: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    justifyContent: 'center',
-  },
-  debugButton: {
+  applyCodeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: RADIUS.md,
+    gap: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
-  debugButtonText: {
+  applyCodeTitle: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  applyCodeSubtitle: {
     fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.medium,
+    fontFamily: FONT_FAMILY.regular,
+    marginBottom: SPACING.md,
+  },
+  applyCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  applyCodeInput: {
+    flex: 1,
+    height: 48,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.semibold,
+    letterSpacing: 2,
+  },
+  applyCodeButton: {
+    height: 48,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyCodeButtonText: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: '#FFFFFF',
   },
 });
 
