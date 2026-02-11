@@ -520,6 +520,7 @@ export const useAuthStore = create<AuthState>()(
           user: mapApiUserToUser(response.data.data.user),
           token,
           isAuthenticated: true,
+          sessionActive: true,
         });
       }
     } catch {

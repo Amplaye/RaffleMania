@@ -369,7 +369,7 @@ class AuthController extends WP_REST_Controller {
         global $wpdb;
         $table_users = $wpdb->prefix . 'rafflemania_users';
 
-        $email = $request->get_param('email');
+        $email = trim($request->get_param('email'));
         $password = $request->get_param('password');
 
         // Find user
@@ -380,6 +380,12 @@ class AuthController extends WP_REST_Controller {
 
         if (!$user) {
             return new WP_Error('invalid_credentials', 'Credenziali non valide', ['status' => 401]);
+        }
+
+        // If user registered via social login and never set a password, suggest using that method
+        if (!empty($user->social_provider) && !password_verify($password, $user->password_hash)) {
+            $provider_name = ucfirst($user->social_provider);
+            return new WP_Error('social_account', "Questo account è stato creato con {$provider_name}. Usa il pulsante {$provider_name} per accedere, oppure usa 'Password dimenticata' per impostare una password.", ['status' => 401]);
         }
 
         // Verify password
