@@ -200,7 +200,7 @@ const MainStack: React.FC = () => {
 };
 
 export const AppNavigator: React.FC = () => {
-  const {isAuthenticated} = useAuthStore();
+  const {isAuthenticated, sessionActive} = useAuthStore();
   const {
     prizes,
     markPrizeAsExtracting,
@@ -350,21 +350,21 @@ export const AppNavigator: React.FC = () => {
   // Check for missed extractions on app start (after auth)
   const missedChecked = useRef(false);
   useEffect(() => {
-    if (isAuthenticated && !missedChecked.current) {
+    if (isAuthenticated && sessionActive && !missedChecked.current) {
       missedChecked.current = true;
       // Delay to let the app settle before checking
       setTimeout(() => {
         fetchMissedExtractions();
       }, 2000);
     }
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !sessionActive) {
       missedChecked.current = false;
     }
-  }, [isAuthenticated, fetchMissedExtractions]);
+  }, [isAuthenticated, sessionActive, fetchMissedExtractions]);
 
   // Monitor all prizes with active timers
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !sessionActive) return;
 
     const interval = setInterval(() => {
       if (!isInitialized.current) return;
@@ -410,7 +410,7 @@ export const AppNavigator: React.FC = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [prizes, isAuthenticated, triggerExtraction]);
+  }, [prizes, isAuthenticated, sessionActive, triggerExtraction]);
 
   // Determine urgency intensity based on remaining time
   const getUrgencyIntensity = (): 'low' | 'medium' | 'high' => {
@@ -424,11 +424,11 @@ export const AppNavigator: React.FC = () => {
   return (
     <View style={styles.appContainer}>
       <NavigationContainer ref={navigationRef} linking={linking} onReady={processPendingNavigation}>
-        {isAuthenticated ? <MainStack /> : <AuthNavigator />}
+        {isAuthenticated && sessionActive ? <MainStack /> : <AuthNavigator />}
       </NavigationContainer>
 
       {/* Global Urgency Border Effect - visible across ALL screens */}
-      {isAuthenticated && (
+      {isAuthenticated && sessionActive && (
         <UrgencyBorderEffect
           isActive={isLastMinute}
           intensity={getUrgencyIntensity()}
@@ -436,14 +436,14 @@ export const AppNavigator: React.FC = () => {
       )}
 
       {/* Global Extraction Effect - visible across ALL screens */}
-      {isAuthenticated && showExtractionEffect && (
+      {isAuthenticated && sessionActive && showExtractionEffect && (
         <ExtractionStartEffect
           visible={showExtractionEffect}
         />
       )}
 
       {/* Global Extraction Result Modal - visible across ALL screens */}
-      {isAuthenticated && (
+      {isAuthenticated && sessionActive && (
         <ExtractionResultModal
           visible={showResultModal}
           isWinner={extractionResult?.isWinner || false}
@@ -456,7 +456,7 @@ export const AppNavigator: React.FC = () => {
       )}
 
       {/* Missed Extraction Modal - shown when user was offline during extraction */}
-      {isAuthenticated && (
+      {isAuthenticated && sessionActive && (
         <MissedExtractionModal
           visible={showMissedModal}
           extraction={missedExtractions[currentMissedIndex] || null}

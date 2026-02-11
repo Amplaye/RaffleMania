@@ -29,6 +29,7 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  sessionActive: boolean; // true only when user explicitly logs in this session (not persisted)
   isLoading: boolean;
   pendingVerificationEmail: string | null;
 
@@ -48,6 +49,7 @@ interface AuthState {
   verifyEmail: (token: string) => Promise<void>;
   resendVerificationEmail: (email: string) => Promise<void>;
   clearPendingVerification: () => void;
+  activateSession: () => void;
 }
 
 // Helper to map API user to app User type
@@ -78,6 +80,7 @@ export const useAuthStore = create<AuthState>()(
   user: null,
   token: null,
   isAuthenticated: false,
+  sessionActive: false,
   isLoading: false,
   pendingVerificationEmail: null,
 
@@ -106,6 +109,7 @@ export const useAuthStore = create<AuthState>()(
         user: guestUser,
         token: 'guest_token_' + Date.now(),
         isAuthenticated: true,
+        sessionActive: true,
         isLoading: false,
       });
     } catch {
@@ -140,6 +144,7 @@ export const useAuthStore = create<AuthState>()(
           user: mockUser,
           token: 'mock_token',
           isAuthenticated: true,
+          sessionActive: true,
           isLoading: false,
         });
         return;
@@ -157,6 +162,7 @@ export const useAuthStore = create<AuthState>()(
         user: mapApiUserToUser(user),
         token: tokens.access_token,
         isAuthenticated: true,
+        sessionActive: true,
         isLoading: false,
       });
     } catch (error) {
@@ -199,6 +205,7 @@ export const useAuthStore = create<AuthState>()(
             user: mockUser,
             token: data.idToken || 'google_token',
             isAuthenticated: true,
+            sessionActive: true,
             isLoading: false,
           });
 
@@ -230,6 +237,7 @@ export const useAuthStore = create<AuthState>()(
           user: mapApiUserToUser(user),
           token: tokens.access_token,
           isAuthenticated: true,
+          sessionActive: true,
           isLoading: false,
         });
         return {isNewUser: !!isNewUser};
@@ -315,6 +323,7 @@ export const useAuthStore = create<AuthState>()(
           user: mockUser,
           token: identityToken,
           isAuthenticated: true,
+          sessionActive: true,
           isLoading: false,
         });
         await AsyncStorage.setItem('@rafflemania_remember_me', 'true');
@@ -345,6 +354,7 @@ export const useAuthStore = create<AuthState>()(
         user: mapApiUserToUser(user),
         token: tokens.access_token,
         isAuthenticated: true,
+        sessionActive: true,
         isLoading: false,
       });
       return {isNewUser: !!isNewUser};
@@ -425,6 +435,7 @@ export const useAuthStore = create<AuthState>()(
         user: null,
         token: null,
         isAuthenticated: false,
+        sessionActive: false,
       });
     }
   },
@@ -476,6 +487,7 @@ export const useAuthStore = create<AuthState>()(
           user: null,
           token: null,
           isAuthenticated: false,
+          sessionActive: false,
           isLoading: false,
         });
       }
@@ -622,6 +634,7 @@ export const useAuthStore = create<AuthState>()(
           user: newUser,
           token: 'verified_token_' + Date.now(),
           isAuthenticated: true,
+          sessionActive: true,
           pendingVerificationEmail: null,
           isLoading: false,
         });
@@ -644,6 +657,7 @@ export const useAuthStore = create<AuthState>()(
           user: mapApiUserToUser(user),
           token: tokens?.access_token || get().token,
           isAuthenticated: true,
+          sessionActive: true,
           pendingVerificationEmail: null,
           isLoading: false,
         });
@@ -674,6 +688,10 @@ export const useAuthStore = create<AuthState>()(
 
   clearPendingVerification: () => {
     set({pendingVerificationEmail: null});
+  },
+
+  activateSession: () => {
+    set({sessionActive: true});
   },
 }),
     {

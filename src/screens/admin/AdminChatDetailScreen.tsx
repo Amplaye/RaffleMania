@@ -189,7 +189,7 @@ export const AdminChatDetailScreen: React.FC<Props> = ({navigation, route}) => {
   return (
     <KeyboardAvoidingView
       style={[styles.container, {backgroundColor: colors.background}]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
       {/* Header */}
       <View

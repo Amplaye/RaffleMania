@@ -41,7 +41,8 @@ class NotificationHelper {
 
         $payload = [
             'app_id' => $app_id,
-            'include_external_user_ids' => [(string)$user_id],
+            'include_aliases' => ['external_id' => [(string)$user_id]],
+            'target_channel' => 'push',
             'headings' => ['en' => $title, 'it' => $title],
             'contents' => ['en' => $message, 'it' => $message],
             'data' => $data
@@ -63,7 +64,8 @@ class NotificationHelper {
 
         $payload = [
             'app_id' => $app_id,
-            'include_external_user_ids' => array_map('strval', $user_ids),
+            'include_aliases' => ['external_id' => array_map('strval', $user_ids)],
+            'target_channel' => 'push',
             'headings' => ['en' => $title, 'it' => $title],
             'contents' => ['en' => $message, 'it' => $message],
             'data' => $data
@@ -126,10 +128,10 @@ class NotificationHelper {
      * Send HTTP request to OneSignal API
      */
     private static function send_request($payload, $api_key) {
-        $response = wp_remote_post('https://onesignal.com/api/v1/notifications', [
+        $response = wp_remote_post('https://api.onesignal.com/notifications', [
             'headers' => [
                 'Content-Type' => 'application/json',
-                'Authorization' => 'Basic ' . $api_key
+                'Authorization' => 'Key ' . $api_key
             ],
             'body' => json_encode($payload),
             'timeout' => 30

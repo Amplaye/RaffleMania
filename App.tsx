@@ -38,13 +38,29 @@ const App: React.FC = () => {
       }
     });
 
+    // Sync notification toggle state with actual OneSignal subscription
+    const syncPushState = () => {
+      const hasPermission = OneSignal.Notifications.hasPermission();
+      if (hasPermission) {
+        OneSignal.User.pushSubscription.optIn();
+      }
+      // Sync the settings store toggle with actual permission state
+      const {useSettingsStore} = require('./src/store/useSettingsStore');
+      const currentPrefs = useSettingsStore.getState().notifications;
+      if (currentPrefs.pushEnabled !== hasPermission) {
+        useSettingsStore.setState({
+          notifications: {...currentPrefs, pushEnabled: hasPermission},
+        });
+      }
+    };
+
+    // Sync on app start (small delay for OneSignal to fully initialize)
+    setTimeout(syncPushState, 2000);
+
     // Re-check permission when app comes back from Settings
     const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        const hasPermission = OneSignal.Notifications.hasPermission();
-        if (hasPermission) {
-          OneSignal.User.pushSubscription.optIn();
-        }
+        syncPushState();
       }
     });
 
