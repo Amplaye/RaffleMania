@@ -299,6 +299,25 @@ class Plugin {
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
         $table_draws = $wpdb->prefix . 'rafflemania_draws';
 
+        // Send "extraction imminent" for long timers (12h) approaching last 5 minutes
+        $approaching_prizes = $wpdb->get_results(
+            "SELECT * FROM {$table_prizes}
+             WHERE timer_status = 'countdown'
+             AND timer_duration > 300
+             AND scheduled_at IS NOT NULL
+             AND scheduled_at > NOW()
+             AND scheduled_at <= DATE_ADD(NOW(), INTERVAL 6 MINUTE)"
+        );
+
+        foreach ($approaching_prizes as $prize) {
+            $transient_key = 'rafflemania_reminder_' . $prize->id;
+            if (!get_transient($transient_key)) {
+                $remaining_min = max(1, intval((strtotime($prize->scheduled_at) - time()) / 60));
+                NotificationHelper::notify_extraction_soon($prize->name, $remaining_min);
+                set_transient($transient_key, 1, 600);
+            }
+        }
+
         // Find prizes with countdown status and expired timer
         $expired_prizes = $wpdb->get_results(
             "SELECT * FROM {$table_prizes}
@@ -405,6 +424,13 @@ class Plugin {
             "UPDATE {$table_tickets} SET status = 'used' WHERE prize_id = %d AND status = 'active'",
             $prize->id
         ));
+
+        // Send "extraction completed" notification to all users
+        $completion_key = 'rafflemania_completion_' . $prize->id;
+        if (!get_transient($completion_key)) {
+            NotificationHelper::notify_extraction_completed($prize->name);
+            set_transient($completion_key, 1, 600);
+        }
 
         // Reset prize for next round
         $wpdb->update(

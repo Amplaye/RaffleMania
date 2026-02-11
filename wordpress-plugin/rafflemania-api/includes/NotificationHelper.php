@@ -130,6 +130,18 @@ class NotificationHelper {
     }
 
     /**
+     * Notify extraction completed - tells all users to check the app for results
+     */
+    public static function notify_extraction_completed($prize_name) {
+        return self::send_to_all_excluding_tag(
+            'draw_reminders',
+            'Estrazione completata!',
+            "L'estrazione per {$prize_name} è terminata! Entra nell'app per verificare l'esito.",
+            ['type' => 'extraction_completed', 'prize_name' => $prize_name]
+        );
+    }
+
+    /**
      * Notify new prize available
      */
     public static function notify_new_prize($prize_name) {

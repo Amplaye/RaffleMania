@@ -208,6 +208,15 @@ class PrizesController extends WP_REST_Controller {
             $update_data['timer_status'] = 'countdown';
             $update_data['timer_started_at'] = current_time('mysql');
             $update_data['scheduled_at'] = date('Y-m-d H:i:s', strtotime('+' . $prize->timer_duration . ' seconds'));
+
+            // Send "extraction imminent" notification for short timers (5 min)
+            if ($prize->timer_duration <= 300) {
+                $transient_key = 'rafflemania_reminder_' . $prize->id;
+                if (!get_transient($transient_key)) {
+                    \RaffleMania\NotificationHelper::notify_extraction_soon($prize->name, intval($prize->timer_duration / 60));
+                    set_transient($transient_key, 1, 600);
+                }
+            }
         }
 
         $wpdb->update($table_prizes, $update_data, ['id' => $prize_id]);
@@ -395,6 +404,17 @@ class PrizesController extends WP_REST_Controller {
         }
 
         $wpdb->update($table_prizes, $update_data, ['id' => $prize_id]);
+
+        // Send "extraction imminent" notification if timer just started for short timers
+        if ($timer_status === 'countdown' && $prize->timer_status !== 'countdown') {
+            if ($prize->timer_duration <= 300) {
+                $transient_key = 'rafflemania_reminder_' . $prize->id;
+                if (!get_transient($transient_key)) {
+                    \RaffleMania\NotificationHelper::notify_extraction_soon($prize->name, intval($prize->timer_duration / 60));
+                    set_transient($transient_key, 1, 600);
+                }
+            }
+        }
 
         // Get updated prize
         $updated_prize = $wpdb->get_row($wpdb->prepare(

@@ -512,6 +512,18 @@ class DrawsController extends WP_REST_Controller {
             ));
         }
 
+        // Send "extraction completed" notification (with deduplication)
+        $completion_key = 'rafflemania_completion_' . $prize_id;
+        if (!get_transient($completion_key)) {
+            \RaffleMania\NotificationHelper::notify_extraction_completed($prize->name);
+            set_transient($completion_key, 1, 600);
+        }
+
+        // Send winner notification
+        if ($winner_user_id) {
+            \RaffleMania\NotificationHelper::notify_winner($winner_user_id, $prize->name);
+        }
+
         // Get created draw
         $draw = $wpdb->get_row($wpdb->prepare(
             "SELECT d.*, p.name as prize_name, p.image_url as prize_image, p.value as prize_value
