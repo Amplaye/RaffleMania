@@ -18,26 +18,6 @@ const App: React.FC = () => {
     // Initialize OneSignal
     OneSignal.initialize(ONESIGNAL_APP_ID);
 
-    // Request notification permissions
-    OneSignal.Notifications.requestPermission(true).then((accepted: boolean) => {
-      // If permission denied on iOS, prompt user to enable in Settings
-      if (!accepted && Platform.OS === 'ios') {
-        setTimeout(() => {
-          Alert.alert(
-            'Notifiche Disabilitate',
-            'Per ricevere le notifiche di RaffleMania (vincite, messaggi di supporto, ecc.), attiva le notifiche nelle impostazioni del dispositivo.',
-            [
-              {text: 'Dopo', style: 'cancel'},
-              {
-                text: 'Apri Impostazioni',
-                onPress: () => Linking.openURL('app-settings:'),
-              },
-            ],
-          );
-        }, 1000);
-      }
-    });
-
     // Sync notification toggle state with actual OneSignal subscription
     const syncPushState = () => {
       const hasPermission = OneSignal.Notifications.hasPermission();
@@ -54,8 +34,45 @@ const App: React.FC = () => {
       }
     };
 
-    // Sync on app start (small delay for OneSignal to fully initialize)
-    setTimeout(syncPushState, 2000);
+    // Request notification permissions
+    OneSignal.Notifications.requestPermission(true).then((accepted: boolean) => {
+      if (accepted) {
+        // Permission granted - immediately opt in and sync state
+        OneSignal.User.pushSubscription.optIn();
+        const {useSettingsStore} = require('./src/store/useSettingsStore');
+        const prefs = useSettingsStore.getState().notifications;
+        if (!prefs.pushEnabled) {
+          useSettingsStore.setState({
+            notifications: {...prefs, pushEnabled: true},
+          });
+        }
+      } else if (Platform.OS === 'ios') {
+        // Permission denied on iOS - prompt to enable in Settings
+        const {useSettingsStore} = require('./src/store/useSettingsStore');
+        const prefs = useSettingsStore.getState().notifications;
+        if (prefs.pushEnabled) {
+          useSettingsStore.setState({
+            notifications: {...prefs, pushEnabled: false},
+          });
+        }
+        setTimeout(() => {
+          Alert.alert(
+            'Notifiche Disabilitate',
+            'Per ricevere le notifiche di RaffleMania (vincite, messaggi di supporto, ecc.), attiva le notifiche nelle impostazioni del dispositivo.',
+            [
+              {text: 'Dopo', style: 'cancel'},
+              {
+                text: 'Apri Impostazioni',
+                onPress: () => Linking.openURL('app-settings:'),
+              },
+            ],
+          );
+        }, 1000);
+      }
+    });
+
+    // Also sync after a delay (for cases where OneSignal needs time to initialize)
+    setTimeout(syncPushState, 3000);
 
     // Re-check permission when app comes back from Settings
     const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {

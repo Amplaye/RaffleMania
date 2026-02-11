@@ -145,7 +145,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
       <Switch
         value={setting.value}
         onValueChange={() => handleToggle(setting.id)}
-        trackColor={{false: colors.border, true: `${colors.primary}50`}}
+        trackColor={{false: colors.border, true: `${colors.primary}AA`}}
         thumbColor={setting.value ? colors.primary : colors.textMuted}
       />
     </View>
