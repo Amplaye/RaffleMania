@@ -193,66 +193,43 @@ export const useSettingsStore = create<SettingsState>()(
           try {
             if (value) {
               OneSignal.User.pushSubscription.optIn();
-              console.log('[Settings] Push notifications enabled');
             } else {
               OneSignal.User.pushSubscription.optOut();
-              console.log('[Settings] Push notifications disabled');
             }
           } catch (error) {
-            console.error('[Settings] Error toggling push notifications:', error);
+            console.error('[Settings] Error toggling push:', error);
           }
         }
 
-        // Handle email preference - sync to backend
-        if (key === 'emailEnabled') {
-          try {
-            // Get user ID from auth store
-            const {useAuthStore} = await import('./useAuthStore');
-            const user = useAuthStore.getState().user;
-            const token = useAuthStore.getState().token;
-            const isGuest = token?.startsWith('guest_token_');
-
-            if (user && !isGuest) {
-              // Sync email preference to WordPress backend
-              await apiClient.post('/users/preferences', {
-                email_notifications: value,
-              });
-              console.log('[Settings] Email preference synced to backend:', value);
-            }
-          } catch (error) {
-            console.log('[Settings] Email sync failed (non-critical):', error);
-          }
-        }
-
-        // Handle draw reminders - control OneSignal tags for targeted notifications
+        // Handle draw reminders - OneSignal tag filter
+        // OFF = set tag 'disabled' (server filters exclude these)
+        // ON = remove tag (default = receive, so no tag needed)
         if (key === 'drawReminders') {
           try {
             if (value) {
-              OneSignal.User.addTag('draw_reminders', 'enabled');
-            } else {
               OneSignal.User.removeTag('draw_reminders');
+            } else {
+              OneSignal.User.addTag('draw_reminders', 'disabled');
             }
-            console.log('[Settings] Draw reminders tag updated:', value);
           } catch (error) {
-            console.log('[Settings] Draw reminders tag update failed:', error);
+            console.log('[Settings] Draw reminders tag failed:', error);
           }
         }
 
-        // Handle win notifications - control OneSignal tags
+        // Handle win notifications - OneSignal tag filter
         if (key === 'winNotifications') {
           try {
             if (value) {
-              OneSignal.User.addTag('win_notifications', 'enabled');
-            } else {
               OneSignal.User.removeTag('win_notifications');
+            } else {
+              OneSignal.User.addTag('win_notifications', 'disabled');
             }
-            console.log('[Settings] Win notifications tag updated:', value);
           } catch (error) {
-            console.log('[Settings] Win notifications tag update failed:', error);
+            console.log('[Settings] Win notifications tag failed:', error);
           }
         }
 
-        // Update state
+        // Update local state first
         set(state => ({
           notifications: {
             ...state.notifications,
@@ -260,7 +237,25 @@ export const useSettingsStore = create<SettingsState>()(
           },
         }));
 
-        console.log(`[Settings] ${key} set to ${value}`);
+        // Sync all preferences to server (non-blocking)
+        try {
+          const {useAuthStore} = await import('./useAuthStore');
+          const user = useAuthStore.getState().user;
+          const token = useAuthStore.getState().token;
+          const isGuest = token?.startsWith('guest_token_');
+
+          if (user && !isGuest) {
+            const prefs = get().notifications;
+            await apiClient.post('/users/me/preferences', {
+              push_enabled: prefs.pushEnabled,
+              email_enabled: prefs.emailEnabled,
+              draw_reminders: prefs.drawReminders,
+              win_notifications: prefs.winNotifications,
+            });
+          }
+        } catch (error) {
+          console.log('[Settings] Server sync failed (non-critical):', error);
+        }
       },
 
       getNotificationPreferences: () => {
@@ -298,3 +293,32 @@ export const useSettingsStore = create<SettingsState>()(
 
 // Export a function to get XP rewards that can be used instead of the old XP_REWARDS constant
 export const getXPRewards = () => useSettingsStore.getState().xpRewards;
+
+// Sync OneSignal tags based on stored preferences (call after login)
+export const syncNotificationTags = async () => {
+  try {
+    const {OneSignal} = await import('react-native-onesignal');
+    const prefs = useSettingsStore.getState().notifications;
+
+    // Sync draw_reminders tag
+    if (prefs.drawReminders) {
+      OneSignal.User.removeTag('draw_reminders');
+    } else {
+      OneSignal.User.addTag('draw_reminders', 'disabled');
+    }
+
+    // Sync win_notifications tag
+    if (prefs.winNotifications) {
+      OneSignal.User.removeTag('win_notifications');
+    } else {
+      OneSignal.User.addTag('win_notifications', 'disabled');
+    }
+
+    // Sync push subscription state
+    if (prefs.pushEnabled) {
+      OneSignal.User.pushSubscription.optIn();
+    }
+  } catch (error) {
+    console.log('[Settings] Tag sync failed:', error);
+  }
+};

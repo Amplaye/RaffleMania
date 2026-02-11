@@ -75,9 +75,40 @@ class NotificationHelper {
     }
 
     /**
-     * Notify winner
+     * Send to all users excluding those with a specific tag set to 'disabled'
+     * Uses OneSignal filters instead of included_segments
+     */
+    public static function send_to_all_excluding_tag($exclude_tag, $title, $message, $data = []) {
+        $app_id = get_option('rafflemania_onesignal_app_id');
+        $api_key = get_option('rafflemania_onesignal_api_key');
+
+        if (empty($app_id) || empty($api_key)) {
+            return false;
+        }
+
+        // Filter: tag != 'disabled' (includes users who never set the tag)
+        $payload = [
+            'app_id' => $app_id,
+            'filters' => [
+                ['field' => 'tag', 'key' => $exclude_tag, 'relation' => '!=', 'value' => 'disabled'],
+            ],
+            'headings' => ['en' => $title, 'it' => $title],
+            'contents' => ['en' => $message, 'it' => $message],
+            'data' => $data
+        ];
+
+        return self::send_request($payload, $api_key);
+    }
+
+    /**
+     * Notify winner (checks user preference before sending)
      */
     public static function notify_winner($user_id, $prize_name) {
+        // Check if user has disabled win notifications
+        if (self::is_notification_disabled($user_id, 'win_notifications')) {
+            return null; // User opted out
+        }
+
         return self::send_to_user(
             $user_id,
             'Hai vinto!',
@@ -87,10 +118,11 @@ class NotificationHelper {
     }
 
     /**
-     * Notify extraction starting soon
+     * Notify extraction starting soon (respects draw_reminders preference)
      */
     public static function notify_extraction_soon($prize_name, $minutes = 5) {
-        return self::send_to_all(
+        return self::send_to_all_excluding_tag(
+            'draw_reminders',
             'Estrazione imminente!',
             "L'estrazione per {$prize_name} iniziera tra {$minutes} minuti!",
             ['type' => 'extraction_soon', 'prize_name' => $prize_name]
@@ -106,6 +138,29 @@ class NotificationHelper {
             "E' disponibile un nuovo premio: {$prize_name}. Partecipa subito!",
             ['type' => 'new_prize', 'prize_name' => $prize_name]
         );
+    }
+
+    /**
+     * Check if a user has disabled a specific notification type
+     */
+    private static function is_notification_disabled($user_id, $pref_key) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'rafflemania_users';
+        $prefs_json = $wpdb->get_var($wpdb->prepare(
+            "SELECT notification_preferences FROM {$table} WHERE id = %d",
+            $user_id
+        ));
+
+        if (empty($prefs_json)) {
+            return false; // Default: notifications enabled
+        }
+
+        $prefs = json_decode($prefs_json, true);
+        if (!is_array($prefs)) {
+            return false;
+        }
+
+        return isset($prefs[$pref_key]) && $prefs[$pref_key] === false;
     }
 
     /**

@@ -15,6 +15,7 @@ import {User} from '../types';
 import {API_CONFIG} from '../utils/constants';
 import * as Keychain from 'react-native-keychain';
 import apiClient, {tokenManager, getErrorMessage} from '../services/apiClient';
+import {syncNotificationTags} from './useSettingsStore';
 
 // Configure Google Sign-In
 GoogleSignin.configure({
@@ -157,6 +158,7 @@ export const useAuthStore = create<AuthState>()(
 
       // Link user to OneSignal for targeted push notifications
       OneSignal.login(String(user.id));
+      syncNotificationTags();
 
       set({
         user: mapApiUserToUser(user),
@@ -232,6 +234,7 @@ export const useAuthStore = create<AuthState>()(
 
         // Link user to OneSignal for targeted push notifications
         OneSignal.login(String(user.id));
+        syncNotificationTags();
 
         set({
           user: mapApiUserToUser(user),
@@ -349,6 +352,7 @@ export const useAuthStore = create<AuthState>()(
 
       // Link user to OneSignal for targeted push notifications
       OneSignal.login(String(user.id));
+      syncNotificationTags();
 
       set({
         user: mapApiUserToUser(user),
@@ -652,6 +656,7 @@ export const useAuthStore = create<AuthState>()(
 
         // Link user to OneSignal for targeted push notifications
         OneSignal.login(String(user.id));
+        syncNotificationTags();
 
         set({
           user: mapApiUserToUser(user),

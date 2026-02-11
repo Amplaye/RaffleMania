@@ -150,6 +150,15 @@ class UsersController extends WP_REST_Controller {
             ]
         ]);
 
+        // Update notification preferences
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/me/preferences', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'update_preferences'],
+                'permission_callback' => [$this, 'check_auth'],
+            ]
+        ]);
+
         // Get user wins
         register_rest_route($this->namespace, '/' . $this->rest_base . '/me/wins', [
             [
@@ -982,6 +991,39 @@ class UsersController extends WP_REST_Controller {
             'xpToNextLevel' => max(0, $info['max'] - $xp),
             'progress' => round($progress, 2)
         ];
+    }
+
+    /**
+     * Update notification preferences
+     */
+    public function update_preferences(WP_REST_Request $request) {
+        $user_id = $request->get_param('_auth_user_id');
+        if (!$user_id) {
+            return new WP_Error('unauthorized', 'Authentication required', ['status' => 401]);
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'rafflemania_users';
+
+        $params = $request->get_json_params();
+
+        $prefs = [
+            'push_enabled' => isset($params['push_enabled']) ? (bool) $params['push_enabled'] : true,
+            'email_enabled' => isset($params['email_enabled']) ? (bool) $params['email_enabled'] : true,
+            'draw_reminders' => isset($params['draw_reminders']) ? (bool) $params['draw_reminders'] : true,
+            'win_notifications' => isset($params['win_notifications']) ? (bool) $params['win_notifications'] : true,
+        ];
+
+        $wpdb->update(
+            $table,
+            ['notification_preferences' => json_encode($prefs)],
+            ['id' => $user_id]
+        );
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => $prefs,
+        ], 200);
     }
 
     private function format_user($user) {

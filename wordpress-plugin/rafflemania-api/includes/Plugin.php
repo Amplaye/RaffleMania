@@ -449,26 +449,8 @@ class Plugin {
     }
 
     private function send_winner_notification($user_id, $prize) {
-        // Get user's push token
-        global $wpdb;
-        $table_users = $wpdb->prefix . 'rafflemania_users';
-        $user = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$table_users} WHERE id = %d",
-            $user_id
-        ));
-
-        if ($user && !empty($user->push_token)) {
-            // Send push notification (implement your push service here)
-            // Example: Firebase, OneSignal, etc.
-            do_action('rafflemania_send_push', $user->push_token, [
-                'title' => 'Hai Vinto!',
-                'body' => 'Congratulazioni! Hai vinto ' . $prize->name,
-                'data' => [
-                    'type' => 'win',
-                    'prize_id' => $prize->id
-                ]
-            ]);
-        }
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
+        NotificationHelper::notify_winner($user_id, $prize->name);
     }
 
     /**
@@ -513,6 +495,23 @@ class Plugin {
 
             // Update version
             update_option('rafflemania_referral_db_version', '1.4');
+        }
+
+        // Migration 1.5: Add notification_preferences to users table
+        global $wpdb;
+        $notif_version = get_option('rafflemania_notif_db_version', '0');
+        if (version_compare($notif_version, '1.5', '<')) {
+            $table_users = $wpdb->prefix . 'rafflemania_users';
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_users}'");
+            if ($table_exists) {
+                $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_users}");
+                $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+                if (!in_array('notification_preferences', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_users} ADD COLUMN notification_preferences TEXT DEFAULT NULL");
+                }
+            }
+            update_option('rafflemania_notif_db_version', '1.5');
         }
     }
 }
