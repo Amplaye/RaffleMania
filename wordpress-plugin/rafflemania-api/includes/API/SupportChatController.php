@@ -168,9 +168,30 @@ class SupportChatController extends WP_REST_Controller {
 
         $email_sent = wp_mail($admin_email, $subject, $body);
 
+        // Send push notification to admin devices via OneSignal
+        $push_sent = false;
+        $admin_users = get_users(['role' => 'administrator', 'fields' => 'ID']);
+        if (!empty($admin_users)) {
+            $admin_ids = array_map('strval', $admin_users);
+            $push_preview = strlen($message) > 50
+                ? substr($message, 0, 47) . '...'
+                : $message;
+            $push_sent = NotificationHelper::send_to_users(
+                $admin_ids,
+                "Messaggio da {$user_name}",
+                $push_preview,
+                [
+                    'type' => 'admin_support_message',
+                    'user_id' => $user_id,
+                    'user_name' => $user_name,
+                ]
+            );
+        }
+
         return new WP_REST_Response([
             'success' => true,
             'email_sent' => $email_sent,
+            'push_sent' => $push_sent ? true : false,
             'message' => 'Admin notified'
         ], 200);
     }

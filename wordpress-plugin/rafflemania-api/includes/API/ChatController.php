@@ -91,6 +91,13 @@ class ChatController extends WP_REST_Controller {
             return true;
         }
 
+        // Check support secret (for in-app admin chat)
+        $support_secret = $request->get_header('X-Support-Secret');
+        $expected_secret = get_option('rafflemania_support_secret', 'rafflemania-support-2024');
+        if ($support_secret === $expected_secret) {
+            return true;
+        }
+
         // Or check if user is logged in as admin
         return current_user_can('manage_options');
     }
@@ -233,9 +240,31 @@ class ChatController extends WP_REST_Controller {
             }
         }
 
+        // Send push notification to admin devices via OneSignal
+        $push_sent = false;
+        $admin_users = get_users(['role' => 'administrator', 'fields' => 'ID']);
+        if (!empty($admin_users)) {
+            $admin_ids = array_map('strval', $admin_users);
+            $push_preview = strlen($message) > 50
+                ? substr($message, 0, 47) . '...'
+                : $message;
+            $push_sent = NotificationHelper::send_to_users(
+                $admin_ids,
+                "Messaggio da {$user_name}",
+                $push_preview,
+                [
+                    'type' => 'admin_support_message',
+                    'user_id' => $user_id,
+                    'user_name' => $user_name,
+                ]
+            );
+        }
+
         return new WP_REST_Response([
-            'success' => $sent,
-            'message' => $sent ? 'Admin notified' : 'Failed to send email',
+            'success' => $sent || $push_sent,
+            'message' => 'Admin notified',
+            'email_sent' => $sent,
+            'push_sent' => $push_sent ? true : false,
         ], 200);
     }
 }

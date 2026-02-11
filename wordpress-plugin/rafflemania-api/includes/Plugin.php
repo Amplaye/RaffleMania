@@ -57,7 +57,7 @@ class Plugin {
         add_filter('rest_pre_serve_request', function($value) {
             header('Access-Control-Allow-Origin: *');
             header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-            header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With');
+            header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With, X-Support-Secret, X-Admin-Key');
             header('Access-Control-Allow-Credentials: true');
             return $value;
         });
@@ -109,10 +109,18 @@ class Plugin {
         $referrals = new API\ReferralController();
         $referrals->register_routes();
 
+        // NotificationHelper (needed by chat controllers)
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
+
         // Support Chat endpoints - v1.5
         require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/SupportChatController.php';
         $support = new API\SupportChatController();
         $support->register_routes();
+
+        // Admin Chat endpoints (push notifications for admin chat)
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/ChatController.php';
+        $chat = new API\ChatController();
+        $chat->register_routes();
     }
 
     public function add_admin_menu() {

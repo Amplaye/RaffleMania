@@ -14,22 +14,18 @@ import {
   writeBatch,
   serverTimestamp,
 } from '@react-native-firebase/firestore';
-import {API_CONFIG} from '../utils/constants';
+import apiClient from '../services/apiClient';
 
 const db = getFirestore();
 
 // Send push notification to user via WordPress/OneSignal
 const notifyUserOfAdminReply = async (userId: string, message: string) => {
   try {
-    await fetch(`${API_CONFIG.BASE_URL}/rafflemania/v1/chat/notify`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        user_id: userId,
-        message: message,
-      }),
+    await apiClient.post('/chat/notify', {
+      user_id: userId,
+      message: message,
+    }, {
+      headers: {'X-Support-Secret': 'rafflemania-support-2024'},
     });
   } catch (error) {
     // Non-critical: user will still see the message in app
