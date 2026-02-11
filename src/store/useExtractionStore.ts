@@ -120,7 +120,7 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
 
       // Filter draws that happened after last seen timestamp
       const newDraws = draws.filter((draw: any) => {
-        const drawTime = new Date(draw.extracted_at || draw.created_at).getTime();
+        const drawTime = new Date(draw.extractedAt || draw.createdAt).getTime();
         return drawTime > lastSeenTimestamp && draw.status === 'completed';
       });
 
@@ -134,31 +134,32 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
       const missed: MissedExtraction[] = [];
 
       for (const draw of newDraws) {
-        const prizeId = draw.prize_id;
-        const winningNumber = draw.winning_number;
+        const prizeId = draw.prizeId;
+        const winningNumber = draw.winningNumber;
         let userNumbers: number[] = [];
 
         // Try to get user's ticket numbers for this prize
         try {
           const ticketsResponse = await apiClient.get(`/tickets/prize/${prizeId}`);
-          userNumbers = ticketsResponse.data?.data?.numbers || [];
+          const nums = ticketsResponse.data?.data?.numbers || [];
+          userNumbers = nums.map((n: any) => Number(n));
         } catch {
           console.log(`[Extraction] Could not fetch tickets for prize ${prizeId}`);
         }
 
         const isWinner = userNumbers.includes(winningNumber);
 
-        // Only show if user had tickets for this prize
+        // Show to all users who had tickets, or if they won
         if (userNumbers.length > 0) {
           missed.push({
             drawId: String(draw.id),
             prizeId: String(prizeId),
-            prizeName: draw.prize?.name || draw.prize_name || 'Premio',
-            prizeImage: draw.prize?.image_url || draw.prize_image || undefined,
+            prizeName: draw.prizeName || 'Premio',
+            prizeImage: draw.prizeImage || undefined,
             winningNumber,
             userNumbers,
             isWinner,
-            extractedAt: draw.extracted_at || draw.created_at,
+            extractedAt: draw.extractedAt || draw.createdAt,
           });
         }
       }
@@ -173,7 +174,7 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
 
       // Update last seen timestamp to the most recent draw
       const mostRecentDraw = draws[0];
-      const mostRecentTime = mostRecentDraw.extracted_at || mostRecentDraw.created_at;
+      const mostRecentTime = mostRecentDraw.extractedAt || mostRecentDraw.createdAt;
       await AsyncStorage.setItem(LAST_SEEN_DRAW_KEY, mostRecentTime);
     } catch (error) {
       console.log('[Extraction] Error fetching missed extractions:', error);

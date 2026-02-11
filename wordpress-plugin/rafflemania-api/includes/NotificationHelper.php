@@ -201,9 +201,6 @@ class NotificationHelper {
         $payload['large_icon'] = $icon_url;
         $payload['small_icon'] = 'ic_launcher';
 
-        // iOS: add icon as attachment for rich notification
-        $payload['ios_attachments'] = ['icon' => $icon_url];
-
         $response = wp_remote_post('https://api.onesignal.com/notifications', [
             'headers' => [
                 'Content-Type' => 'application/json',
