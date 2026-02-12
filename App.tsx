@@ -98,7 +98,7 @@ const App: React.FC = () => {
           userId: data.user_id,
           userName: data.user_name || 'Utente',
         });
-      } else if (data?.type === 'winner') {
+      } else if (data?.type === 'winner' || data?.type === 'extraction_result') {
         navigate('MyWins');
       } else if (data?.type === 'new_prize' && data?.prize_id) {
         navigate('PrizeDetail', {prizeId: data.prize_id});

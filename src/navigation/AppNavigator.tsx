@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState, useCallback} from 'react';
 import {NavigationContainer, LinkingOptions} from '@react-navigation/native';
 import {createNativeStackNavigator, NativeStackScreenProps} from '@react-navigation/native-stack';
-import {View, Text, StyleSheet} from 'react-native';
+import {View, Text, StyleSheet, AppState} from 'react-native';
 import {useAuthStore, usePrizesStore, useExtractionStore, useTicketsStore} from '../store';
 import {Prize} from '../types';
 import {AuthNavigator} from './AuthNavigator';
@@ -10,6 +10,7 @@ import {COLORS, FONT_SIZE, FONT_WEIGHT, API_CONFIG} from '../utils/constants';
 import {ScreenContainer, Button, UrgencyBorderEffect, ExtractionStartEffect, ExtractionResultModal, MissedExtractionModal} from '../components/common';
 import {navigationRef, processPendingNavigation} from '../services/NavigationService';
 import apiClient from '../services/apiClient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import actual screens
 import {MyWinsScreen} from '../screens/mywins';
@@ -206,7 +207,6 @@ export const AppNavigator: React.FC = () => {
     markPrizeAsExtracting,
     completePrizeExtraction,
     resetPrizeAfterExtraction,
-    syncTimerToBackend,
     addWin,
   } = usePrizesStore();
   const {simulateExtraction, getTicketsForPrize, clearTicketsForPrize} = useTicketsStore();
@@ -235,8 +235,8 @@ export const AppNavigator: React.FC = () => {
   const [urgencyPrize, setUrgencyPrize] = useState<Prize | null>(null);
   const [urgencySeconds, setUrgencySeconds] = useState(0);
 
-  // Trigger extraction for a prize - server-driven winning number
-  const triggerExtraction = useCallback(async (prize: Prize) => {
+  // Wait for extraction result from server (server performs the extraction via cron)
+  const waitForExtractionResult = useCallback(async (prize: Prize) => {
     // Mark prize as extracting locally
     markPrizeAsExtracting(prize.id);
 
@@ -246,68 +246,77 @@ export const AppNavigator: React.FC = () => {
     const isGuestUser = token?.startsWith('guest_token_');
     const useMockMode = API_CONFIG.USE_MOCK_DATA || isGuestUser;
 
-    // Run animation timer and server call IN PARALLEL
-    // The result is shown only after BOTH complete
-    const minAnimationTime = new Promise<void>(resolve => setTimeout(() => resolve(), 3000));
-
-    let winningNumber = 0;
-    let isWinner = false;
     const userTickets = getTicketsForPrize(prize.id);
     const userNumbers = userTickets.map(t => t.ticketNumber);
 
-    const serverCall = (async () => {
-      if (useMockMode) {
-        // Guest/mock: use local simulation (no server)
-        const result = simulateExtraction(prize.id, prize.name, prize.imageUrl);
-        winningNumber = result.winningNumber || 0;
-        isWinner = result.isWinner;
-      } else {
-        // Authenticated: server picks winning number from REAL tickets in DB
-        // Same number returned to ALL devices calling this endpoint
-        try {
-          const payload: any = {prize_id: parseInt(prize.id, 10)};
-          if (prize.timerStartedAt) {
-            payload.timer_started_at = prize.timerStartedAt;
-          }
-          const response = await apiClient.post('/draws', payload);
-          const noTickets = response.data?.data?.no_tickets;
-          const alreadyExists = response.data?.data?.already_exists;
-          const drawData = response.data?.data?.draw;
-          console.log(`[Extraction] Server response: noTickets=${noTickets}, alreadyExists=${alreadyExists}, winningNumber=${drawData?.winningNumber}, totalTickets=${drawData?.totalTickets}`);
-          if (drawData) {
-            winningNumber = drawData.winningNumber || 0;
-            isWinner = userNumbers.includes(winningNumber);
+    let winningNumber = 0;
+    let isWinner = false;
 
-            // Move user's tickets to past
-            if (userTickets.length > 0) {
-              const {activeTickets, pastTickets} = useTicketsStore.getState();
-              const now = new Date().toISOString();
-              const updatedUserTickets = userTickets.map(ticket => ({
-                ...ticket,
-                isWinner: ticket.ticketNumber === winningNumber,
-                wonAt: ticket.ticketNumber === winningNumber ? now : undefined,
-                prizeName: ticket.ticketNumber === winningNumber ? prize.name : undefined,
-                prizeImage: ticket.ticketNumber === winningNumber ? prize.imageUrl : undefined,
-              }));
-              const remainingActive = activeTickets.filter(t => t.prizeId !== prize.id);
-              useTicketsStore.setState({
-                activeTickets: remainingActive,
-                pastTickets: [...updatedUserTickets, ...pastTickets],
-              });
+    if (useMockMode) {
+      // Guest/mock: use local simulation
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 3000));
+      const result = simulateExtraction(prize.id, prize.name, prize.imageUrl);
+      winningNumber = result.winningNumber || 0;
+      isWinner = result.isWinner;
+    } else {
+      // Poll the server for the completed draw result
+      // The server cron will perform the extraction - we just wait for the result
+      const maxAttempts = 20; // ~60 seconds max wait
+      let drawData = null;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        // Wait 3 seconds between polls (first poll after 3s to give server cron time)
+        await new Promise<void>(resolve => setTimeout(() => resolve(), 3000));
+
+        try {
+          const response = await apiClient.get(`/draws/prize/${prize.id}?limit=1`);
+          const draws = response.data?.data?.draws || [];
+
+          if (draws.length > 0) {
+            const latestDraw = draws[0];
+            // Check if this draw is recent (within last 5 minutes) and completed
+            const drawTime = new Date(latestDraw.extractedAt || latestDraw.createdAt).getTime();
+            const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+
+            if (latestDraw.status === 'completed' && drawTime > fiveMinutesAgo) {
+              drawData = latestDraw;
+              console.log(`[Extraction] Server draw found: winningNumber=${drawData.winningNumber}`);
+              break;
             }
           }
+          console.log(`[Extraction] Polling attempt ${attempt + 1}/${maxAttempts} - no result yet`);
         } catch (error) {
-          console.log('[Extraction] Server draw failed:', error);
-          // For authenticated users, DO NOT fall back to random local numbers
-          // Show 0 as winning number to indicate an error occurred
-          winningNumber = 0;
-          isWinner = false;
+          console.log(`[Extraction] Poll error:`, error);
         }
       }
-    })();
 
-    // Wait for both animation and server response
-    await Promise.all([minAnimationTime, serverCall]);
+      if (drawData) {
+        winningNumber = drawData.winningNumber || 0;
+        isWinner = userNumbers.includes(winningNumber);
+
+        // Move user's tickets to past
+        if (userTickets.length > 0) {
+          const {activeTickets, pastTickets} = useTicketsStore.getState();
+          const now = new Date().toISOString();
+          const updatedUserTickets = userTickets.map(ticket => ({
+            ...ticket,
+            isWinner: ticket.ticketNumber === winningNumber,
+            wonAt: ticket.ticketNumber === winningNumber ? now : undefined,
+            prizeName: ticket.ticketNumber === winningNumber ? prize.name : undefined,
+            prizeImage: ticket.ticketNumber === winningNumber ? prize.imageUrl : undefined,
+          }));
+          const remainingActive = activeTickets.filter(t => t.prizeId !== prize.id);
+          useTicketsStore.setState({
+            activeTickets: remainingActive,
+            pastTickets: [...updatedUserTickets, ...pastTickets],
+          });
+        }
+      } else {
+        console.log('[Extraction] Timeout waiting for server draw result');
+        winningNumber = 0;
+        isWinner = false;
+      }
+    }
 
     // Generate drawId for tracking
     const drawId = `draw_${prize.id}_${(prize.timerStartedAt || new Date().toISOString()).replace(/[^0-9]/g, '').slice(0, 14)}`;
@@ -317,7 +326,7 @@ export const AppNavigator: React.FC = () => {
       addWin(prize.id, drawId, userTickets[0].id, user.id);
     }
 
-    // Show the result modal with the definitive winning number from server
+    // Show the result modal
     showResult({
       isWinner,
       winningNumber,
@@ -327,20 +336,18 @@ export const AppNavigator: React.FC = () => {
       prizeImage: prize.imageUrl,
     });
 
-    // Mark extraction complete locally (stops countdown display)
+    // Mark extraction complete locally
     completePrizeExtraction(prize.id, winningNumber);
 
-    // Sync timer status to server (ensures server knows extraction is done,
-    // even if POST /draws returned no_tickets and didn't update timer_status)
-    syncTimerToBackend(prize.id, 'completed');
+    // Update last seen draw timestamp
+    AsyncStorage.setItem('rafflemania_last_seen_draw_timestamp', new Date().toISOString());
 
     // Clean up tickets and reset prize for next round after a delay
     setTimeout(() => {
       clearTicketsForPrize(prize.id);
-      // Reset prize for next round (clears timer, resets currentAds to 0)
       resetPrizeAfterExtraction(prize.id);
     }, 5000);
-  }, [user, token, markPrizeAsExtracting, startExtraction, simulateExtraction, getTicketsForPrize, addWin, showResult, completePrizeExtraction, resetPrizeAfterExtraction, syncTimerToBackend, clearTicketsForPrize]);
+  }, [user, token, markPrizeAsExtracting, startExtraction, simulateExtraction, getTicketsForPrize, addWin, showResult, completePrizeExtraction, resetPrizeAfterExtraction, clearTicketsForPrize]);
 
   // Initialize
   useEffect(() => {
@@ -360,6 +367,24 @@ export const AppNavigator: React.FC = () => {
     if (!isAuthenticated || !sessionActive) {
       missedChecked.current = false;
     }
+  }, [isAuthenticated, sessionActive, fetchMissedExtractions]);
+
+  // Re-check missed extractions when app returns to foreground
+  const appStateRef = useRef(AppState.currentState);
+  useEffect(() => {
+    if (!isAuthenticated || !sessionActive) return;
+
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
+        // App came to foreground - check for missed extractions
+        setTimeout(() => {
+          fetchMissedExtractions();
+        }, 1000);
+      }
+      appStateRef.current = nextAppState;
+    });
+
+    return () => subscription.remove();
   }, [isAuthenticated, sessionActive, fetchMissedExtractions]);
 
   // Monitor all prizes with active timers
@@ -389,11 +414,11 @@ export const AppNavigator: React.FC = () => {
           setUrgencySeconds(remainingSeconds);
         }
 
-        // Timer has expired - trigger extraction
-        // Only trigger if scheduledAt just passed (within 60s) and this drawId hasn't been extracted yet
+        // Timer has expired - wait for server extraction result
+        // Only trigger if scheduledAt just passed (within 60s) and this drawId hasn't been handled yet
         if (remainingSeconds === 0 && diffSeconds >= -60 && !extractedDrawIds.current.has(drawId)) {
           extractedDrawIds.current.add(drawId);
-          triggerExtraction(prize);
+          waitForExtractionResult(prize);
         }
       }
 
@@ -410,7 +435,7 @@ export const AppNavigator: React.FC = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [prizes, isAuthenticated, sessionActive, triggerExtraction]);
+  }, [prizes, isAuthenticated, sessionActive, waitForExtractionResult]);
 
   // Determine urgency intensity based on remaining time
   const getUrgencyIntensity = (): 'low' | 'medium' | 'high' => {

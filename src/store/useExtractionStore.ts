@@ -97,11 +97,19 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
   },
 
   fetchMissedExtractions: async () => {
+    const state = get();
+    // Don't fetch if already showing missed modal (prevents duplicates on foreground)
+    if (state.showMissedModal) {
+      console.log('[MissedExtraction] Skipping - modal already visible');
+      return;
+    }
+
     const authStore = useAuthStore.getState();
     const user = authStore.user;
     const token = authStore.token;
 
     if (!token || token.startsWith('guest_token_') || !user?.id) {
+      console.log('[MissedExtraction] Skipping - no auth');
       return;
     }
 
@@ -109,10 +117,12 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
       // Get last seen timestamp
       const lastSeenStr = await AsyncStorage.getItem(LAST_SEEN_DRAW_KEY);
       const lastSeenTimestamp = lastSeenStr ? new Date(lastSeenStr).getTime() : 0;
+      console.log(`[MissedExtraction] Last seen: ${lastSeenStr || 'never'}, timestamp: ${lastSeenTimestamp}`);
 
       // Fetch recent draws from server
       const drawsResponse = await apiClient.get('/draws?limit=10');
       const draws = drawsResponse.data?.data?.draws || [];
+      console.log(`[MissedExtraction] Fetched ${draws.length} draws from server`);
 
       if (draws.length === 0) {
         return;
@@ -124,11 +134,15 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
         return drawTime > lastSeenTimestamp && draw.status === 'completed';
       });
 
+      console.log(`[MissedExtraction] ${newDraws.length} new draws since last seen`);
+
       if (newDraws.length === 0) {
+        // Still update timestamp so we don't re-check old draws
+        const mostRecentDraw = draws[0];
+        const mostRecentTime = mostRecentDraw.extractedAt || mostRecentDraw.createdAt;
+        await AsyncStorage.setItem(LAST_SEEN_DRAW_KEY, mostRecentTime);
         return;
       }
-
-      console.log(`[Extraction] Found ${newDraws.length} missed extractions`);
 
       // For each missed draw, get user's tickets for that prize
       const missed: MissedExtraction[] = [];
@@ -143,13 +157,14 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
           const ticketsResponse = await apiClient.get(`/tickets/prize/${prizeId}`);
           const nums = ticketsResponse.data?.data?.numbers || [];
           userNumbers = nums.map((n: any) => Number(n));
-        } catch {
-          console.log(`[Extraction] Could not fetch tickets for prize ${prizeId}`);
+          console.log(`[MissedExtraction] Prize ${prizeId}: user has ${userNumbers.length} tickets, winning=${winningNumber}`);
+        } catch (e) {
+          console.log(`[MissedExtraction] Could not fetch tickets for prize ${prizeId}:`, e);
         }
 
         const isWinner = userNumbers.includes(winningNumber);
 
-        // Show to all users who had tickets, or if they won
+        // Show to all users who had tickets
         if (userNumbers.length > 0) {
           missed.push({
             drawId: String(draw.id),
@@ -164,6 +179,8 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
         }
       }
 
+      console.log(`[MissedExtraction] ${missed.length} missed extractions with user tickets`);
+
       if (missed.length > 0) {
         set({
           missedExtractions: missed,
@@ -177,7 +194,7 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
       const mostRecentTime = mostRecentDraw.extractedAt || mostRecentDraw.createdAt;
       await AsyncStorage.setItem(LAST_SEEN_DRAW_KEY, mostRecentTime);
     } catch (error) {
-      console.log('[Extraction] Error fetching missed extractions:', error);
+      console.log('[MissedExtraction] Error fetching missed extractions:', error);
     }
   },
 

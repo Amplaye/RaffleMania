@@ -101,30 +101,13 @@ class NotificationHelper {
     }
 
     /**
-     * Notify winner (checks user preference before sending)
+     * Notify extraction starting in 5 minutes (respects draw_reminders preference)
      */
-    public static function notify_winner($user_id, $prize_name) {
-        // Check if user has disabled win notifications
-        if (self::is_notification_disabled($user_id, 'win_notifications')) {
-            return null; // User opted out
-        }
-
-        return self::send_to_user(
-            $user_id,
-            'Hai vinto!',
-            "Congratulazioni! Hai vinto: {$prize_name}",
-            ['type' => 'winner', 'prize_name' => $prize_name]
-        );
-    }
-
-    /**
-     * Notify extraction starting soon (respects draw_reminders preference)
-     */
-    public static function notify_extraction_soon($prize_name, $minutes = 5) {
+    public static function notify_extraction_soon($prize_name) {
         return self::send_to_all_excluding_tag(
             'draw_reminders',
             'Estrazione imminente!',
-            "L'estrazione per {$prize_name} iniziera tra {$minutes} minuti!",
+            "L'estrazione per {$prize_name} iniziera' tra 5 minuti!",
             ['type' => 'extraction_soon', 'prize_name' => $prize_name]
         );
     }
@@ -133,10 +116,9 @@ class NotificationHelper {
      * Notify extraction completed - tells all users to check the app for results
      */
     public static function notify_extraction_completed($prize_name) {
-        return self::send_to_all_excluding_tag(
-            'draw_reminders',
+        return self::send_to_all(
             'Estrazione completata!',
-            "L'estrazione per {$prize_name} è terminata! Entra nell'app per verificare l'esito.",
+            "L'estrazione per {$prize_name} e' terminata! Apri l'applicazione per scoprire se hai vinto.",
             ['type' => 'extraction_completed', 'prize_name' => $prize_name]
         );
     }
@@ -201,21 +183,28 @@ class NotificationHelper {
         $payload['large_icon'] = $icon_url;
         $payload['small_icon'] = 'ic_launcher';
 
+        $json_body = json_encode($payload);
+        error_log('[RaffleMania OneSignal] Sending notification: ' . substr($json_body, 0, 500));
+
         $response = wp_remote_post('https://api.onesignal.com/notifications', [
             'headers' => [
                 'Content-Type' => 'application/json',
                 'Authorization' => 'Key ' . $api_key
             ],
-            'body' => json_encode($payload),
+            'body' => $json_body,
             'timeout' => 30
         ]);
 
         if (is_wp_error($response)) {
-            error_log('OneSignal Error: ' . $response->get_error_message());
+            error_log('[RaffleMania OneSignal] HTTP Error: ' . $response->get_error_message());
             return false;
         }
 
-        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $response_body = wp_remote_retrieve_body($response);
+        $status_code = wp_remote_retrieve_response_code($response);
+        error_log('[RaffleMania OneSignal] Response (HTTP ' . $status_code . '): ' . $response_body);
+
+        $body = json_decode($response_body, true);
         return $body;
     }
 }

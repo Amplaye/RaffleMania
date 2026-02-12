@@ -35,14 +35,7 @@ class Plugin {
         // Admin menu
         add_action('admin_menu', [$this, 'add_admin_menu']);
 
-        // Cron for scheduled extractions
-        add_action('rafflemania_check_extractions', [$this, 'check_scheduled_extractions']);
-
-        if (!wp_next_scheduled('rafflemania_check_extractions')) {
-            wp_schedule_event(time(), 'every_minute', 'rafflemania_check_extractions');
-        }
-
-        // Custom cron schedule
+        // Custom cron schedule - MUST be registered BEFORE wp_schedule_event
         add_filter('cron_schedules', function($schedules) {
             $schedules['every_minute'] = [
                 'interval' => 60,
@@ -50,6 +43,22 @@ class Plugin {
             ];
             return $schedules;
         });
+
+        // Cron for scheduled extractions
+        add_action('rafflemania_check_extractions', [$this, 'check_scheduled_extractions']);
+
+        // Force re-schedule to fix previously broken cron registration
+        $cron_fix_version = get_option('rafflemania_cron_fix_version', '0');
+        if ($cron_fix_version < 2) {
+            $timestamp = wp_next_scheduled('rafflemania_check_extractions');
+            if ($timestamp) {
+                wp_unschedule_event($timestamp, 'rafflemania_check_extractions');
+            }
+            wp_schedule_event(time(), 'every_minute', 'rafflemania_check_extractions');
+            update_option('rafflemania_cron_fix_version', 2);
+        } elseif (!wp_next_scheduled('rafflemania_check_extractions')) {
+            wp_schedule_event(time(), 'every_minute', 'rafflemania_check_extractions');
+        }
     }
 
     public function add_cors_headers() {
@@ -295,9 +304,14 @@ class Plugin {
     }
 
     public function check_scheduled_extractions() {
+        // Ensure NotificationHelper is loaded (critical in WP-Cron context)
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
+
         global $wpdb;
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
         $table_draws = $wpdb->prefix . 'rafflemania_draws';
+
+        error_log('[RaffleMania Cron] check_scheduled_extractions running at ' . current_time('mysql'));
 
         // Send "extraction imminent" for timers approaching last 5 minutes
         $approaching_prizes = $wpdb->get_results(
@@ -311,8 +325,7 @@ class Plugin {
         foreach ($approaching_prizes as $prize) {
             $transient_key = 'rafflemania_reminder_' . $prize->id;
             if (!get_transient($transient_key)) {
-                $remaining_min = max(1, intval((strtotime($prize->scheduled_at) - time()) / 60));
-                NotificationHelper::notify_extraction_soon($prize->name, $remaining_min);
+                NotificationHelper::notify_extraction_soon($prize->name);
                 set_transient($transient_key, 1, 600);
             }
         }
@@ -331,11 +344,30 @@ class Plugin {
     }
 
     private function perform_extraction($prize) {
+        error_log('[RaffleMania Cron] perform_extraction started for prize ID=' . $prize->id . ' name=' . $prize->name);
+
         global $wpdb;
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
         $table_tickets = $wpdb->prefix . 'rafflemania_tickets';
         $table_draws = $wpdb->prefix . 'rafflemania_draws';
         $table_winners = $wpdb->prefix . 'rafflemania_winners';
+
+        // Deduplication: check if a draw already exists for this prize recently
+        $recent_draw = $wpdb->get_row($wpdb->prepare(
+            "SELECT id FROM {$table_draws} WHERE prize_id = %d AND extracted_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE)",
+            $prize->id
+        ));
+        if ($recent_draw) {
+            // Draw already exists, just reset the prize status
+            $wpdb->update($table_prizes, [
+                'timer_status' => 'waiting',
+                'current_ads' => 0,
+                'scheduled_at' => null,
+                'timer_started_at' => null,
+                'extracted_at' => current_time('mysql')
+            ], ['id' => $prize->id]);
+            return;
+        }
 
         // Mark prize as extracting
         $wpdb->update(
@@ -344,7 +376,7 @@ class Plugin {
             ['id' => $prize->id]
         );
 
-        // Get all tickets for this prize
+        // Get all active tickets for this prize
         $tickets = $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM {$table_tickets} WHERE prize_id = %d AND status = 'active'",
             $prize->id
@@ -365,17 +397,10 @@ class Plugin {
             return;
         }
 
-        // Generate random winning number
-        $winning_number = rand(1, count($tickets) * 3);
-
-        // Find winner (if any ticket matches)
-        $winner_ticket = null;
-        foreach ($tickets as $ticket) {
-            if ($ticket->ticket_number == $winning_number) {
-                $winner_ticket = $ticket;
-                break;
-            }
-        }
+        // Pick winning number from actual ticket numbers (guarantees a winner)
+        $random_index = array_rand($tickets);
+        $winner_ticket = $tickets[$random_index];
+        $winning_number = (int) $winner_ticket->ticket_number;
 
         // Create draw record
         $draw_id = 'draw_' . $prize->id . '_' . date('YmdHis');
@@ -383,40 +408,36 @@ class Plugin {
             'draw_id' => $draw_id,
             'prize_id' => $prize->id,
             'winning_number' => $winning_number,
-            'winner_user_id' => $winner_ticket ? $winner_ticket->user_id : null,
-            'winner_ticket_id' => $winner_ticket ? $winner_ticket->id : null,
+            'winner_user_id' => $winner_ticket->user_id,
+            'winner_ticket_id' => $winner_ticket->id,
             'total_tickets' => count($tickets),
             'extracted_at' => current_time('mysql'),
             'status' => 'completed'
         ]);
 
-        // Track daily stats for cron extractions
+        $draw_db_id = $wpdb->insert_id;
+
+        // Track daily stats
         $this->track_daily_stat('draws_made');
 
-        // If there's a winner, record it
-        if ($winner_ticket) {
-            $wpdb->insert($table_winners, [
-                'user_id' => $winner_ticket->user_id,
-                'prize_id' => $prize->id,
-                'draw_id' => $wpdb->insert_id,
-                'ticket_id' => $winner_ticket->id,
-                'claimed' => 0,
-                'won_at' => current_time('mysql')
-            ]);
+        // Record winner
+        $wpdb->insert($table_winners, [
+            'user_id' => $winner_ticket->user_id,
+            'prize_id' => $prize->id,
+            'draw_id' => $draw_db_id,
+            'ticket_id' => $winner_ticket->id,
+            'claimed' => 0,
+            'won_at' => current_time('mysql')
+        ]);
 
-            // Track daily winner stat
-            $this->track_daily_stat('winners');
+        $this->track_daily_stat('winners');
 
-            // Mark winning ticket
-            $wpdb->update(
-                $table_tickets,
-                ['status' => 'winner', 'is_winner' => 1],
-                ['id' => $winner_ticket->id]
-            );
-
-            // Send push notification to winner
-            $this->send_winner_notification($winner_ticket->user_id, $prize);
-        }
+        // Mark winning ticket
+        $wpdb->update(
+            $table_tickets,
+            ['status' => 'winner', 'is_winner' => 1],
+            ['id' => $winner_ticket->id]
+        );
 
         // Mark all other tickets as used
         $wpdb->query($wpdb->prepare(
@@ -424,12 +445,10 @@ class Plugin {
             $prize->id
         ));
 
-        // Send "extraction completed" notification to all users
-        $completion_key = 'rafflemania_completion_' . $prize->id;
-        if (!get_transient($completion_key)) {
-            NotificationHelper::notify_extraction_completed($prize->name);
-            set_transient($completion_key, 1, 600);
-        }
+        error_log('[RaffleMania Cron] Extraction completed for prize ' . $prize->name . ', winning_number=' . $winning_number . ', winner_user_id=' . $winner_ticket->user_id . ', total_tickets=' . count($tickets));
+
+        // Notify all users that extraction is completed
+        NotificationHelper::notify_extraction_completed($prize->name);
 
         // Reset prize for next round
         $wpdb->update(
