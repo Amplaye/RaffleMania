@@ -18,6 +18,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_prize_non
         $action = $_POST['action_type'] ?? '';
 
         if ($action === 'create' || $action === 'update') {
+            // Handle scheduling
+            $publish_at = null;
+            $is_active = isset($_POST['is_active']) ? 1 : 0;
+            if (!empty($_POST['publish_at'])) {
+                $publish_at = sanitize_text_field($_POST['publish_at']);
+                // If publish_at is in the future, auto-set is_active = 0
+                if (strtotime($publish_at) > time()) {
+                    $is_active = 0;
+                }
+            }
+
             $data = [
                 'name' => sanitize_text_field($_POST['name']),
                 'description' => sanitize_textarea_field($_POST['description']),
@@ -25,14 +36,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_prize_non
                 'value' => floatval($_POST['value']),
                 'goal_ads' => intval($_POST['goal_ads']),
                 'timer_duration' => intval($_POST['timer_duration']),
-                'is_active' => isset($_POST['is_active']) ? 1 : 0
+                'is_active' => $is_active,
+                'publish_at' => $publish_at
             ];
 
             if ($action === 'create') {
                 $data['timer_status'] = 'waiting';
                 $data['current_ads'] = 0;
                 $wpdb->insert($table_prizes, $data);
-                $message = 'Premio creato con successo!';
+                $message = $publish_at ? 'Premio programmato con successo!' : 'Premio creato con successo!';
             } else {
                 $prize_id = intval($_POST['prize_id']);
                 $wpdb->update($table_prizes, $data, ['id' => $prize_id]);
@@ -140,8 +152,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_prize_non
     }
 }
 
-// Get prizes
-$prizes = $wpdb->get_results("SELECT * FROM {$table_prizes} ORDER BY created_at DESC");
+// Auto-activate scheduled prizes whose publish_at has passed
+$wpdb->query(
+    "UPDATE {$table_prizes} SET is_active = 1 WHERE publish_at IS NOT NULL AND publish_at <= NOW() AND is_active = 0"
+);
+
+// Get prizes with sorting
+$sort_prizes = sanitize_text_field($_GET['sort_prizes'] ?? 'newest');
+$order_sql = 'ORDER BY created_at DESC'; // default
+if ($sort_prizes === 'value_desc') {
+    $order_sql = 'ORDER BY value DESC';
+} elseif ($sort_prizes === 'value_asc') {
+    $order_sql = 'ORDER BY value ASC';
+} elseif ($sort_prizes === 'name_asc') {
+    $order_sql = 'ORDER BY name ASC';
+}
+$prizes = $wpdb->get_results("SELECT * FROM {$table_prizes} {$order_sql}");
 
 // Stats
 $stats = [
@@ -149,12 +175,14 @@ $stats = [
     'active' => 0,
     'countdown' => 0,
     'completed' => 0,
+    'scheduled' => 0,
     'total_value' => 0
 ];
 foreach ($prizes as $p) {
     if ($p->is_active) $stats['active']++;
     if ($p->timer_status === 'countdown') $stats['countdown']++;
     if ($p->timer_status === 'completed') $stats['completed']++;
+    if (!$p->is_active && $p->publish_at && strtotime($p->publish_at) > time()) $stats['scheduled']++;
     $stats['total_value'] += $p->value;
 }
 
@@ -329,6 +357,7 @@ if (isset($_GET['edit'])) {
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
+            align-items: center;
         }
 
         /* Progress bar */
@@ -389,33 +418,87 @@ if (isset($_GET['edit'])) {
         .rafflemania-btn {
             display: inline-flex;
             align-items: center;
-            gap: 4px;
-            padding: 6px 14px;
-            border: none;
-            border-radius: 6px;
-            font-size: 12px;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
             text-decoration: none;
+            line-height: 1;
+            vertical-align: middle;
+            white-space: nowrap;
         }
-        .rafflemania-btn:hover { opacity: 0.85; transform: translateY(-1px); }
-        .rafflemania-btn-primary { background: #FF6B00; color: white; }
-        .rafflemania-btn-success { background: #28a745; color: white; }
-        .rafflemania-btn-warning { background: #ffc107; color: #333; }
-        .rafflemania-btn-danger { background: #dc3545; color: white; }
-        .rafflemania-btn-secondary { background: #6c757d; color: white; }
+        .rafflemania-btn .dashicons {
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .rafflemania-btn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+        .rafflemania-btn:active { transform: translateY(0); box-shadow: none; }
+        .rafflemania-btn-primary { background: #FF6B00; color: white; border-color: #FF6B00; }
+        .rafflemania-btn-primary:hover { background: #e55d00; border-color: #e55d00; }
+        .rafflemania-btn-success { background: #28a745; color: white; border-color: #28a745; }
+        .rafflemania-btn-success:hover { background: #218838; border-color: #218838; }
+        .rafflemania-btn-warning { background: #ffc107; color: #333; border-color: #ffc107; }
+        .rafflemania-btn-warning:hover { background: #e0a800; border-color: #e0a800; }
+        .rafflemania-btn-danger { background: #dc3545; color: white; border-color: #dc3545; }
+        .rafflemania-btn-danger:hover { background: #c82333; border-color: #c82333; }
+        .rafflemania-btn-secondary { background: #6c757d; color: white; border-color: #6c757d; }
+        .rafflemania-btn-secondary:hover { background: #5a6268; border-color: #5a6268; }
         .rafflemania-btn-outline { background: transparent; border: 2px solid #FF6B00; color: #FF6B00; }
+        .rafflemania-btn-outline:hover { background: #FF6B00; color: white; }
+        .rafflemania-btn-outline-warning { background: transparent; border: 2px solid #e0a800; color: #e0a800; }
+        .rafflemania-btn-outline-warning:hover { background: #e0a800; color: white; }
+        .rafflemania-btn-outline-danger { background: transparent; border: 2px solid #dc3545; color: #dc3545; }
+        .rafflemania-btn-outline-danger:hover { background: #dc3545; color: white; }
+        .rafflemania-btn-outline-secondary { background: transparent; border: 2px solid #6c757d; color: #6c757d; }
+        .rafflemania-btn-outline-secondary:hover { background: #6c757d; color: white; }
+        .rafflemania-btn-icon-only { padding: 8px 10px; }
 
-        .button-primary {
+        .rafflemania-prizes-wrap .button-primary,
+        .rafflemania-prizes-wrap .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 24px !important;
+            border-radius: 8px !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            line-height: 1 !important;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            vertical-align: middle;
+            height: auto !important;
+        }
+        .rafflemania-prizes-wrap .button-primary {
             background: #FF6B00 !important;
             border-color: #FF6B00 !important;
-            border-radius: 8px !important;
-            padding: 8px 24px !important;
+            color: white !important;
         }
-        .button-primary:hover {
+        .rafflemania-prizes-wrap .button-primary:hover {
             background: #e55d00 !important;
             border-color: #e55d00 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(255,107,0,0.25);
+        }
+        .rafflemania-prizes-wrap .button:not(.button-primary) {
+            background: transparent !important;
+            border: 2px solid #6c757d !important;
+            color: #6c757d !important;
+        }
+        .rafflemania-prizes-wrap .button:not(.button-primary):hover {
+            background: #6c757d !important;
+            color: white !important;
+            transform: translateY(-1px);
         }
 
         /* No image placeholder */
@@ -461,6 +544,10 @@ if (isset($_GET['edit'])) {
             <div class="stat-label">Completati</div>
         </div>
         <div class="rafflemania-stat-card">
+            <div class="stat-value" style="color: #0c5460;"><?php echo $stats['scheduled']; ?></div>
+            <div class="stat-label">Programmati</div>
+        </div>
+        <div class="rafflemania-stat-card">
             <div class="stat-value">&euro;<?php echo number_format($stats['total_value'], 0); ?></div>
             <div class="stat-label">Valore Totale</div>
         </div>
@@ -504,6 +591,14 @@ if (isset($_GET['edit'])) {
                     </label>
                 </div>
                 <input type="hidden" name="timer_duration" value="86400">
+
+                <div class="rafflemania-form-row">
+                    <label>Programma Pubblicazione (opzionale)</label>
+                    <input type="datetime-local" name="publish_at" value="<?php echo $editing && $editing->publish_at ? date('Y-m-d\TH:i', strtotime($editing->publish_at)) : ''; ?>" style="max-width: 280px;">
+                    <p class="description" style="font-size: 12px; color: #888; margin-top: 4px;">
+                        Se impostato nel futuro, il premio sara disattivato e apparira in "Raffle Futuri" nell'app fino alla data impostata.
+                    </p>
+                </div>
             </div>
 
             <div class="rafflemania-form-row" style="margin-top: 16px;">
@@ -518,13 +613,27 @@ if (isset($_GET['edit'])) {
         </form>
     </div>
 
-    <!-- Prize Cards -->
+    <!-- Sort Bar + Prize Cards -->
     <?php if (empty($prizes)): ?>
     <div class="rafflemania-form" style="text-align: center; padding: 60px;">
         <span class="dashicons dashicons-gift" style="font-size: 48px; color: #ccc;"></span>
         <p style="color: #999; margin-top: 12px;">Nessun premio ancora. Creane uno!</p>
     </div>
     <?php else: ?>
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+        <div style="font-size: 15px; font-weight: 600; color: #444;">
+            <?php echo count($prizes); ?> premi
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="dashicons dashicons-sort" style="font-size: 18px; width: 18px; height: 18px; color: #888;"></span>
+            <select id="sort-prizes" onchange="window.location.href=this.value" style="padding: 8px 14px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; background: white; color: #333; transition: border-color 0.2s;">
+                <option value="<?php echo admin_url('admin.php?page=rafflemania-prizes&sort_prizes=newest'); ?>" <?php selected($sort_prizes, 'newest'); ?>>Piu recenti</option>
+                <option value="<?php echo admin_url('admin.php?page=rafflemania-prizes&sort_prizes=value_desc'); ?>" <?php selected($sort_prizes, 'value_desc'); ?>>Valore: alto &rarr; basso</option>
+                <option value="<?php echo admin_url('admin.php?page=rafflemania-prizes&sort_prizes=value_asc'); ?>" <?php selected($sort_prizes, 'value_asc'); ?>>Valore: basso &rarr; alto</option>
+                <option value="<?php echo admin_url('admin.php?page=rafflemania-prizes&sort_prizes=name_asc'); ?>" <?php selected($sort_prizes, 'name_asc'); ?>>Nome A-Z</option>
+            </select>
+        </div>
+    </div>
     <div class="rafflemania-prize-grid">
         <?php foreach ($prizes as $prize): ?>
         <?php
@@ -551,7 +660,9 @@ if (isset($_GET['edit'])) {
                     <p class="prize-name"><?php echo esc_html($prize->name); ?></p>
                     <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
                         <span class="prize-value">&euro;<?php echo number_format($prize->value, 2); ?></span>
-                        <?php if ($prize->is_active): ?>
+                        <?php if (!$prize->is_active && $prize->publish_at && strtotime($prize->publish_at) > time()): ?>
+                        <span class="rafflemania-badge rafflemania-badge-info">Programmato</span>
+                        <?php elseif ($prize->is_active): ?>
                         <span class="rafflemania-badge rafflemania-badge-success">Attivo</span>
                         <?php else: ?>
                         <span class="rafflemania-badge rafflemania-badge-danger">Inattivo</span>
@@ -609,12 +720,19 @@ if (isset($_GET['edit'])) {
                     Estrazione completata
                 </div>
                 <?php endif; ?>
+
+                <?php if ($prize->publish_at && strtotime($prize->publish_at) > time()): ?>
+                <div style="background: #d1ecf1; color: #0c5460; padding: 10px 16px; border-radius: 8px; text-align: center; margin-top: 10px; font-size: 13px;">
+                    <span class="dashicons dashicons-calendar-alt" style="font-size: 16px; width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;"></span>
+                    Pubblicazione: <strong><?php echo date('d/m/Y H:i', strtotime($prize->publish_at)); ?></strong>
+                </div>
+                <?php endif; ?>
             </div>
 
             <!-- Footer Actions -->
             <div class="rafflemania-prize-card-footer">
                 <a href="<?php echo admin_url('admin.php?page=rafflemania-prizes&edit=' . $prize->id); ?>" class="rafflemania-btn rafflemania-btn-outline">
-                    <span class="dashicons dashicons-edit" style="font-size: 14px;"></span> Modifica
+                    <span class="dashicons dashicons-edit"></span> Modifica
                 </a>
 
                 <?php if ($prize->timer_status === 'waiting'): ?>
@@ -622,8 +740,8 @@ if (isset($_GET['edit'])) {
                     <?php wp_nonce_field('rafflemania_prize_action', 'rafflemania_prize_nonce'); ?>
                     <input type="hidden" name="action_type" value="force_timer">
                     <input type="hidden" name="prize_id" value="<?php echo $prize->id; ?>">
-                    <button type="submit" class="rafflemania-btn rafflemania-btn-warning">
-                        <span class="dashicons dashicons-clock" style="font-size: 14px;"></span> Forza Timer
+                    <button type="submit" class="rafflemania-btn rafflemania-btn-outline-warning">
+                        <span class="dashicons dashicons-clock"></span> Forza Timer
                     </button>
                 </form>
                 <?php endif; ?>
@@ -633,8 +751,8 @@ if (isset($_GET['edit'])) {
                     <?php wp_nonce_field('rafflemania_prize_action', 'rafflemania_prize_nonce'); ?>
                     <input type="hidden" name="action_type" value="force_extraction">
                     <input type="hidden" name="prize_id" value="<?php echo $prize->id; ?>">
-                    <button type="submit" class="rafflemania-btn rafflemania-btn-danger">
-                        <span class="dashicons dashicons-randomize" style="font-size: 14px;"></span> Forza Estrazione
+                    <button type="submit" class="rafflemania-btn rafflemania-btn-outline-danger">
+                        <span class="dashicons dashicons-randomize"></span> Forza Estrazione
                     </button>
                 </form>
                 <?php endif; ?>
@@ -643,8 +761,8 @@ if (isset($_GET['edit'])) {
                     <?php wp_nonce_field('rafflemania_prize_action', 'rafflemania_prize_nonce'); ?>
                     <input type="hidden" name="action_type" value="reset_timer">
                     <input type="hidden" name="prize_id" value="<?php echo $prize->id; ?>">
-                    <button type="submit" class="rafflemania-btn rafflemania-btn-secondary">
-                        <span class="dashicons dashicons-image-rotate" style="font-size: 14px;"></span> Reset
+                    <button type="submit" class="rafflemania-btn rafflemania-btn-outline-secondary">
+                        <span class="dashicons dashicons-image-rotate"></span> Reset
                     </button>
                 </form>
 
@@ -652,8 +770,8 @@ if (isset($_GET['edit'])) {
                     <?php wp_nonce_field('rafflemania_prize_action', 'rafflemania_prize_nonce'); ?>
                     <input type="hidden" name="action_type" value="delete">
                     <input type="hidden" name="prize_id" value="<?php echo $prize->id; ?>">
-                    <button type="submit" class="rafflemania-btn" style="color: #dc3545; background: transparent;">
-                        <span class="dashicons dashicons-trash" style="font-size: 14px;"></span>
+                    <button type="submit" class="rafflemania-btn rafflemania-btn-outline-danger rafflemania-btn-icon-only">
+                        <span class="dashicons dashicons-trash"></span>
                     </button>
                 </form>
             </div>

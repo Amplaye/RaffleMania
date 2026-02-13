@@ -115,16 +115,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_bulk_rewa
                     ]),
                 ]);
 
-                // ── Push notification ───────────────────────────────────────────
-                if ($send_push) {
-                    $parts = [];
-                    if ($credits_amount > 0) $parts[] = "{$credits_amount} crediti";
-                    if ($xp_amount > 0)      $parts[] = "{$xp_amount} XP";
-                    if ($tickets_amount > 0)  $parts[] = "{$tickets_amount} biglietti";
-                    $push_msg = $reason . ' — ' . implode(', ', $parts);
-
-                    \RaffleMania\NotificationHelper::send_to_all('Ricompensa ricevuta!', $push_msg);
+                // ── Create per-user reward notifications for in-app popup ──────
+                $table_reward_notif = $wpdb->prefix . 'rafflemania_reward_notifications';
+                $bulk_log_id = $wpdb->insert_id;
+                $recipient_ids = $wpdb->get_col("SELECT id FROM {$table_users} WHERE {$where_clause}");
+                foreach ($recipient_ids as $uid) {
+                    $wpdb->insert($table_reward_notif, [
+                        'user_id' => (int)$uid,
+                        'bulk_reward_id' => $bulk_log_id,
+                        'reason' => $reason,
+                        'credits_amount' => $credits_amount,
+                        'xp_amount' => $xp_amount,
+                        'tickets_amount' => $tickets_amount,
+                    ]);
                 }
+
+                // ── Push notification (always send with data for in-app popup) ──
+                $parts = [];
+                if ($credits_amount > 0) $parts[] = "{$credits_amount} crediti";
+                if ($xp_amount > 0)      $parts[] = "{$xp_amount} XP";
+                if ($tickets_amount > 0)  $parts[] = "{$tickets_amount} biglietti";
+                $push_msg = $reason . ' — ' . implode(', ', $parts);
+
+                \RaffleMania\NotificationHelper::send_to_all(
+                    'Ricompensa ricevuta!',
+                    $push_msg,
+                    [
+                        'type' => 'bulk_reward',
+                        'reason' => $reason,
+                        'credits' => (string)$credits_amount,
+                        'xp' => (string)$xp_amount,
+                        'tickets' => (string)$tickets_amount,
+                    ]
+                );
 
                 $notice      = "Ricompensa inviata con successo a <strong>{$recipients_count}</strong> utenti.";
                 $notice_type = 'success';
@@ -585,10 +608,10 @@ $total_active_users = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_users} 
                     </div>
                 </div>
 
-                <!-- Push checkbox -->
+                <!-- Push notification info -->
                 <div class="rm-checkbox-row">
-                    <input type="checkbox" id="send_push" name="send_push" value="1" <?php checked(!empty($_POST['send_push'])); ?>>
-                    <label for="send_push">Invia notifica push automatica a tutti i destinatari</label>
+                    <span class="dashicons dashicons-megaphone" style="font-size: 18px; width: 18px; height: 18px; color: #FF6B00;"></span>
+                    <label style="cursor: default;">Notifica push e popup in-app verranno inviati automaticamente a tutti i destinatari</label>
                 </div>
 
                 <!-- Submit -->
@@ -775,7 +798,6 @@ $total_active_users = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_users} 
         var tickets  = parseInt(document.getElementById('tickets_amount').value) || 0;
         var target   = targetSelect.value === 'level_range' ? 'utenti livello ' + (document.getElementById('min_level').value || 0) + '–' + (document.getElementById('max_level').value || 10) : 'tutti gli utenti attivi';
         var count    = previewCount.textContent;
-        var pushText = document.getElementById('send_push').checked ? 'SI' : 'NO';
 
         if (credits === 0 && xp === 0 && tickets === 0) {
             e.preventDefault();
@@ -796,7 +818,7 @@ $total_active_users = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_users} 
         if (xp > 0)      summary += 'XP: +' + xp.toLocaleString('it-IT') + '\n';
         if (tickets > 0)  summary += 'Biglietti: +' + tickets.toLocaleString('it-IT') + '\n';
         summary += 'Destinatari: ' + target + ' (~' + count + ' utenti)\n';
-        summary += 'Notifica push: ' + pushText + '\n\n';
+        summary += 'Notifica push: SI (automatica)\n\n';
         summary += 'Confermi l\'invio definitivo?';
 
         if (!confirm(summary)) {

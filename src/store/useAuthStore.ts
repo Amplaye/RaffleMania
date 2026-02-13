@@ -60,13 +60,13 @@ const mapApiUserToUser = (apiUser: any): User => ({
   displayName: apiUser.username,
   avatarColor: apiUser.avatar_color || apiUser.avatarColor || '#FF6B00',
   avatarUrl: apiUser.avatar_url || apiUser.avatarUrl || undefined,
-  credits: apiUser.credits || 0,
-  xp: apiUser.xp || 0,
-  level: apiUser.level || 1,
+  credits: apiUser.credits ?? 0,
+  xp: apiUser.xp ?? 0,
+  level: apiUser.level ?? 1,
   totalTickets: apiUser.total_tickets || apiUser.totalTickets || 0,
   watchedAdsCount: apiUser.watched_ads || apiUser.watchedAds || apiUser.watchedAdsCount || 0,
   winsCount: apiUser.wins_count || apiUser.winsCount || 0,
-  currentStreak: apiUser.current_streak || apiUser.currentStreak || 0,
+  currentStreak: apiUser.current_streak ?? apiUser.currentStreak ?? 0,
   lastStreakDate: apiUser.last_streak_date || apiUser.lastStreakDate || undefined,
   referralCode: apiUser.referral_code || apiUser.referralCode || '',
   referredBy: apiUser.referred_by || apiUser.referredBy || undefined,
@@ -167,6 +167,9 @@ export const useAuthStore = create<AuthState>()(
         sessionActive: true,
         isLoading: false,
       });
+
+      // Sync streak store from server after login
+      import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
     } catch (error) {
       set({isLoading: false});
       throw new Error(getErrorMessage(error));
@@ -243,6 +246,10 @@ export const useAuthStore = create<AuthState>()(
           sessionActive: true,
           isLoading: false,
         });
+
+        // Sync streak store from server after login
+        import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
+
         return {isNewUser: !!isNewUser};
       } else {
         set({isLoading: false});
@@ -369,6 +376,10 @@ export const useAuthStore = create<AuthState>()(
         sessionActive: true,
         isLoading: false,
       });
+
+      // Sync streak store from server after login
+      import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
+
       return {isNewUser: !!isNewUser};
     } catch (error: any) {
       set({isLoading: false});
@@ -536,6 +547,9 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
           sessionActive: true,
         });
+
+        // Sync streak store from server on app reopen
+        import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
       }
     } catch {
       await tokenManager.clearTokens();

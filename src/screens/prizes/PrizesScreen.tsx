@@ -14,6 +14,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {AnimatedBackground} from '../../components/common';
 import {usePrizesStore} from '../../store';
+import type {PrizeSortOption} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {Prize} from '../../types';
 import {
@@ -163,20 +164,43 @@ const PrizeListCard: React.FC<{
   );
 };
 
+// Format publish date for display
+const formatPublishDate = (dateStr?: string): string => {
+  if (!dateStr) return 'Prossimamente';
+  const date = new Date(dateStr);
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${day}/${month}/${year} alle ${hours}:${minutes}`;
+};
+
+// Get month/year label for grouping
+const getMonthLabel = (dateStr?: string): string => {
+  if (!dateStr) return 'Da definire';
+  const date = new Date(dateStr);
+  const months = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+  return `${months[date.getMonth()]} ${date.getFullYear()}`;
+};
+
 // Future Prize Card with section header
 const FuturePrizeCard: React.FC<{
   prize: Prize;
   section: string;
+  showSection: boolean;
   onPress: () => void;
-}> = ({prize, section, onPress}) => {
+}> = ({prize, section, showSection, onPress}) => {
   const {colors} = useThemeColors();
 
   return (
     <View style={styles.futurePrizeWrapper}>
-      {/* Section Header */}
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, {color: colors.textMuted}]}>{section}</Text>
-      </View>
+      {/* Section Header - only show once per group */}
+      {showSection && (
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, {color: colors.textMuted}]}>{section}</Text>
+        </View>
+      )}
 
       {/* Card */}
       <TouchableOpacity
@@ -196,9 +220,12 @@ const FuturePrizeCard: React.FC<{
             <Text style={[styles.prizeName, {color: colors.text}]} numberOfLines={2}>
               {prize.name}
             </Text>
-            <Text style={[styles.comingSoonText, {color: COLORS.primary}]}>
-              Prossimamente
-            </Text>
+            <View style={styles.publishDateRow}>
+              <Ionicons name="calendar-outline" size={14} color={COLORS.primary} />
+              <Text style={[styles.comingSoonText, {color: COLORS.primary}]}>
+                {formatPublishDate(prize.publishAt)}
+              </Text>
+            </View>
           </View>
 
           <Ionicons name="chevron-forward" size={24} color={COLORS.primary} />
@@ -208,9 +235,16 @@ const FuturePrizeCard: React.FC<{
   );
 };
 
+const SORT_OPTIONS: {value: PrizeSortOption; label: string}[] = [
+  {value: 'default', label: 'Recenti'},
+  {value: 'value_desc', label: 'Valore ↓'},
+  {value: 'value_asc', label: 'Valore ↑'},
+];
+
 export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
-  const {prizes, fetchPrizes} = usePrizesStore();
+  const {fetchPrizes, getSortedActivePrizes, sortBy, setSortBy} = usePrizesStore();
+  const prizes = usePrizesStore(s => s.prizes);
   const [activeTab, setActiveTab] = useState<TabType>('in_corso');
 
   useEffect(() => {
@@ -218,20 +252,20 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Filter prizes by status
-  const activePrizes = prizes.filter(p => p.isActive);
-  const futurePrizes = prizes.filter(p => !p.isActive);
+  // Filter prizes by status - use sorted for active
+  const activePrizes = getSortedActivePrizes();
+  const futurePrizes = prizes.filter(p => !p.isActive && p.publishAt && new Date(p.publishAt) > new Date());
 
   const handlePrizePress = (prize: Prize) => {
     navigation.navigate('PrizeDetail', {prizeId: prize.id});
   };
 
-  // Mock future prizes sections
-  const futureSections = [
-    {section: 'Febbraio 2026', prizes: futurePrizes.slice(0, 1)},
-    {section: 'Marzo 2026', prizes: futurePrizes.slice(1, 2)},
-    {section: 'Aprile 2026', prizes: futurePrizes.slice(2, 3)},
-  ].filter(s => s.prizes.length > 0);
+  // Group future prizes by month based on publishAt
+  const sortedFuturePrizes = [...futurePrizes].sort((a, b) => {
+    if (!a.publishAt) return 1;
+    if (!b.publishAt) return -1;
+    return new Date(a.publishAt).getTime() - new Date(b.publishAt).getTime();
+  });
 
   return (
     <LinearGradient
@@ -268,6 +302,30 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
           />
         </View>
 
+        {/* Sort Filter - only visible on "in_corso" tab */}
+        {activeTab === 'in_corso' && (
+          <View style={styles.sortRow}>
+            {SORT_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[
+                  styles.sortChip,
+                  {backgroundColor: sortBy === opt.value ? COLORS.primary : colors.card},
+                ]}
+                onPress={() => setSortBy(opt.value)}
+                activeOpacity={0.7}>
+                <Text
+                  style={[
+                    styles.sortChipText,
+                    {color: sortBy === opt.value ? COLORS.white : colors.textMuted},
+                  ]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {/* Content based on tab */}
         <ScrollView
           style={styles.scrollView}
@@ -292,18 +350,22 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
               </View>
             )
           ) : (
-            // Future Raffles
-            futureSections.length > 0 ? (
-              futureSections.map((section) =>
-                section.prizes.map((prize) => (
+            // Future Raffles - grouped by month
+            sortedFuturePrizes.length > 0 ? (
+              sortedFuturePrizes.map((prize, index) => {
+                const currentMonth = getMonthLabel(prize.publishAt);
+                const prevMonth = index > 0 ? getMonthLabel(sortedFuturePrizes[index - 1].publishAt) : '';
+                const showSection = currentMonth !== prevMonth;
+                return (
                   <FuturePrizeCard
                     key={prize.id}
                     prize={prize}
-                    section={section.section}
+                    section={currentMonth}
+                    showSection={showSection}
                     onPress={() => handlePrizePress(prize)}
                   />
-                ))
-              )
+                );
+              })
             ) : (
               <View style={styles.emptyContainer}>
                 <Ionicons name="calendar-outline" size={64} color={colors.border} />
@@ -420,6 +482,28 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: FONT_WEIGHT.semibold,
   },
+  // Sort filter - full width chips
+  sortRow: {
+    flexDirection: 'row',
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+    gap: 8,
+  },
+  sortChip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}30`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sortChipText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.semibold,
+    fontWeight: FONT_WEIGHT.semibold,
+    textAlign: 'center',
+  },
   // Scroll
   scrollView: {
     flex: 1,
@@ -494,10 +578,15 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHT.bold,
     textTransform: 'uppercase',
   },
+  publishDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: SPACING.xs,
+  },
   comingSoonText: {
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.medium,
-    marginTop: SPACING.xs,
   },
   // Empty
   emptyContainer: {

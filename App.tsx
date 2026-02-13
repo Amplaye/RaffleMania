@@ -6,6 +6,7 @@ import {AppNavigator} from './src/navigation';
 import {LevelUpOverlay} from './src/components/common';
 import {COLORS} from './src/utils/constants';
 import {navigate} from './src/services/NavigationService';
+import {rewardEvents} from './src/services/rewardEvents';
 
 // Suppress all development-only yellow box warnings
 LogBox.ignoreAllLogs(true);
@@ -83,7 +84,18 @@ const App: React.FC = () => {
 
     // Show notifications even when app is in foreground
     OneSignal.Notifications.addEventListener('foregroundWillDisplay', (event: any) => {
-      event.getNotification().display();
+      const notification = event.getNotification();
+      const data = notification.additionalData as Record<string, string> | undefined;
+
+      // For bulk_reward notifications, suppress the banner and trigger in-app popup instead
+      if (data?.type === 'bulk_reward') {
+        event.preventDefault();
+        // Delay slightly to let the server finish creating notification records
+        setTimeout(() => rewardEvents.emit(), 1500);
+        return;
+      }
+
+      notification.display();
     });
 
     // Handle notification click

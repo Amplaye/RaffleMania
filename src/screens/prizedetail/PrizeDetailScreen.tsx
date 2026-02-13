@@ -262,6 +262,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const imageScaleAnim = useRef(new Animated.Value(0.8)).current;
 
   const prize = prizes.find(p => p.id === prizeId);
+  const isFuturePrize = prize ? (!prize.isActive && !!prize.publishAt && new Date(prize.publishAt) > new Date()) : false;
 
   useEffect(() => {
     Animated.parallel([
@@ -460,15 +461,19 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
 
           {/* Stats Row */}
           <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <View style={[styles.statIconContainer, {backgroundColor: 'rgba(255, 107, 0, 0.1)'}]}>
-                <Ionicons name="ticket-outline" size={20} color={COLORS.primary} />
-              </View>
-              <Text style={[styles.statValue, {color: colors.text}]}>{myTicketCount}</Text>
-              <Text style={[styles.statLabel, {color: colors.textMuted}]}>I Miei Biglietti</Text>
-            </View>
+            {!isFuturePrize && (
+              <>
+                <View style={styles.statItem}>
+                  <View style={[styles.statIconContainer, {backgroundColor: 'rgba(255, 107, 0, 0.1)'}]}>
+                    <Ionicons name="ticket-outline" size={20} color={COLORS.primary} />
+                  </View>
+                  <Text style={[styles.statValue, {color: colors.text}]}>{myTicketCount}</Text>
+                  <Text style={[styles.statLabel, {color: colors.textMuted}]}>I Miei Biglietti</Text>
+                </View>
 
-            <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
+                <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
+              </>
+            )}
 
             <View style={styles.statItem}>
               <View style={[styles.statIconContainer, {backgroundColor: 'rgba(253, 203, 110, 0.1)'}]}>
@@ -481,17 +486,32 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
             <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
 
             <View style={styles.statItem}>
-              <View style={[styles.statIconContainer, {backgroundColor: 'rgba(253, 203, 110, 0.1)'}]}>
-                <Ionicons name="people-outline" size={20} color={COLORS.warning} />
+              <View style={[styles.statIconContainer, {backgroundColor: 'rgba(255, 107, 0, 0.1)'}]}>
+                <Ionicons name="ticket-outline" size={20} color={COLORS.primary} />
               </View>
-              <Text style={[styles.statValue, {color: colors.text}]}>{totalPoolTickets}</Text>
-              <Text style={[styles.statLabel, {color: colors.textMuted}]}>Partecipanti</Text>
+              <Text style={[styles.statValue, {color: colors.text}]}>{prize.goalAds}</Text>
+              <Text style={[styles.statLabel, {color: colors.textMuted}]}>Biglietti Necessari</Text>
             </View>
           </View>
+
+          {/* Publish date for future prizes */}
+          {isFuturePrize && prize.publishAt && (
+            <View style={styles.futurePublishRow}>
+              <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
+              <Text style={[styles.futurePublishText, {color: colors.textSecondary}]}>
+                Disponibile dal{' '}
+                <Text style={{color: COLORS.primary, fontWeight: '700'}}>
+                  {new Date(prize.publishAt).toLocaleDateString('it-IT', {day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'})}
+                </Text>
+              </Text>
+            </View>
+          )}
         </Animated.View>
 
+        {/* === ACTIVE PRIZE SECTIONS (hidden for future prizes) === */}
+
         {/* My Ticket Card - shows user's numbers */}
-        {hasTickets && (
+        {!isFuturePrize && hasTickets && (
           <Animated.View
             style={[
               styles.myTicketCard,
@@ -532,143 +552,151 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
         )}
 
 
-        {/* Countdown Timer - above progress bar */}
-        <FlipCountdownTimer
-          seconds={countdownSeconds ?? 0}
-          isVisible={prize.timerStatus === 'countdown' && countdownSeconds !== null}
-          isUrgent={countdownSeconds !== null && countdownSeconds <= getUrgentThresholdForPrize(prize.value)}
-          isBettingLocked={countdownSeconds !== null && countdownSeconds <= BETTING_LOCK_SECONDS}
-        />
+        {!isFuturePrize && (
+          <>
+            {/* Countdown Timer - above progress bar */}
+            <FlipCountdownTimer
+              seconds={countdownSeconds ?? 0}
+              isVisible={prize.timerStatus === 'countdown' && countdownSeconds !== null}
+              isUrgent={countdownSeconds !== null && countdownSeconds <= getUrgentThresholdForPrize(prize.value)}
+              isBettingLocked={countdownSeconds !== null && countdownSeconds <= BETTING_LOCK_SECONDS}
+            />
 
-        {/* Progress Section */}
-        <Animated.View
-          style={[
-            {
-              opacity: fadeAnim,
-              transform: [{translateY: slideAnim}],
-            },
-          ]}>
-          <ShimmerProgressBar currentAds={prize.currentAds} goalAds={prize.goalAds} />
-        </Animated.View>
+            {/* Progress Section */}
+            <Animated.View
+              style={[
+                {
+                  opacity: fadeAnim,
+                  transform: [{translateY: slideAnim}],
+                },
+              ]}>
+              <ShimmerProgressBar currentAds={prize.currentAds} goalAds={prize.goalAds} />
+            </Animated.View>
 
-        {/* How it Works */}
-        <Animated.View
-          style={[
-            styles.howItWorksCard,
-            neon.glowSubtle,
-            {
-              backgroundColor: colors.card,
-              opacity: fadeAnim,
-              transform: [{translateY: slideAnim}],
-            },
-          ]}>
-          <Text style={[styles.sectionTitle, {color: colors.text}]}>Come Funziona</Text>
+            {/* How it Works */}
+            <Animated.View
+              style={[
+                styles.howItWorksCard,
+                neon.glowSubtle,
+                {
+                  backgroundColor: colors.card,
+                  opacity: fadeAnim,
+                  transform: [{translateY: slideAnim}],
+                },
+              ]}>
+              <Text style={[styles.sectionTitle, {color: colors.text}]}>Come Funziona</Text>
 
-          <View style={styles.stepsList}>
-            <View style={styles.stepItem}>
-              <View style={[styles.stepNumber, {backgroundColor: COLORS.primary}]}>
-                <Text style={styles.stepNumberText}>1</Text>
-              </View>
-              <View style={styles.stepContent}>
-                <Text style={[styles.stepTitle, {color: colors.text}]}>Guarda un'Ad</Text>
-                <Text style={[styles.stepDescription, {color: colors.textMuted}]}>
-                  Premi il pulsante per guardare una pubblicita
-                </Text>
-              </View>
-            </View>
+              <View style={styles.stepsList}>
+                <View style={styles.stepItem}>
+                  <View style={[styles.stepNumber, {backgroundColor: COLORS.primary}]}>
+                    <Text style={styles.stepNumberText}>1</Text>
+                  </View>
+                  <View style={styles.stepContent}>
+                    <Text style={[styles.stepTitle, {color: colors.text}]}>Guarda un'Ad</Text>
+                    <Text style={[styles.stepDescription, {color: colors.textMuted}]}>
+                      Premi il pulsante per guardare una pubblicita
+                    </Text>
+                  </View>
+                </View>
 
-            <View style={styles.stepItem}>
-              <View style={[styles.stepNumber, {backgroundColor: COLORS.primary}]}>
-                <Text style={styles.stepNumberText}>2</Text>
-              </View>
-              <View style={styles.stepContent}>
-                <Text style={[styles.stepTitle, {color: colors.text}]}>Ottieni un Biglietto</Text>
-                <Text style={[styles.stepDescription, {color: colors.textMuted}]}>
-                  Ricevi un biglietto unico per questo premio
-                </Text>
-              </View>
-            </View>
+                <View style={styles.stepItem}>
+                  <View style={[styles.stepNumber, {backgroundColor: COLORS.primary}]}>
+                    <Text style={styles.stepNumberText}>2</Text>
+                  </View>
+                  <View style={styles.stepContent}>
+                    <Text style={[styles.stepTitle, {color: colors.text}]}>Ottieni un Biglietto</Text>
+                    <Text style={[styles.stepDescription, {color: colors.textMuted}]}>
+                      Ricevi un biglietto unico per questo premio
+                    </Text>
+                  </View>
+                </View>
 
-            <View style={styles.stepItem}>
-              <View style={[styles.stepNumber, {backgroundColor: COLORS.primary}]}>
-                <Text style={styles.stepNumberText}>3</Text>
-              </View>
-              <View style={styles.stepContent}>
-                <Text style={[styles.stepTitle, {color: colors.text}]}>Aspetta l'Estrazione</Text>
-                <Text style={[styles.stepDescription, {color: colors.textMuted}]}>
-                  Quando la barra si riempie parte il countdown!
-                </Text>
-              </View>
-            </View>
+                <View style={styles.stepItem}>
+                  <View style={[styles.stepNumber, {backgroundColor: COLORS.primary}]}>
+                    <Text style={styles.stepNumberText}>3</Text>
+                  </View>
+                  <View style={styles.stepContent}>
+                    <Text style={[styles.stepTitle, {color: colors.text}]}>Aspetta l'Estrazione</Text>
+                    <Text style={[styles.stepDescription, {color: colors.textMuted}]}>
+                      Quando la barra si riempie parte il countdown!
+                    </Text>
+                  </View>
+                </View>
 
-            <View style={styles.stepItem}>
-              <View style={[styles.stepNumber, {backgroundColor: COLORS.primary}]}>
-                <Text style={styles.stepNumberText}>4</Text>
+                <View style={styles.stepItem}>
+                  <View style={[styles.stepNumber, {backgroundColor: COLORS.primary}]}>
+                    <Text style={styles.stepNumberText}>4</Text>
+                  </View>
+                  <View style={styles.stepContent}>
+                    <Text style={[styles.stepTitle, {color: colors.text}]}>Vinci il Premio</Text>
+                    <Text style={[styles.stepDescription, {color: colors.textMuted}]}>
+                      Se il tuo numero viene estratto, vinci!
+                    </Text>
+                  </View>
+                </View>
               </View>
-              <View style={styles.stepContent}>
-                <Text style={[styles.stepTitle, {color: colors.text}]}>Vinci il Premio</Text>
-                <Text style={[styles.stepDescription, {color: colors.textMuted}]}>
-                  Se il tuo numero viene estratto, vinci!
-                </Text>
-              </View>
-            </View>
-          </View>
-        </Animated.View>
+            </Animated.View>
 
-        {/* Spacer for sticky bottom buttons */}
-        <View style={{height: 160}} />
+            {/* Spacer for sticky bottom buttons */}
+            <View style={{height: 160}} />
+          </>
+        )}
       </ScrollView>
 
-      {/* Fixed Bottom Buttons */}
-      <View style={[styles.bottomButtonContainer, {backgroundColor: colors.background}]}>
-        {/* Watch Ad Button */}
-        <TouchableOpacity
-          style={[styles.watchButton, neon.glowStrong, (isWatchingAd || adCooldownSeconds > 0) && styles.buttonDisabled]}
-          activeOpacity={0.8}
-          onPress={handleWatchAd}
-          disabled={isWatchingAd || adCooldownSeconds > 0}>
-          <LinearGradient
-            colors={isWatchingAd || adCooldownSeconds > 0 ? ['#666', '#555'] : [COLORS.primary, '#FF8500']}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 0}}
-            style={styles.watchButtonGradient}>
-            <View style={styles.watchButtonContent}>
-              {isWatchingAd ? (
-                <>
-                  <Ionicons name="hourglass" size={24} color={COLORS.white} />
-                  <Text style={styles.watchButtonText}>Caricamento...</Text>
-                </>
-              ) : adCooldownSeconds > 0 ? (
-                <>
-                  <Ionicons name="time-outline" size={20} color={COLORS.white} />
-                  <Text style={styles.watchButtonText}>ATTENDI {formatAdCooldown(adCooldownSeconds)}</Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="play-circle" size={20} color={COLORS.white} />
-                  <Text style={styles.watchButtonText}>GUARDA PUBBLICITÀ E RICEVI UN BIGLIETTO</Text>
-                </>
-              )}
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
+      {/* Fixed Bottom Buttons - only for active prizes */}
+      {!isFuturePrize && (
+        <View style={[styles.bottomButtonContainer, {backgroundColor: colors.background}]}>
+          {/* Watch Ad Button */}
+          <TouchableOpacity
+            style={[styles.watchButton, neon.glowStrong, (isWatchingAd || adCooldownSeconds > 0) && styles.buttonDisabled]}
+            activeOpacity={0.8}
+            onPress={handleWatchAd}
+            disabled={isWatchingAd || adCooldownSeconds > 0}>
+            <LinearGradient
+              colors={isWatchingAd || adCooldownSeconds > 0 ? ['#666', '#555'] : [COLORS.primary, '#FF8500']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 0}}
+              style={styles.watchButtonGradient}>
+              <View style={styles.watchButtonContent}>
+                {isWatchingAd ? (
+                  <>
+                    <Ionicons name="hourglass" size={24} color={COLORS.white} />
+                    <Text style={styles.watchButtonText}>Caricamento...</Text>
+                  </>
+                ) : adCooldownSeconds > 0 ? (
+                  <>
+                    <Ionicons name="time-outline" size={20} color={COLORS.white} />
+                    <Text style={styles.watchButtonText}>ATTENDI {formatAdCooldown(adCooldownSeconds)}</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="play-circle" size={20} color={COLORS.white} />
+                    <Text style={styles.watchButtonText}>GUARDA PUBBLICITÀ E RICEVI UN BIGLIETTO</Text>
+                  </>
+                )}
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
 
-        {/* Buy Credits Button */}
-        <TouchableOpacity
-          style={[styles.buyCreditsButton, {backgroundColor: colors.card, borderColor: COLORS.primary}]}
-          onPress={() => navigation.navigate('MainTabs', {screen: 'Shop'})}
-          activeOpacity={0.8}>
-          <Ionicons name="cart" size={20} color={COLORS.primary} />
-          <Text style={styles.buyCreditsText}>COMPRA CREDITI</Text>
-        </TouchableOpacity>
-      </View>
+          {/* Buy Credits Button */}
+          <TouchableOpacity
+            style={[styles.buyCreditsButton, {backgroundColor: colors.card, borderColor: COLORS.primary}]}
+            onPress={() => navigation.navigate('MainTabs', {screen: 'Shop'})}
+            activeOpacity={0.8}>
+            <Ionicons name="cart" size={20} color={COLORS.primary} />
+            <Text style={styles.buyCreditsText}>COMPRA CREDITI</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Ticket Success Modal */}
-      <TicketSuccessModal
-        visible={showTicketModal}
-        ticketInfo={newTicketInfo}
-        onClose={handleCloseModal}
-      />
+      {!isFuturePrize && (
+        <TicketSuccessModal
+          visible={showTicketModal}
+          ticketInfo={newTicketInfo}
+          onClose={handleCloseModal}
+        />
+      )}
     </LinearGradient>
   );
 };
@@ -787,6 +815,20 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 50,
+  },
+  futurePublishRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginTop: SPACING.lg,
+    paddingTop: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  futurePublishText: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.medium,
+    flex: 1,
   },
   // My Ticket Card Styles
   myTicketCard: {

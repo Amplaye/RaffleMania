@@ -1,5 +1,5 @@
 <?php
-// Force opcache refresh: 2026-02-09-referral-auth-fix-v3
+// Force opcache refresh: 2026-02-13-delivery-v2
 namespace RaffleMania;
 
 /**
@@ -197,6 +197,15 @@ class Plugin {
 
         add_submenu_page(
             'rafflemania',
+            'Consegna Premi',
+            'Consegna Premi',
+            'manage_options',
+            'rafflemania-deliveries',
+            [$this, 'render_deliveries_page']
+        );
+
+        add_submenu_page(
+            'rafflemania',
             'Spedizioni',
             'Spedizioni',
             'manage_options',
@@ -251,6 +260,15 @@ class Plugin {
 
         add_submenu_page(
             'rafflemania',
+            'XP, Ricompense e Limiti',
+            'XP e Ricompense',
+            'manage_options',
+            'rafflemania-xp',
+            [$this, 'render_xp_page']
+        );
+
+        add_submenu_page(
+            'rafflemania',
             'Impostazioni',
             'Impostazioni',
             'manage_options',
@@ -288,6 +306,11 @@ class Plugin {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/support-chat.php';
     }
 
+    public function render_deliveries_page() {
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/deliveries.php';
+    }
+
     public function render_shipments_page() {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/shipments.php';
     }
@@ -308,6 +331,10 @@ class Plugin {
     public function render_rewards_page() {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
         require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/bulk-rewards.php';
+    }
+
+    public function render_xp_page() {
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/xp-rewards.php';
     }
 
     /**
@@ -661,6 +688,83 @@ class Plugin {
                 }
             }
             update_option('rafflemania_admin_panel_db_version', '2.1');
+        }
+
+        // Migration 2.2: Add delivery_status and delivered_at to winners table
+        if (version_compare($admin_db_version, '2.2', '<')) {
+            $table_winners = $wpdb->prefix . 'rafflemania_winners';
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_winners}'");
+            if ($table_exists) {
+                $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_winners}");
+                $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+                if (!in_array('delivery_status', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_winners} ADD COLUMN delivery_status varchar(20) DEFAULT 'processing' AFTER claimed_at");
+                }
+                if (!in_array('delivered_at', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_winners} ADD COLUMN delivered_at datetime DEFAULT NULL AFTER delivery_status");
+                }
+                if (!in_array('delivery_email_sent', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_winners} ADD COLUMN delivery_email_sent tinyint(1) DEFAULT 0 AFTER delivered_at");
+                }
+            }
+            update_option('rafflemania_admin_panel_db_version', '2.2');
+        }
+
+        // Migration 2.3: Add reward_notifications table for in-app reward popups
+        if (version_compare($admin_db_version, '2.3', '<')) {
+            $table_reward_notif = $wpdb->prefix . 'rafflemania_reward_notifications';
+            $charset_collate = $wpdb->get_charset_collate();
+
+            $wpdb->query("CREATE TABLE IF NOT EXISTS {$table_reward_notif} (
+                id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+                user_id bigint(20) unsigned NOT NULL,
+                bulk_reward_id bigint(20) unsigned DEFAULT NULL,
+                reason varchar(255) NOT NULL,
+                credits_amount int(11) DEFAULT 0,
+                xp_amount int(11) DEFAULT 0,
+                tickets_amount int(11) DEFAULT 0,
+                seen tinyint(1) DEFAULT 0,
+                created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY idx_user_seen (user_id, seen),
+                KEY idx_created (created_at)
+            ) {$charset_collate}");
+
+            update_option('rafflemania_admin_panel_db_version', '2.3');
+        }
+
+        // Migration 2.4: Add voucher_code and delivery_notes to winners table
+        if (version_compare($admin_db_version, '2.4', '<')) {
+            $table_winners = $wpdb->prefix . 'rafflemania_winners';
+            $existing_columns = array_map(function($col) { return $col->Field; },
+                $wpdb->get_results("SHOW COLUMNS FROM {$table_winners}")
+            );
+
+            if (!in_array('voucher_code', $existing_columns)) {
+                $wpdb->query("ALTER TABLE {$table_winners} ADD COLUMN voucher_code varchar(500) DEFAULT NULL AFTER delivery_email_sent");
+            }
+            if (!in_array('delivery_notes', $existing_columns)) {
+                $wpdb->query("ALTER TABLE {$table_winners} ADD COLUMN delivery_notes text DEFAULT NULL AFTER voucher_code");
+            }
+
+            update_option('rafflemania_admin_panel_db_version', '2.4');
+        }
+
+        // Migration 2.5: Add publish_at column to prizes table for scheduling
+        if (version_compare($admin_db_version, '2.5', '<')) {
+            $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_prizes}'");
+            if ($table_exists) {
+                $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_prizes}");
+                $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+                if (!in_array('publish_at', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_prizes} ADD COLUMN publish_at datetime DEFAULT NULL AFTER extracted_at");
+                    $wpdb->query("ALTER TABLE {$table_prizes} ADD KEY publish_at (publish_at)");
+                }
+            }
+            update_option('rafflemania_admin_panel_db_version', '2.5');
         }
     }
 

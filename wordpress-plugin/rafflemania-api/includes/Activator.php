@@ -10,9 +10,30 @@ class Activator {
         self::create_tables();
         self::create_admin_panel_tables();
         self::migrate_referrals_table();
+        self::migrate_prizes_table();
         self::insert_default_data();
         self::insert_admin_panel_defaults();
         flush_rewrite_rules();
+    }
+
+    /**
+     * Migrate prizes table to add publish_at column for scheduling
+     */
+    private static function migrate_prizes_table() {
+        global $wpdb;
+        $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
+
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_prizes}'");
+        if (!$table_exists) {
+            return;
+        }
+
+        $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_prizes}");
+        $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+        if (!in_array('publish_at', $existing_columns)) {
+            $wpdb->query("ALTER TABLE {$table_prizes} ADD COLUMN publish_at datetime DEFAULT NULL AFTER extracted_at");
+        }
     }
 
     /**
@@ -113,11 +134,13 @@ class Activator {
             scheduled_at datetime DEFAULT NULL,
             timer_started_at datetime DEFAULT NULL,
             extracted_at datetime DEFAULT NULL,
+            publish_at datetime DEFAULT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             KEY is_active (is_active),
-            KEY timer_status (timer_status)
+            KEY timer_status (timer_status),
+            KEY publish_at (publish_at)
         ) {$charset_collate};";
         dbDelta($sql_prizes);
 

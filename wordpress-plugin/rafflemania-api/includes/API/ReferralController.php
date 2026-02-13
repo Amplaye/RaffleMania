@@ -346,12 +346,29 @@ class ReferralController {
             $referred_credits = self::REFERRED_CREDITS;
         }
 
-        // Add credits to user
+        // Add credits and XP to user
         $total_credits = $referrer_credits + $referred_credits;
+        $xp_reward = 0;
+        $total_referrals_claimed = count($completed_referrals) + ($my_referral ? 1 : 0);
+
         if ($total_credits > 0) {
+            // Award XP for each referral claimed
+            $xp_per_referral = get_option('rafflemania_xp_referral', 50);
+            $xp_reward = $xp_per_referral * $total_referrals_claimed;
+
+            $user = $wpdb->get_row($wpdb->prepare(
+                "SELECT xp, level FROM {$table_users} WHERE id = %d",
+                $user_id
+            ));
+
+            $new_xp = (int)$user->xp + $xp_reward;
+            $new_level = $this->calculate_level($new_xp);
+
             $wpdb->query($wpdb->prepare(
-                "UPDATE {$table_users} SET credits = credits + %d WHERE id = %d",
+                "UPDATE {$table_users} SET credits = credits + %d, xp = %d, level = %d WHERE id = %d",
                 $total_credits,
+                $new_xp,
+                $new_level,
                 $user_id
             ));
         }
@@ -362,8 +379,32 @@ class ReferralController {
                 'referrer_credits' => $referrer_credits,
                 'referred_credits' => $referred_credits,
                 'total_credits' => $total_credits,
-                'message' => $total_credits > 0 ? "Hai ottenuto {$total_credits} crediti!" : 'Nessun premio da riscuotere',
+                'xp_earned' => $xp_reward,
+                'message' => $total_credits > 0 ? "Hai ottenuto {$total_credits} crediti e {$xp_reward} XP!" : 'Nessun premio da riscuotere',
             ]
         ]);
+    }
+
+    private function calculate_level($xp) {
+        $levels = [
+            1 => 0,
+            2 => 100,
+            3 => 250,
+            4 => 500,
+            5 => 1000,
+            6 => 2000,
+            7 => 3500,
+            8 => 5500,
+            9 => 8000,
+            10 => 11000,
+        ];
+
+        $level = 1;
+        foreach ($levels as $lvl => $threshold) {
+            if ($xp >= $threshold) {
+                $level = $lvl;
+            }
+        }
+        return $level;
     }
 }

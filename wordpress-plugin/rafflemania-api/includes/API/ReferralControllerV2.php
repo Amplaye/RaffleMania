@@ -316,12 +316,37 @@ class ReferralControllerV2 {
         }
 
         $total_credits = $referrer_credits + $referred_credits;
+        $total_xp = 0;
+
         if ($total_credits > 0) {
+            // Award credits
             $wpdb->query($wpdb->prepare(
                 "UPDATE {$table_users} SET credits = credits + %d WHERE id = %d",
                 $total_credits,
                 $user_id
             ));
+
+            // Award XP for each referral claimed
+            $xp_per_referral = (int) get_option('rafflemania_xp_referral', 50);
+            $num_claims = count($completed_referrals) + ($my_referral ? 1 : 0);
+            $total_xp = $xp_per_referral * $num_claims;
+
+            if ($total_xp > 0) {
+                // Get current XP to calculate new level
+                $user = $wpdb->get_row($wpdb->prepare(
+                    "SELECT xp, level FROM {$table_users} WHERE id = %d",
+                    $user_id
+                ));
+                $new_xp = (int) $user->xp + $total_xp;
+                $new_level = $this->calculate_level($new_xp);
+
+                $wpdb->query($wpdb->prepare(
+                    "UPDATE {$table_users} SET xp = %d, level = %d WHERE id = %d",
+                    $new_xp,
+                    $new_level,
+                    $user_id
+                ));
+            }
         }
 
         return new WP_REST_Response([
@@ -330,8 +355,21 @@ class ReferralControllerV2 {
                 'referrer_credits' => $referrer_credits,
                 'referred_credits' => $referred_credits,
                 'total_credits' => $total_credits,
-                'message' => $total_credits > 0 ? "Hai ottenuto {$total_credits} crediti!" : 'Nessun premio da riscuotere',
+                'total_xp' => $total_xp,
+                'message' => $total_credits > 0 ? "Hai ottenuto {$total_credits} crediti e {$total_xp} XP!" : 'Nessun premio da riscuotere',
             ]
         ]);
+    }
+
+    private function calculate_level($xp) {
+        global $wpdb;
+        $table_levels = $wpdb->prefix . 'rafflemania_levels';
+
+        $level = $wpdb->get_var($wpdb->prepare(
+            "SELECT level FROM {$table_levels} WHERE min_xp <= %d AND is_active = 1 ORDER BY min_xp DESC LIMIT 1",
+            $xp
+        ));
+
+        return $level ? (int) $level : 1;
     }
 }

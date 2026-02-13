@@ -94,38 +94,39 @@ class PrizesController extends WP_REST_Controller {
         global $wpdb;
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
 
-        $active_only = $request->get_param('active') !== 'false';
+        // Auto-activate scheduled prizes whose publish_at has passed
+        $wpdb->query(
+            "UPDATE {$table_prizes} SET is_active = 1 WHERE publish_at IS NOT NULL AND publish_at <= NOW() AND is_active = 0"
+        );
 
-        $where = $active_only ? 'WHERE is_active = 1' : '';
+        $active_param = $request->get_param('active');
+        $sort_by = $request->get_param('sort_by');
+
+        // Default: return active + scheduled future prizes for the app
+        if ($active_param === 'false') {
+            $where = 'WHERE is_active = 0';
+        } elseif ($active_param === 'all') {
+            $where = '';
+        } else {
+            $where = 'WHERE (is_active = 1 OR (is_active = 0 AND publish_at IS NOT NULL AND publish_at > NOW()))';
+        }
+
+        // Support sorting by value for the app
+        $order_sql = 'ORDER BY created_at DESC';
+        if ($sort_by === 'value_desc') {
+            $order_sql = 'ORDER BY value DESC';
+        } elseif ($sort_by === 'value_asc') {
+            $order_sql = 'ORDER BY value ASC';
+        }
 
         $prizes = $wpdb->get_results(
-            "SELECT * FROM {$table_prizes} {$where} ORDER BY created_at DESC"
+            "SELECT * FROM {$table_prizes} {$where} {$order_sql}"
         );
 
         $formatted = array_map([$this, 'format_prize'], $prizes);
 
         // Include app settings in prizes response for mobile app - v1.2
-        $xp_watch_ad = (int) get_option('rafflemania_xp_watch_ad', 10);
-        $xp_daily_streak = (int) get_option('rafflemania_xp_daily_streak', 10);
-        $xp_credit_ticket = (int) get_option('rafflemania_xp_credit_ticket', 5);
-        $credits_per_ticket = (int) get_option('rafflemania_credits_per_ticket', 5);
-        $referral_bonus = (int) get_option('rafflemania_referral_bonus', 10);
-
-        $settings = [
-            'xp' => [
-                'watch_ad' => $xp_watch_ad,
-                'daily_streak' => $xp_daily_streak,
-                'credit_ticket' => $xp_credit_ticket,
-                'skip_ad' => $xp_watch_ad * 2,
-                'purchase_credits' => 25,
-                'win_prize' => 250,
-                'referral' => 50,
-            ],
-            'credits' => [
-                'per_ticket' => $credits_per_ticket,
-                'referral_bonus' => $referral_bonus,
-            ],
-        ];
+        $settings = $this->get_settings_data();
 
         return new WP_REST_Response([
             'success' => true,
@@ -141,15 +142,16 @@ class PrizesController extends WP_REST_Controller {
      * Get app settings data
      */
     private function get_settings_data() {
+        $xp_watch_ad = (int) get_option('rafflemania_xp_watch_ad', 10);
         return [
             'xp' => [
-                'watch_ad' => (int) get_option('rafflemania_xp_watch_ad', 10),
+                'watch_ad' => $xp_watch_ad,
                 'daily_streak' => (int) get_option('rafflemania_xp_daily_streak', 10),
                 'credit_ticket' => (int) get_option('rafflemania_xp_credit_ticket', 5),
-                'skip_ad' => (int) get_option('rafflemania_xp_watch_ad', 10) * 2,
-                'purchase_credits' => 25,
-                'win_prize' => 250,
-                'referral' => 50,
+                'skip_ad' => $xp_watch_ad * 2,
+                'purchase_credits' => (int) get_option('rafflemania_xp_purchase_credits', 25),
+                'win_prize' => (int) get_option('rafflemania_xp_win_prize', 250),
+                'referral' => (int) get_option('rafflemania_xp_referral', 50),
             ],
             'credits' => [
                 'per_ticket' => (int) get_option('rafflemania_credits_per_ticket', 5),
@@ -343,6 +345,7 @@ class PrizesController extends WP_REST_Controller {
             'scheduledAt' => $prize->scheduled_at,
             'timerStartedAt' => $prize->timer_started_at,
             'extractedAt' => $prize->extracted_at,
+            'publishAt' => $prize->publish_at ?? null,
             'createdAt' => $prize->created_at
         ];
     }
@@ -443,32 +446,9 @@ class PrizesController extends WP_REST_Controller {
      * Get app settings (XP rewards, credits config)
      */
     public function get_app_settings(WP_REST_Request $request) {
-        // XP rewards from WordPress settings
-        $xp_watch_ad = (int) get_option('rafflemania_xp_watch_ad', 10);
-        $xp_daily_streak = (int) get_option('rafflemania_xp_daily_streak', 10);
-        $xp_credit_ticket = (int) get_option('rafflemania_xp_credit_ticket', 5);
-
-        // Credits settings
-        $credits_per_ticket = (int) get_option('rafflemania_credits_per_ticket', 5);
-        $referral_bonus = (int) get_option('rafflemania_referral_bonus', 10);
-
         return new WP_REST_Response([
             'success' => true,
-            'data' => [
-                'xp' => [
-                    'watch_ad' => $xp_watch_ad,
-                    'daily_streak' => $xp_daily_streak,
-                    'credit_ticket' => $xp_credit_ticket,
-                    'skip_ad' => $xp_watch_ad * 2,
-                    'purchase_credits' => 25,
-                    'win_prize' => 250,
-                    'referral' => 50,
-                ],
-                'credits' => [
-                    'per_ticket' => $credits_per_ticket,
-                    'referral_bonus' => $referral_bonus,
-                ],
-            ]
+            'data' => $this->get_settings_data()
         ], 200);
     }
 }

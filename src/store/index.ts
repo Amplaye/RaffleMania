@@ -3,6 +3,7 @@ export {useTicketsStore, debugTicketsStorage, DAILY_LIMITS} from './useTicketsSt
 export type {ExtractionResult} from './useTicketsStore';
 export {useCreditsStore} from './useCreditsStore';
 export {usePrizesStore, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS} from './usePrizesStore';
+export type {PrizeSortOption} from './usePrizesStore';
 export {useThemeStore} from './useThemeStore';
 export {useLevelStore, XP_REWARDS, LEVELS} from './useLevelStore';
 export {useStreakStore, STREAK_REWARDS, setMidnightStreakCallback} from './useStreakStore';
@@ -20,3 +21,13 @@ export {useChatStore} from './useChatStore';
 export type {ChatMessage} from './useChatStore';
 export {useAdminChatStore} from './useAdminChatStore';
 export type {ChatRoom, ChatMessage as AdminChatMessage} from './useAdminChatStore';
+
+// Sync all stores after login - call this after any successful authentication
+export const syncStoresAfterLogin = async () => {
+  try {
+    const {useStreakStore: streakStore} = await import('./useStreakStore');
+    await streakStore.getState().syncFromServer();
+  } catch (error) {
+    console.log('[syncStoresAfterLogin] Error:', error);
+  }
+};

@@ -60,6 +60,7 @@ export interface Prize {
   scheduledAt?: string; // Data/ora dell'estrazione (impostata quando raggiunge goalAds)
   timerStartedAt?: string; // Quando il timer è partito
   extractedAt?: string; // Quando l'estrazione è avvenuta
+  publishAt?: string; // Data/ora di pubblicazione programmata
 }
 
 // Ticket Types
@@ -78,6 +79,9 @@ export interface Ticket {
   prizeName?: string;
   prizeImage?: string;
   wonAt?: string;
+  // Delivery status for winning tickets
+  deliveryStatus?: 'processing' | 'delivered';
+  deliveredAt?: string;
 }
 
 // Draw Types
@@ -102,6 +106,7 @@ export interface Draw {
 
 // Winner Types
 export type ShippingStatus = 'pending' | 'shipped' | 'delivered';
+export type DeliveryStatus = 'processing' | 'delivered';
 
 export interface Winner {
   id: string;
@@ -112,6 +117,8 @@ export interface Winner {
   prize?: Prize;
   user?: User;
   shippingStatus: ShippingStatus;
+  deliveryStatus: DeliveryStatus;
+  deliveredAt?: string;
   shippingAddress?: ShippingAddress;
   shippingDate?: string;
   trackingNumber?: string;

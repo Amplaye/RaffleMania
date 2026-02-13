@@ -15,3 +15,5 @@ export {TicketSuccessModal} from './TicketSuccessModal';
 export type {TicketSuccessInfo} from './TicketSuccessModal';
 export {LevelUpOverlay} from './LevelUpOverlay';
 export {MissedExtractionModal} from './MissedExtractionModal';
+export {RewardPopupModal} from './RewardPopupModal';
+export type {RewardNotification} from './RewardPopupModal';

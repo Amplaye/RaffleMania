@@ -19,6 +19,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import {AnimatedBackground, StreakModal, StreakRecoveryModal, ExtractionResultModal, UrgencyBorderEffect, FlipCountdownTimer, TicketSuccessModal, TicketSuccessInfo} from '../../components/common';
 import {getTotalPoolTickets} from '../../services/mock';
 import apiClient from '../../services/apiClient';
+import {listenToPrizeUpdates, LivePrizeState} from '../../services/firebasePrizes';
 import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, useExtractionStore, useLevelUpStore, useGameConfigStore, DAILY_LIMITS, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS, setMidnightStreakCallback} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
@@ -39,7 +40,7 @@ interface HomeScreenProps {
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const {colors, gradientColors, isDark} = useThemeColors();
-  const {fetchTickets, addTicket, addTicketsBatch, incrementAdsWatched, canPurchaseTicket, getTicketsPurchasedToday, getAdCooldownRemaining, getAdCooldownSeconds, checkAndResetDaily, resetDailyLimit} = useTicketsStore();
+  const {fetchTickets, addTicket, addTicketsBatch, incrementAdsWatched, canPurchaseTicket, getTicketsPurchasedToday, getAdCooldownRemaining, getAdCooldownSeconds, checkAndResetDaily, resetDailyLimit, cleanupExtractedTickets} = useTicketsStore();
   const {prizes, fetchPrizes, fetchDraws, incrementAdsForPrize, fillPrizeToGoal, startTimerForPrize} = usePrizesStore();
   const {addXPForAd, addXPForTicket} = useLevelStore();
   const {currentStreak, checkAndUpdateStreak, getNextMilestone, hasClaimedToday, _hasHydrated, checkDayChange, setupMidnightTimer, missedDays, shouldShowRecoveryPopup, markRecoveryPopupShown, resetStreak, recoverStreak} = useStreakStore();
@@ -69,28 +70,62 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
 
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Get active prizes only
-  const activePrizes = prizes.filter(p => p.isActive);
+  // Get active prizes sorted by user preference
+  const {getSortedActivePrizes} = usePrizesStore();
+  const activePrizes = getSortedActivePrizes();
   const currentPrize = activePrizes[currentSlideIndex] || null;
 
   useEffect(() => {
     checkAndResetDaily();
     fetchTickets();
     fetchPrizes();
-    fetchDraws();
     fetchSettings();
     fetchGameConfig();
+    // Fetch draws e poi pulisci i ticket per premi già estratti
+    fetchDraws().then(() => {
+      cleanupExtractedTickets();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Poll prizes every 15s to keep timer/extraction state in sync across all users
+  // Real-time prize sync via Firebase + fallback polling every 60s
   useEffect(() => {
+    const activePrizeIds = prizes.filter(p => p.isActive).map(p => p.id);
+    if (activePrizeIds.length === 0) return;
+
+    // Firebase real-time listener per aggiornamenti istantanei
+    const unsubscribe = listenToPrizeUpdates(activePrizeIds, (prizeId: string, state: LivePrizeState) => {
+      // Aggiorna il premio nello store se i dati Firebase sono più recenti
+      usePrizesStore.setState(s => ({
+        prizes: s.prizes.map(p => {
+          if (p.id !== prizeId) return p;
+          // Solo aggiorna se lo stato è cambiato
+          if (
+            p.currentAds === state.currentAds &&
+            p.timerStatus === state.timerStatus
+          ) return p;
+          return {
+            ...p,
+            currentAds: state.currentAds ?? p.currentAds,
+            timerStatus: (state.timerStatus as any) ?? p.timerStatus,
+            scheduledAt: state.scheduledAt ?? p.scheduledAt,
+            timerStartedAt: state.timerStartedAt ?? p.timerStartedAt,
+          };
+        }),
+      }));
+    });
+
+    // Fallback: polling server ogni 60s (ridotto da 15s grazie a Firebase)
     const interval = setInterval(() => {
       fetchPrizes();
-    }, 15000);
-    return () => clearInterval(interval);
+    }, 60000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [prizes.length]);
 
   // Check streak e setup midnight callback
   useEffect(() => {

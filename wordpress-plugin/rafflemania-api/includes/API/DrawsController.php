@@ -502,6 +502,23 @@ class DrawsController extends WP_REST_Controller {
                 'ticket_id' => $winner_ticket->id
             ]);
 
+            // Award XP for winning a prize
+            $xp_reward = get_option('rafflemania_xp_win_prize', 250);
+            $winner_user = $wpdb->get_row($wpdb->prepare(
+                "SELECT xp, level FROM {$table_users} WHERE id = %d",
+                $winner_user_id
+            ));
+            if ($winner_user) {
+                $new_xp = (int)$winner_user->xp + $xp_reward;
+                $new_level = $this->calculate_level($new_xp);
+                $wpdb->query($wpdb->prepare(
+                    "UPDATE {$table_users} SET xp = %d, level = %d WHERE id = %d",
+                    $new_xp,
+                    $new_level,
+                    $winner_user_id
+                ));
+            }
+
             // Track daily winner stat
             $this->track_daily_stat('winners');
 
@@ -682,6 +699,29 @@ class DrawsController extends WP_REST_Controller {
             'extractedAt' => $draw->extracted_at,
             'createdAt' => $draw->created_at
         ];
+    }
+
+    private function calculate_level($xp) {
+        $levels = [
+            1 => 0,
+            2 => 100,
+            3 => 250,
+            4 => 500,
+            5 => 1000,
+            6 => 2000,
+            7 => 3500,
+            8 => 5500,
+            9 => 8000,
+            10 => 11000,
+        ];
+
+        $level = 1;
+        foreach ($levels as $lvl => $threshold) {
+            if ($xp >= $threshold) {
+                $level = $lvl;
+            }
+        }
+        return $level;
     }
 
     private function track_daily_stat($stat_name, $amount = 1) {

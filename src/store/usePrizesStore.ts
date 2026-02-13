@@ -2,6 +2,7 @@ import {create} from 'zustand';
 import {Prize, Draw, Winner, PrizeTimerStatus} from '../types';
 import {API_CONFIG} from '../utils/constants';
 import apiClient, {getErrorMessage} from '../services/apiClient';
+import {publishPrizeState} from '../services/firebasePrizes';
 import {
   mockPrizes,
   getCompletedDraws,
@@ -77,6 +78,7 @@ const mapApiPrizeToPrize = (apiPrize: any): Prize => ({
   scheduledAt: apiPrize.scheduledAt || apiPrize.scheduled_at || undefined,
   timerStartedAt: apiPrize.timerStartedAt || apiPrize.timer_started_at || undefined,
   extractedAt: apiPrize.extractedAt || apiPrize.extracted_at || undefined,
+  publishAt: apiPrize.publishAt || apiPrize.publish_at || undefined,
   isActive: apiPrize.isActive === true || apiPrize.is_active === 1 || apiPrize.is_active === true,
 });
 
@@ -123,12 +125,15 @@ const mapApiPrizeToPrice = (apiPrize: any): Prize => ({
   isActive: true,
 });
 
+export type PrizeSortOption = 'default' | 'value_desc' | 'value_asc';
+
 interface PrizesState {
   prizes: Prize[];
   completedDraws: Draw[];
   recentWinners: Winner[];
   myWins: Winner[];
   isLoading: boolean;
+  sortBy: PrizeSortOption;
 
   // Actions
   fetchPrizes: () => Promise<void>;
@@ -144,11 +149,24 @@ interface PrizesState {
   resetPrizeForNextRound: (prizeId: string) => void;
   addWin: (prizeId: string, drawId: string, ticketId: string, userId: string) => void;
   syncTimerToBackend: (prizeId: string, timerStatus: string, timerStartedAt?: string, scheduledAt?: string, currentAds?: number) => Promise<void>;
+  setSortBy: (sort: PrizeSortOption) => void;
 
   // Getters
   getPrizesWithActiveTimer: () => Prize[];
   getPrizeTimerStatus: (prizeId: string) => PrizeTimerStatus | undefined;
+  getSortedActivePrizes: () => Prize[];
 }
+
+// Helper to sort prizes by the selected option
+const sortPrizes = (prizes: Prize[], sortBy: PrizeSortOption): Prize[] => {
+  if (sortBy === 'value_desc') {
+    return [...prizes].sort((a, b) => b.value - a.value);
+  }
+  if (sortBy === 'value_asc') {
+    return [...prizes].sort((a, b) => a.value - b.value);
+  }
+  return prizes; // default order (from API)
+};
 
 export const usePrizesStore = create<PrizesState>((set, get) => ({
   prizes: [],
@@ -156,6 +174,7 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
   recentWinners: [],
   myWins: [],
   isLoading: false,
+  sortBy: 'default' as PrizeSortOption,
 
   fetchPrizes: async () => {
     set({isLoading: true});
@@ -209,16 +228,16 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
       }
 
       // Use server timer state - trust the server as source of truth for sync across users
-      // But reset stale countdown prizes where scheduledAt is far in the past (>2 min)
-      // to avoid false extraction triggers on app start
+      // But reset stale countdown prizes where scheduledAt is far in the past (>60s)
+      // to avoid stuck 0:00:00 timers on app start
       const now = Date.now();
       const mergedPrizes = apiPrizes.map((newPrize: Prize) => {
         if (
           newPrize.timerStatus === 'countdown' &&
           newPrize.scheduledAt &&
-          new Date(newPrize.scheduledAt).getTime() < now - 120000
+          new Date(newPrize.scheduledAt).getTime() < now - 60000
         ) {
-          // scheduledAt is more than 2 minutes in the past - extraction already happened
+          // scheduledAt is more than 60 seconds in the past - extraction already happened
           return {
             ...newPrize,
             timerStatus: 'waiting' as PrizeTimerStatus,
@@ -338,6 +357,14 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
     if (shouldStartTimer && timerStartedAt && scheduledAt) {
       get().syncTimerToBackend(prizeId, 'countdown', timerStartedAt, scheduledAt, newCurrentAds);
     }
+
+    // Pubblica aggiornamento su Firebase per sync real-time tra utenti
+    publishPrizeState(prizeId, {
+      currentAds: newCurrentAds,
+      timerStatus: shouldStartTimer ? 'countdown' : prize.timerStatus,
+      scheduledAt: scheduledAt || prize.scheduledAt,
+      timerStartedAt: timerStartedAt || prize.timerStartedAt,
+    });
   },
 
   // Fill prize to goal in ONE state update (for debug - avoids UI freeze)
@@ -377,6 +404,14 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
 
     // Sync timer to backend
     get().syncTimerToBackend(prizeId, 'countdown', now, scheduledAt, goalAds);
+
+    // Pubblica su Firebase per sync real-time
+    publishPrizeState(prizeId, {
+      currentAds: goalAds,
+      timerStatus: 'countdown',
+      scheduledAt,
+      timerStartedAt: now,
+    });
   },
 
   // Avvia manualmente il timer per un premio (per debug)
@@ -416,6 +451,14 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
 
     // Sync timer to backend
     get().syncTimerToBackend(prizeId, 'countdown', nowIso, scheduledAtIso, prize.currentAds);
+
+    // Pubblica su Firebase per sync real-time
+    publishPrizeState(prizeId, {
+      currentAds: prize.currentAds,
+      timerStatus: 'countdown',
+      scheduledAt: scheduledAtIso,
+      timerStartedAt: nowIso,
+    });
   },
 
   // Segna un premio come "in estrazione"
@@ -443,11 +486,21 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
           : prize,
       ),
     }));
+
+    // Pulisci i ticket attivi per questo premio (e tutti gli altri premi già estratti)
+    import('./useTicketsStore').then(({useTicketsStore}) => {
+      useTicketsStore.getState().cleanupExtractedTickets();
+    }).catch(() => {});
   },
 
   // Resetta un premio dopo l'estrazione (quando l'utente perde - pronto per nuovo round)
   resetPrizeAfterExtraction: (prizeId: string) => {
     console.log(`Prize ${prizeId} reset for new round after extraction`);
+    // Prima pulisci i ticket attivi per questo premio prima di resettare
+    import('./useTicketsStore').then(({useTicketsStore}) => {
+      useTicketsStore.getState().clearTicketsForPrize(prizeId);
+    }).catch(() => {});
+
     set(state => ({
       prizes: state.prizes.map(prize =>
         prize.id === prizeId
@@ -536,5 +589,15 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
   getPrizeTimerStatus: (prizeId: string) => {
     const state = get();
     return state.prizes.find(p => p.id === prizeId)?.timerStatus;
+  },
+
+  setSortBy: (sort: PrizeSortOption) => {
+    set({sortBy: sort});
+  },
+
+  getSortedActivePrizes: () => {
+    const state = get();
+    const active = state.prizes.filter(p => p.isActive);
+    return sortPrizes(active, state.sortBy);
   },
 }));

@@ -122,18 +122,37 @@ class AdminController extends WP_REST_Controller {
             'created_by' => get_current_user_id(),
         ]);
 
-        // Send push notification
-        if ($send_push && $recipients > 0) {
-            require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
-            $push_msg = "Hai ricevuto una ricompensa: ";
-            $parts = [];
-            if ($credits > 0) $parts[] = "{$credits} crediti";
-            if ($xp > 0) $parts[] = "{$xp} XP";
-            if ($tickets > 0) $parts[] = "{$tickets} biglietti";
-            $push_msg .= implode(', ', $parts) . "!";
-
-            NotificationHelper::send_to_all('Ricompensa ricevuta!', $push_msg);
+        // Create per-user reward notifications for in-app popup
+        $table_reward_notif = $wpdb->prefix . 'rafflemania_reward_notifications';
+        $bulk_log_id = $wpdb->insert_id;
+        $recipient_ids = $wpdb->get_col("SELECT id FROM {$table_users} WHERE {$where}");
+        foreach ($recipient_ids as $uid) {
+            $wpdb->insert($table_reward_notif, [
+                'user_id' => (int)$uid,
+                'bulk_reward_id' => $bulk_log_id,
+                'reason' => $reason,
+                'credits_amount' => $credits,
+                'xp_amount' => $xp,
+                'tickets_amount' => $tickets,
+            ]);
         }
+
+        // Send push notification with data for in-app popup
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
+        $push_msg = "Hai ricevuto una ricompensa: ";
+        $parts = [];
+        if ($credits > 0) $parts[] = "{$credits} crediti";
+        if ($xp > 0) $parts[] = "{$xp} XP";
+        if ($tickets > 0) $parts[] = "{$tickets} biglietti";
+        $push_msg .= implode(', ', $parts) . "!";
+
+        NotificationHelper::send_to_all('Ricompensa ricevuta!', $push_msg, [
+            'type' => 'bulk_reward',
+            'reason' => $reason,
+            'credits' => (string)$credits,
+            'xp' => (string)$xp,
+            'tickets' => (string)$tickets,
+        ]);
 
         $this->log_admin_action('bulk_reward', null, [
             'reason' => $reason, 'credits' => $credits, 'xp' => $xp, 'recipients' => $recipients

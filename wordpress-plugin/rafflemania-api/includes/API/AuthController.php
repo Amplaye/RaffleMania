@@ -674,25 +674,25 @@ class AuthController extends WP_REST_Controller {
             return new WP_Error('token_expired', 'Token di verifica scaduto. Richiedi un nuovo link.', ['status' => 400]);
         }
 
-        // Check if already verified
-        if ($user->email_verified) {
-            return new WP_REST_Response([
-                'success' => true,
-                'message' => 'Email gia verificata',
-                'data' => [
-                    'alreadyVerified' => true
-                ]
-            ]);
+        // Check if already verified - still return tokens for auto-login
+        $already_verified = (bool) $user->email_verified;
+
+        if (!$already_verified) {
+            // Update user as verified and clear token
+            $wpdb->update($table_users, [
+                'email_verified' => 1,
+                'verification_token' => null,
+                'verification_token_expires' => null
+            ], ['id' => $user->id]);
+        } else {
+            // Already verified (e.g. via web endpoint) - clear the token now
+            $wpdb->update($table_users, [
+                'verification_token' => null,
+                'verification_token_expires' => null
+            ], ['id' => $user->id]);
         }
 
-        // Update user as verified
-        $wpdb->update($table_users, [
-            'email_verified' => 1,
-            'verification_token' => null,
-            'verification_token_expires' => null
-        ], ['id' => $user->id]);
-
-        // Generate tokens for auto-login
+        // Generate tokens for auto-login (always, even if already verified)
         $tokens = $this->generate_tokens($user->id);
 
         // Get updated user data
@@ -703,10 +703,11 @@ class AuthController extends WP_REST_Controller {
 
         return new WP_REST_Response([
             'success' => true,
-            'message' => 'Email verificata con successo!',
+            'message' => $already_verified ? 'Email gia verificata' : 'Email verificata con successo!',
             'data' => [
                 'user' => $this->format_user($user),
-                'tokens' => $tokens
+                'tokens' => $tokens,
+                'alreadyVerified' => $already_verified
             ]
         ]);
     }
@@ -770,11 +771,10 @@ class AuthController extends WP_REST_Controller {
             $html_response('Gia Verificato', 'Il tuo account e gia stato verificato. Puoi effettuare il login nell\'app.', true);
         }
 
-        // Update user as verified
+        // Update user as verified - keep token so the app deep link can also use it
+        // Token will expire naturally (24h) and be cleaned up
         $wpdb->update($table_users, [
             'email_verified' => 1,
-            'verification_token' => null,
-            'verification_token_expires' => null
         ], ['id' => $user->id]);
 
         $html_response('Email Verificata!', 'Il tuo account e stato verificato con successo. Ora puoi accedere a tutte le funzionalita di RaffleMania!', true);
@@ -834,51 +834,48 @@ class AuthController extends WP_REST_Controller {
         // Build verification URL - use the web endpoint that works
         $verification_url = home_url("/wp-json/rafflemania/v1/auth/verify-email-web?token={$token}");
 
+        // Get logo from WordPress media library
+        $logo_attachment = get_posts([
+            'post_type' => 'attachment',
+            'post_status' => 'inherit',
+            'posts_per_page' => 1,
+            's' => 'logo',
+            'orderby' => 'date',
+            'order' => 'DESC',
+        ]);
+        $logo_url = !empty($logo_attachment) ? wp_get_attachment_url($logo_attachment[0]->ID) : 'https://www.rafflemania.it/wp-content/uploads/2026/02/rafflemania-icon.png';
+
         $subject = 'Verifica il tuo account RaffleMania';
+        $year = date('Y');
 
-        $message = "
-        <html>
-        <head>
-            <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: linear-gradient(135deg, #FF6B00, #FF8533); padding: 30px; text-align: center; border-radius: 12px 12px 0 0; }
-                .header h1 { color: white; margin: 0; font-size: 28px; }
-                .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 12px 12px; }
-                .button { display: inline-block; background: #FF6B00; color: white !important; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
-                .button:hover { background: #E55A00; }
-                .footer { text-align: center; color: #888; font-size: 12px; margin-top: 20px; }
-                .code { background: #eee; padding: 10px 15px; border-radius: 6px; font-family: monospace; font-size: 14px; word-break: break-all; }
-            </style>
-        </head>
-        <body>
-            <div class='container'>
-                <div class='header'>
-                    <h1>RaffleMania</h1>
-                </div>
-                <div class='content'>
-                    <h2>Ciao {$username}!</h2>
-                    <p>Grazie per esserti registrato su RaffleMania! Per completare la registrazione e iniziare a vincere premi incredibili, verifica il tuo indirizzo email.</p>
-
-                    <p style='text-align: center;'>
-                        <a href='{$verification_url}' class='button'>Verifica Email</a>
-                    </p>
-
-                    <p>Se il pulsante non funziona, copia e incolla questo link nel tuo browser:</p>
-                    <p class='code'>{$verification_url}</p>
-
-                    <p><strong>Il link scade tra 24 ore.</strong></p>
-
-                    <p>Se non hai creato un account su RaffleMania, puoi ignorare questa email.</p>
-                </div>
-                <div class='footer'>
-                    <p>&copy; " . date('Y') . " RaffleMania. Tutti i diritti riservati.</p>
-                    <p>Questa email e stata inviata automaticamente, non rispondere.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        ";
+        $message = "<!DOCTYPE html><html lang='it'><head><meta charset='UTF-8'></head>
+<body style='margin:0;padding:0;background-color:#f4f4f4;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;'>
+<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='background-color:#f4f4f4;'>
+<tr><td align='center' style='padding:20px 10px;'>
+<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='600' style='max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;'>
+<tr><td style='padding:32px 40px;text-align:center;'>
+<img src='{$logo_url}' alt='RaffleMania' width='160' height='160' style='width:160px;height:160px;border-radius:20px;display:block;margin:0 auto;'/>
+</td></tr>
+<tr><td style='padding:16px 40px 0;'>
+<h2 style='color:#1a1a1a;margin:0 0 10px;font-size:26px;font-weight:700;'>Ciao {$username}!</h2>
+<p style='color:#555;font-size:18px;line-height:1.6;margin:0;'>Grazie per esserti registrato su RaffleMania! Per completare la registrazione e iniziare a vincere premi incredibili, verifica il tuo indirizzo email.</p>
+</td></tr>
+<tr><td style='padding:28px 40px;text-align:center;'>
+<a href='{$verification_url}' style='display:inline-block;background:#FF6B00;color:#ffffff !important;padding:16px 36px;text-decoration:none;border-radius:10px;font-weight:700;font-size:18px;'>Verifica Email</a>
+</td></tr>
+<tr><td style='padding:0 40px 16px;'>
+<p style='color:#555;font-size:16px;line-height:1.6;margin:0 0 10px;'>Se il pulsante non funziona, copia e incolla questo link nel tuo browser:</p>
+<div style='background:#f0f0f0;padding:12px 16px;border-radius:8px;font-family:Courier New,monospace;font-size:14px;word-break:break-all;color:#333;'>{$verification_url}</div>
+</td></tr>
+<tr><td style='padding:0 40px 16px;'>
+<p style='color:#555;font-size:16px;line-height:1.6;margin:0;'><strong>Il link scade tra 24 ore.</strong></p>
+<p style='color:#888;font-size:15px;line-height:1.6;margin:10px 0 0;'>Se non hai creato un account su RaffleMania, puoi ignorare questa email.</p>
+</td></tr>
+<tr><td style='background-color:#fafafa;padding:20px 40px;text-align:center;border-top:1px solid #eee;'>
+<p style='color:#aaa;font-size:13px;margin:0;'>&copy; {$year} RaffleMania. Tutti i diritti riservati.</p>
+</td></tr>
+</table></td></tr></table>
+</body></html>";
 
         $headers = [
             'Content-Type: text/html; charset=UTF-8',

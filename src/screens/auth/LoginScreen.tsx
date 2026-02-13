@@ -213,6 +213,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [errors, setErrors] = useState<{email?: string; password?: string}>({});
+  const passwordInputRef = useRef<TextInput>(null);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -260,6 +261,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
           const savedPassword = await Keychain.getGenericPassword({service: SAVED_PASSWORD_SERVICE});
           if (savedPassword) {
             setPassword(savedPassword.password);
+            // iOS workaround: secureTextEntry ignores programmatic value updates
+            // Force native text update via ref after the component renders
+            if (Platform.OS === 'ios') {
+              setTimeout(() => {
+                passwordInputRef.current?.setNativeProps?.({text: savedPassword.password});
+              }, 150);
+            }
           }
         }
       } catch (error) {
@@ -544,6 +552,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                       style={styles.inputIcon}
                     />
                     <TextInput
+                      ref={passwordInputRef}
                       style={styles.input}
                       placeholder="Password"
                       placeholderTextColor={COLORS.textMuted}
@@ -552,6 +561,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
                       autoCorrect={false}
+                      textContentType="none"
                     />
                     <TouchableOpacity
                       onPress={() => setShowPassword(!showPassword)}

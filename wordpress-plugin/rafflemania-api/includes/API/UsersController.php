@@ -177,6 +177,24 @@ class UsersController extends WP_REST_Controller {
             ]
         ]);
 
+        // Get pending reward notifications (unseen)
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/me/reward-notifications', [
+            [
+                'methods' => 'GET',
+                'callback' => [$this, 'get_reward_notifications'],
+                'permission_callback' => [$this, 'check_auth']
+            ]
+        ]);
+
+        // Mark reward notifications as seen
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/me/reward-notifications/seen', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'mark_reward_notifications_seen'],
+                'permission_callback' => [$this, 'check_auth']
+            ]
+        ]);
+
         // Delete account permanently
         register_rest_route($this->namespace, '/' . $this->rest_base . '/me/delete', [
             [
@@ -566,11 +584,23 @@ class UsersController extends WP_REST_Controller {
         }
 
         // In production, verify receipt with App Store / Google Play here
-        // For now, just add credits
+        // For now, just add credits and XP
+
+        // Award XP for purchasing credits
+        $xp_reward = get_option('rafflemania_xp_purchase_credits', 25);
+        $user = $wpdb->get_row($wpdb->prepare(
+            "SELECT credits, xp, level FROM {$table_users} WHERE id = %d",
+            $user_id
+        ));
+
+        $new_xp = (int)$user->xp + $xp_reward;
+        $new_level = $this->calculate_level($new_xp);
 
         $wpdb->query($wpdb->prepare(
-            "UPDATE {$table_users} SET credits = credits + %d WHERE id = %d",
+            "UPDATE {$table_users} SET credits = credits + %d, xp = %d, level = %d WHERE id = %d",
             $credits_to_add,
+            $new_xp,
+            $new_level,
             $user_id
         ));
 
@@ -1024,6 +1054,78 @@ class UsersController extends WP_REST_Controller {
             'success' => true,
             'data' => $prefs,
         ], 200);
+    }
+
+    // === REWARD NOTIFICATIONS ===
+
+    /**
+     * Get pending (unseen) reward notifications for current user
+     */
+    public function get_reward_notifications(WP_REST_Request $request) {
+        $user_id = $request->get_param('_auth_user_id');
+        if (!$user_id) {
+            return new WP_Error('unauthorized', 'Authentication required', ['status' => 401]);
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'rafflemania_reward_notifications';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table}'");
+        if (!$table_exists) {
+            return new WP_REST_Response(['success' => true, 'data' => ['notifications' => []]], 200);
+        }
+
+        $notifications = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$table} WHERE user_id = %d AND seen = 0 ORDER BY created_at DESC LIMIT 10",
+            $user_id
+        ));
+
+        $formatted = array_map(function($n) {
+            return [
+                'id' => (int) $n->id,
+                'reason' => $n->reason,
+                'credits' => (int) $n->credits_amount,
+                'xp' => (int) $n->xp_amount,
+                'tickets' => (int) $n->tickets_amount,
+                'createdAt' => $n->created_at,
+            ];
+        }, $notifications);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => ['notifications' => $formatted]
+        ], 200);
+    }
+
+    /**
+     * Mark reward notifications as seen
+     */
+    public function mark_reward_notifications_seen(WP_REST_Request $request) {
+        $user_id = $request->get_param('_auth_user_id');
+        if (!$user_id) {
+            return new WP_Error('unauthorized', 'Authentication required', ['status' => 401]);
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'rafflemania_reward_notifications';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table}'");
+        if (!$table_exists) {
+            return new WP_REST_Response(['success' => true], 200);
+        }
+
+        $ids = $request->get_param('ids');
+        if (!empty($ids) && is_array($ids)) {
+            $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+            $values = array_merge([$user_id], array_map('intval', $ids));
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$table} SET seen = 1 WHERE user_id = %d AND id IN ({$placeholders})",
+                ...$values
+            ));
+        } else {
+            // Mark all as seen
+            $wpdb->update($table, ['seen' => 1], ['user_id' => $user_id, 'seen' => 0]);
+        }
+
+        return new WP_REST_Response(['success' => true], 200);
     }
 
     private function format_user($user) {

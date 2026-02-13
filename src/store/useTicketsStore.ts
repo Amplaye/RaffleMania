@@ -101,6 +101,9 @@ interface TicketsState {
 
   // Pulizia biglietti per nuovo round
   clearTicketsForPrize: (prizeId: string) => void;
+
+  // Cleanup: rimuovi ticket attivi per premi già estratti
+  cleanupExtractedTickets: () => Promise<void>;
 }
 
 export const useTicketsStore = create<TicketsState>()(
@@ -157,6 +160,9 @@ export const useTicketsStore = create<TicketsState>()(
         isLoading: false,
         isInitialized: true,
       });
+
+      // Cleanup tickets for prizes that have already been extracted
+      await get().cleanupExtractedTickets();
     } catch {
       // API failed - KEEP local data, don't reset!
       console.log('Tickets API not available, preserving local data');
@@ -165,6 +171,9 @@ export const useTicketsStore = create<TicketsState>()(
         isInitialized: true,
         // Keep activeTickets and pastTickets as they are (persisted from AsyncStorage)
       });
+
+      // Still cleanup even with local data
+      await get().cleanupExtractedTickets();
     }
   },
 
@@ -656,6 +665,52 @@ export const useTicketsStore = create<TicketsState>()(
       activeTickets: activeTickets.filter(t => t.prizeId !== prizeId),
     });
     console.log(`[TicketsStore] Cleared all active tickets for prize ${prizeId}`);
+  },
+
+  cleanupExtractedTickets: async () => {
+    try {
+      const {usePrizesStore} = await import('./usePrizesStore');
+      const {completedDraws} = usePrizesStore.getState();
+      const {activeTickets, pastTickets} = get();
+
+      if (activeTickets.length === 0 && pastTickets.length === 0) return;
+
+      // Raccogli tutti i prizeId che hanno draws completati
+      const extractedPrizeIds = new Set<string>();
+      completedDraws.forEach(draw => {
+        if (draw.status === 'completed' && draw.prizeId) {
+          extractedPrizeIds.add(String(draw.prizeId));
+        }
+      });
+
+      // Anche controlla i premi con timerStatus 'completed' o extractedAt
+      const {prizes} = usePrizesStore.getState();
+      prizes.forEach(prize => {
+        if (prize.extractedAt || prize.timerStatus === 'completed') {
+          extractedPrizeIds.add(String(prize.id));
+        }
+      });
+
+      if (extractedPrizeIds.size === 0) return;
+
+      // Filtra i ticket attivi: rimuovi quelli per premi già estratti
+      const cleanedActiveTickets = activeTickets.filter(t => !extractedPrizeIds.has(String(t.prizeId)));
+      const removedActive = activeTickets.length - cleanedActiveTickets.length;
+
+      // Pulisci pastTickets: mantieni SOLO i ticket vincenti
+      const cleanedPastTickets = pastTickets.filter(t => t.isWinner);
+      const removedPast = pastTickets.length - cleanedPastTickets.length;
+
+      if (removedActive > 0 || removedPast > 0) {
+        set({
+          activeTickets: cleanedActiveTickets,
+          pastTickets: cleanedPastTickets,
+        });
+        console.log(`[TicketsStore] Cleanup: removed ${removedActive} active tickets for extracted prizes, ${removedPast} non-winning past tickets`);
+      }
+    } catch (error) {
+      console.log('[TicketsStore] Cleanup error:', error);
+    }
   },
 }),
     {

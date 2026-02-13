@@ -7,15 +7,17 @@ import {Prize} from '../types';
 import {AuthNavigator} from './AuthNavigator';
 import {TabNavigator} from './TabNavigator';
 import {COLORS, FONT_SIZE, FONT_WEIGHT, API_CONFIG} from '../utils/constants';
-import {ScreenContainer, Button, UrgencyBorderEffect, ExtractionStartEffect, ExtractionResultModal, MissedExtractionModal} from '../components/common';
+import {ScreenContainer, Button, UrgencyBorderEffect, ExtractionStartEffect, ExtractionResultModal, MissedExtractionModal, RewardPopupModal} from '../components/common';
+import type {RewardNotification} from '../components/common';
 import {navigationRef, processPendingNavigation} from '../services/NavigationService';
 import apiClient from '../services/apiClient';
+import {listenForDrawResult, publishDrawResult} from '../services/firebaseExtraction';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {rewardEvents} from '../services/rewardEvents';
 
 // Import actual screens
 import {MyWinsScreen} from '../screens/mywins';
 import {ReferralScreen} from '../screens/referral';
-import {AddressFormScreen} from '../screens/address';
 import {SettingsScreen} from '../screens/settings';
 import {TicketDetailScreen} from '../screens/ticketdetail';
 import {LevelDetailScreen} from '../screens/leveldetail';
@@ -35,7 +37,6 @@ export type RootStackParamList = {
   Winners: undefined;
   Referral: undefined;
   Settings: undefined;
-  AddressForm: undefined;
   MyWins: undefined;
   LevelDetail: undefined;
   AvatarCustomization: undefined;
@@ -146,11 +147,6 @@ const MainStack: React.FC = () => {
         options={{title: 'Impostazioni'}}
       />
       <Stack.Screen
-        name="AddressForm"
-        component={AddressFormScreen}
-        options={{title: 'Indirizzo'}}
-      />
-      <Stack.Screen
         name="MyWins"
         component={MyWinsScreen}
         options={{title: 'Le Mie Vincite'}}
@@ -235,12 +231,59 @@ export const AppNavigator: React.FC = () => {
   const [urgencyPrize, setUrgencyPrize] = useState<Prize | null>(null);
   const [urgencySeconds, setUrgencySeconds] = useState(0);
 
-  // Wait for extraction result from server (server performs the extraction via cron)
+  // State for reward popup notifications
+  const [rewardQueue, setRewardQueue] = useState<RewardNotification[]>([]);
+  const [showRewardPopup, setShowRewardPopup] = useState(false);
+  const rewardChecked = useRef(false);
+
+  // Helper: move user tickets to past after extraction
+  const moveTicketsToPast = useCallback((prizeId: string, wNumber: number, prizeName: string, prizeImage: string) => {
+    const ticketsForPrize = getTicketsForPrize(prizeId);
+    if (ticketsForPrize.length > 0) {
+      const {activeTickets, pastTickets} = useTicketsStore.getState();
+      const now = new Date().toISOString();
+      const updatedUserTickets = ticketsForPrize.map(ticket => ({
+        ...ticket,
+        isWinner: ticket.ticketNumber === wNumber,
+        wonAt: ticket.ticketNumber === wNumber ? now : undefined,
+        prizeName: ticket.ticketNumber === wNumber ? prizeName : undefined,
+        prizeImage: ticket.ticketNumber === wNumber ? prizeImage : undefined,
+      }));
+      const remainingActive = activeTickets.filter(t => t.prizeId !== prizeId);
+      useTicketsStore.setState({
+        activeTickets: remainingActive,
+        pastTickets: [...updatedUserTickets, ...pastTickets],
+      });
+    }
+  }, [getTicketsForPrize]);
+
+  // Poll server once for extraction result (used as publisher for Firebase)
+  const pollServerOnce = useCallback(async (prizeId: string): Promise<number | null> => {
+    try {
+      const response = await apiClient.get(`/draws/prize/${prizeId}?limit=1`);
+      const draws = response.data?.data?.draws || [];
+      if (draws.length > 0) {
+        const latestDraw = draws[0];
+        const drawTime = new Date(latestDraw.extractedAt || latestDraw.createdAt).getTime();
+        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+        if (latestDraw.status === 'completed' && drawTime > fiveMinutesAgo) {
+          return latestDraw.winningNumber || 0;
+        }
+      }
+    } catch (error) {
+      console.log('[Extraction] Server poll error:', error);
+    }
+    return null;
+  }, []);
+
+  // Wait for extraction result using Firebase as single source of truth
+  // Flow: Firebase listener + server poll race - first valid result wins
+  // Server is the authority, Firebase is the distribution layer
   const waitForExtractionResult = useCallback(async (prize: Prize) => {
     // Mark prize as extracting locally
     markPrizeAsExtracting(prize.id);
 
-    // Start the extraction animation (video effect)
+    // Start the extraction animation
     startExtraction();
 
     const isGuestUser = token?.startsWith('guest_token_');
@@ -248,73 +291,127 @@ export const AppNavigator: React.FC = () => {
 
     const userTickets = getTicketsForPrize(prize.id);
     const userNumbers = userTickets.map(t => t.ticketNumber);
+    const timerStartedAt = prize.timerStartedAt || '';
 
     let winningNumber = 0;
     let isWinner = false;
 
     if (useMockMode) {
-      // Guest/mock: use local simulation
-      await new Promise<void>(resolve => setTimeout(() => resolve(), 3000));
-      const result = simulateExtraction(prize.id, prize.name, prize.imageUrl);
-      winningNumber = result.winningNumber || 0;
-      isWinner = result.isWinner;
-    } else {
-      // Poll the server for the completed draw result
-      // The server cron will perform the extraction - we just wait for the result
-      const maxAttempts = 20; // ~60 seconds max wait
-      let drawData = null;
+      // MOCK/GUEST MODE: Check Firebase first - if another client already
+      // simulated and published, use that result. Otherwise simulate and publish.
+      if (timerStartedAt) {
+        // Listen to Firebase for 2s - another client may have already published
+        const firebaseListener = listenForDrawResult(prize.id, timerStartedAt, 2000);
+        const firebaseResult = await firebaseListener.promise;
+        firebaseListener.unsubscribe();
 
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        // Wait 3 seconds between polls (first poll after 3s to give server cron time)
-        await new Promise<void>(resolve => setTimeout(() => resolve(), 3000));
-
-        try {
-          const response = await apiClient.get(`/draws/prize/${prize.id}?limit=1`);
-          const draws = response.data?.data?.draws || [];
-
-          if (draws.length > 0) {
-            const latestDraw = draws[0];
-            // Check if this draw is recent (within last 5 minutes) and completed
-            const drawTime = new Date(latestDraw.extractedAt || latestDraw.createdAt).getTime();
-            const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-
-            if (latestDraw.status === 'completed' && drawTime > fiveMinutesAgo) {
-              drawData = latestDraw;
-              console.log(`[Extraction] Server draw found: winningNumber=${drawData.winningNumber}`);
-              break;
-            }
-          }
-          console.log(`[Extraction] Polling attempt ${attempt + 1}/${maxAttempts} - no result yet`);
-        } catch (error) {
-          console.log(`[Extraction] Poll error:`, error);
-        }
-      }
-
-      if (drawData) {
-        winningNumber = drawData.winningNumber || 0;
-        isWinner = userNumbers.includes(winningNumber);
-
-        // Move user's tickets to past
-        if (userTickets.length > 0) {
-          const {activeTickets, pastTickets} = useTicketsStore.getState();
-          const now = new Date().toISOString();
-          const updatedUserTickets = userTickets.map(ticket => ({
-            ...ticket,
-            isWinner: ticket.ticketNumber === winningNumber,
-            wonAt: ticket.ticketNumber === winningNumber ? now : undefined,
-            prizeName: ticket.ticketNumber === winningNumber ? prize.name : undefined,
-            prizeImage: ticket.ticketNumber === winningNumber ? prize.imageUrl : undefined,
-          }));
-          const remainingActive = activeTickets.filter(t => t.prizeId !== prize.id);
-          useTicketsStore.setState({
-            activeTickets: remainingActive,
-            pastTickets: [...updatedUserTickets, ...pastTickets],
-          });
+        if (firebaseResult) {
+          // Another client already published - use their result (consistency!)
+          winningNumber = firebaseResult.winningNumber;
+          isWinner = userNumbers.includes(winningNumber);
+          moveTicketsToPast(prize.id, winningNumber, prize.name, prize.imageUrl);
+          console.log(`[Extraction] Mock: using Firebase result #${winningNumber}`);
+        } else {
+          // No result yet - this client simulates and publishes for everyone
+          const result = simulateExtraction(prize.id, prize.name, prize.imageUrl);
+          winningNumber = result.winningNumber || 0;
+          isWinner = result.isWinner;
+          publishDrawResult(prize.id, winningNumber, timerStartedAt);
+          console.log(`[Extraction] Mock: simulated and published #${winningNumber}`);
         }
       } else {
-        console.log('[Extraction] Timeout waiting for server draw result');
-        winningNumber = 0;
-        isWinner = false;
+        // No timerStartedAt - just simulate locally
+        await new Promise<void>(resolve => setTimeout(resolve, 1500));
+        const result = simulateExtraction(prize.id, prize.name, prize.imageUrl);
+        winningNumber = result.winningNumber || 0;
+        isWinner = result.isWinner;
+      }
+    } else {
+      // PRODUCTION: Server is the sole authority for winning numbers.
+      // Firebase is the distribution layer - first client to get the server
+      // result publishes it, all others receive it instantly via Firebase.
+      // NO local simulation fallback - prevents different users seeing different numbers.
+
+      const firebaseListener = timerStartedAt
+        ? listenForDrawResult(prize.id, timerStartedAt, 10000)
+        : null;
+
+      // Race: first non-null result from Firebase or server poll wins
+      const resultNumber = await new Promise<number | null>((resolve) => {
+        let settled = false;
+
+        const settle = (num: number, source: string) => {
+          if (!settled) {
+            settled = true;
+            firebaseListener?.unsubscribe();
+            console.log(`[Extraction] Got result from ${source}: #${num}`);
+            resolve(num);
+          }
+        };
+
+        // 1. Firebase listener - receives result instantly when ANY client publishes
+        if (firebaseListener) {
+          firebaseListener.promise.then(result => {
+            if (result && !settled) {
+              settle(result.winningNumber, 'firebase');
+            }
+          });
+        }
+
+        // 2. Server poll - 5 attempts with increasing delays
+        // If server responds, publish to Firebase for all other clients
+        (async () => {
+          const delays = [500, 1000, 1500, 2000, 2500];
+          for (const delay of delays) {
+            if (settled) return;
+            await new Promise<void>(r => setTimeout(r, delay));
+            if (settled) return;
+            const result = await pollServerOnce(prize.id);
+            if (result !== null) {
+              // Publish to Firebase so all other clients get it instantly
+              if (timerStartedAt) {
+                publishDrawResult(prize.id, result, timerStartedAt);
+              }
+              settle(result, 'server');
+              return;
+            }
+          }
+        })();
+
+        // 3. Overall timeout (10s) - safety net
+        setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            firebaseListener?.unsubscribe();
+            resolve(null);
+          }
+        }, 10000);
+      });
+
+      if (resultNumber !== null) {
+        winningNumber = resultNumber;
+        isWinner = userNumbers.includes(winningNumber);
+        moveTicketsToPast(prize.id, winningNumber, prize.name, prize.imageUrl);
+      } else {
+        // 10s timeout - server extraction hasn't completed yet
+        // Last chance: one more server poll
+        console.log('[Extraction] Timeout - trying one last server poll...');
+        const lastChance = await pollServerOnce(prize.id);
+        if (lastChance !== null) {
+          winningNumber = lastChance;
+          isWinner = userNumbers.includes(winningNumber);
+          moveTicketsToPast(prize.id, winningNumber, prize.name, prize.imageUrl);
+          if (timerStartedAt) {
+            publishDrawResult(prize.id, winningNumber, timerStartedAt);
+          }
+          console.log(`[Extraction] Last chance server poll succeeded: #${winningNumber}`);
+        } else {
+          // Server truly unavailable - extraction result unknown
+          // Show 0 as winning number to indicate no result
+          console.warn('[Extraction] No result from server after 10s - server may be down');
+          winningNumber = 0;
+          isWinner = false;
+        }
       }
     }
 
@@ -342,16 +439,30 @@ export const AppNavigator: React.FC = () => {
     // Update last seen draw timestamp
     AsyncStorage.setItem('rafflemania_last_seen_draw_timestamp', new Date().toISOString());
 
-    // Clean up tickets and reset prize for next round after a delay
+    // Clean up tickets and reset prize for next round
     setTimeout(() => {
       clearTicketsForPrize(prize.id);
       resetPrizeAfterExtraction(prize.id);
-    }, 5000);
-  }, [user, token, markPrizeAsExtracting, startExtraction, simulateExtraction, getTicketsForPrize, addWin, showResult, completePrizeExtraction, resetPrizeAfterExtraction, clearTicketsForPrize]);
+    }, 2000);
+  }, [user, token, markPrizeAsExtracting, startExtraction, simulateExtraction, getTicketsForPrize, pollServerOnce, moveTicketsToPast, addWin, showResult, completePrizeExtraction, resetPrizeAfterExtraction, clearTicketsForPrize]);
 
   // Initialize
   useEffect(() => {
     isInitialized.current = true;
+  }, []);
+
+  // Fetch pending reward notifications from server
+  const fetchRewardNotifications = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/users/me/reward-notifications');
+      const notifications = response.data?.data?.notifications || [];
+      if (notifications.length > 0) {
+        setRewardQueue(notifications);
+        setShowRewardPopup(true);
+      }
+    } catch (error) {
+      console.log('[Rewards] Error fetching reward notifications:', error);
+    }
   }, []);
 
   // Check for missed extractions on app start (after auth)
@@ -369,23 +480,76 @@ export const AppNavigator: React.FC = () => {
     }
   }, [isAuthenticated, sessionActive, fetchMissedExtractions]);
 
-  // Re-check missed extractions when app returns to foreground
+  // Check for pending reward notifications on app start (after auth)
+  useEffect(() => {
+    if (isAuthenticated && sessionActive && !rewardChecked.current) {
+      rewardChecked.current = true;
+      // Delay to let missed extractions show first
+      setTimeout(() => {
+        fetchRewardNotifications();
+      }, 4000);
+    }
+    if (!isAuthenticated || !sessionActive) {
+      rewardChecked.current = false;
+    }
+  }, [isAuthenticated, sessionActive, fetchRewardNotifications]);
+
+  // Re-check missed extractions and rewards when app returns to foreground
   const appStateRef = useRef(AppState.currentState);
   useEffect(() => {
     if (!isAuthenticated || !sessionActive) return;
 
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
-        // App came to foreground - check for missed extractions
+        // App came to foreground - check for missed extractions and rewards
         setTimeout(() => {
           fetchMissedExtractions();
         }, 1000);
+        setTimeout(() => {
+          fetchRewardNotifications();
+        }, 3000);
       }
       appStateRef.current = nextAppState;
     });
 
     return () => subscription.remove();
-  }, [isAuthenticated, sessionActive, fetchMissedExtractions]);
+  }, [isAuthenticated, sessionActive, fetchMissedExtractions, fetchRewardNotifications]);
+
+  // Handle reward popup dismiss - show next in queue or close
+  const handleRewardPopupClose = useCallback(async () => {
+    const current = rewardQueue[0];
+    const remaining = rewardQueue.slice(1);
+
+    // Mark as seen on server
+    if (current) {
+      try {
+        await apiClient.post('/users/me/reward-notifications/seen', {ids: [current.id]});
+      } catch (error) {
+        console.log('[Rewards] Error marking notification as seen:', error);
+      }
+    }
+
+    if (remaining.length > 0) {
+      setRewardQueue(remaining);
+      // Brief delay before showing next
+      setShowRewardPopup(false);
+      setTimeout(() => setShowRewardPopup(true), 400);
+    } else {
+      setRewardQueue([]);
+      setShowRewardPopup(false);
+      // Refresh user data to sync updated credits/XP from server
+      useAuthStore.getState().refreshUserData();
+    }
+  }, [rewardQueue]);
+
+  // Listen for real-time reward push notifications (online users)
+  useEffect(() => {
+    if (!isAuthenticated || !sessionActive) return;
+    const unsubscribe = rewardEvents.subscribe(() => {
+      fetchRewardNotifications();
+    });
+    return unsubscribe;
+  }, [isAuthenticated, sessionActive, fetchRewardNotifications]);
 
   // Monitor all prizes with active timers
   useEffect(() => {
@@ -419,6 +583,14 @@ export const AppNavigator: React.FC = () => {
         if (remainingSeconds === 0 && diffSeconds >= -60 && !extractedDrawIds.current.has(drawId)) {
           extractedDrawIds.current.add(drawId);
           waitForExtractionResult(prize);
+        }
+
+        // Stale timer cleanup: if expired by more than 60 seconds, the extraction
+        // window has passed. Reset the prize to avoid stuck 0:00:00 timers.
+        if (remainingSeconds === 0 && diffSeconds < -60 && !extractedDrawIds.current.has(drawId)) {
+          extractedDrawIds.current.add(drawId);
+          console.log(`[Timer] Stale countdown detected for prize ${prize.id} (expired ${Math.abs(diffSeconds)}s ago). Resetting.`);
+          resetPrizeAfterExtraction(prize.id);
         }
       }
 
@@ -488,6 +660,15 @@ export const AppNavigator: React.FC = () => {
           currentIndex={currentMissedIndex}
           totalCount={missedExtractions.length}
           onDismiss={dismissMissedExtraction}
+        />
+      )}
+
+      {/* Reward Popup Modal - shown for bulk rewards */}
+      {isAuthenticated && sessionActive && (
+        <RewardPopupModal
+          visible={showRewardPopup}
+          reward={rewardQueue[0] || null}
+          onClose={handleRewardPopupClose}
         />
       )}
     </View>
