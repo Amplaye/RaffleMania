@@ -26,6 +26,10 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = RaffleManiaApp/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = RaffleManiaApp/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = RaffleManiaApp/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		32693A89D02FB24F9B4F72FD /* OneSignalNotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; name = OneSignalNotificationServiceExtension.appex; path = OneSignalNotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		53A7EEB1D9C603572B32A22B /* Pods-OneSignalNotificationServiceExtension.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-OneSignalNotificationServiceExtension.release.xcconfig"; path = "Target Support Files/Pods-OneSignalNotificationServiceExtension/Pods-OneSignalNotificationServiceExtension.release.xcconfig"; sourceTree = "<group>"; };
+		5BA7D78DABDCCE77DD4C75C5 /* libPods-OneSignalNotificationServiceExtension.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-OneSignalNotificationServiceExtension.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6A2930EA3223C2833438E20C /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = RaffleManiaApp/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = RaffleManiaApp/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		8B30AF0C55A14F919AE3678A /* Poppins-SemiBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-SemiBold.ttf"; path = "../assets/fonts/Poppins-SemiBold.ttf"; sourceTree = "<group>"; };
@@ -34,6 +38,7 @@
 		A8C886A84754BE6112BA9714 /* Pods-RaffleManiaApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RaffleManiaApp.debug.xcconfig"; path = "Target Support Files/Pods-RaffleManiaApp/Pods-RaffleManiaApp.debug.xcconfig"; sourceTree = "<group>"; };
 		C62BA09261BB2B31A4C70C2E /* libPods-RaffleManiaApp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RaffleManiaApp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D232C3C5CD674474B83102FA /* Poppins-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-Regular.ttf"; path = "../assets/fonts/Poppins-Regular.ttf"; sourceTree = "<group>"; };
+		E9359AF724AB0B58C158D96D /* Pods-OneSignalNotificationServiceExtension.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-OneSignalNotificationServiceExtension.debug.xcconfig"; path = "Target Support Files/Pods-OneSignalNotificationServiceExtension/Pods-OneSignalNotificationServiceExtension.debug.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -67,6 +72,8 @@
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				C62BA09261BB2B31A4C70C2E /* libPods-RaffleManiaApp.a */,
+				D40F62BAB97745E901D81161 /* iOS */,
+				5BA7D78DABDCCE77DD4C75C5 /* libPods-OneSignalNotificationServiceExtension.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -97,6 +104,7 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* RaffleManiaApp.app */,
+				32693A89D02FB24F9B4F72FD /* OneSignalNotificationServiceExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -117,8 +125,18 @@
 			children = (
 				A8C886A84754BE6112BA9714 /* Pods-RaffleManiaApp.debug.xcconfig */,
 				05EF34F3867B754B90F91C09 /* Pods-RaffleManiaApp.release.xcconfig */,
+				53A7EEB1D9C603572B32A22B /* Pods-OneSignalNotificationServiceExtension.release.xcconfig */,
+				E9359AF724AB0B58C158D96D /* Pods-OneSignalNotificationServiceExtension.debug.xcconfig */,
 			);
 			path = Pods;
+			sourceTree = "<group>";
+		};
+		D40F62BAB97745E901D81161 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				6A2930EA3223C2833438E20C /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -299,8 +317,10 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A8C886A84754BE6112BA9714 /* Pods-RaffleManiaApp.debug.xcconfig */;
 			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = RaffleManiaApp/RaffleManiaApp.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = S973UZ9U74;
 				ENABLE_BITCODE = NO;
@@ -316,7 +336,6 @@
 					"-ObjC",
 					"-lc++",
 				);
-				CODE_SIGN_ENTITLEMENTS = RaffleManiaApp/RaffleManiaApp.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = RaffleManiaApp;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -329,8 +348,10 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 05EF34F3867B754B90F91C09 /* Pods-RaffleManiaApp.release.xcconfig */;
 			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = RaffleManiaApp/RaffleManiaApp.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = S973UZ9U74;
 				INFOPLIST_FILE = RaffleManiaApp/Info.plist;
@@ -345,7 +366,6 @@
 					"-ObjC",
 					"-lc++",
 				);
-				CODE_SIGN_ENTITLEMENTS = RaffleManiaApp/RaffleManiaApp.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = RaffleManiaApp;
 				SWIFT_VERSION = 5.0;
