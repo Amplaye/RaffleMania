@@ -19,7 +19,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import {AnimatedBackground, StreakModal, StreakRecoveryModal, ExtractionResultModal, UrgencyBorderEffect, FlipCountdownTimer, TicketSuccessModal, TicketSuccessInfo} from '../../components/common';
 import {getTotalPoolTickets} from '../../services/mock';
 import apiClient from '../../services/apiClient';
-import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, useExtractionStore, useLevelUpStore, DAILY_LIMITS, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS, setMidnightStreakCallback} from '../../store';
+import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, useExtractionStore, useLevelUpStore, useGameConfigStore, DAILY_LIMITS, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS, setMidnightStreakCallback} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -47,6 +47,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const user = useAuthStore(state => state.user);
   const refreshUserData = useAuthStore(state => state.refreshUserData);
   const {fetchSettings} = useSettingsStore();
+  const fetchGameConfig = useGameConfigStore(s => s.fetchConfig);
   const {getTicketNumbersForPrize} = useTicketsStore();
   const {showResultModal, extractionResult, hideResult, startExtraction, showResult} = useExtractionStore();
 
@@ -78,6 +79,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     fetchPrizes();
     fetchDraws();
     fetchSettings();
+    fetchGameConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

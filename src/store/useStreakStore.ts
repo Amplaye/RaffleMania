@@ -3,22 +3,18 @@ import {persist, createJSONStorage} from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useAuthStore} from './useAuthStore';
 import {useLevelStore} from './useLevelStore';
+import {useGameConfigStore, DEFAULT_STREAK_CONFIG} from './useGameConfigStore';
 
-// Streak rewards configuration
-export const STREAK_REWARDS = {
-  // XP rewards per day
-  DAILY_XP: 5,        // Days 1-6: 5 XP each
-  DAY_7_XP: 10,       // Day 7: 10 XP
-  // Giorno 7: 1 Credito
-  DAY_7_CREDITS: 1,
-  // Reward extra settimanali (fine della settimana)
-  WEEK_1_CREDITS: 1,
-  WEEK_2_CREDITS: 2,
-  WEEK_3_CREDITS: 3,
-  WEEK_4_CREDITS: 5,
-  MAX_STREAK: 1000,
-  // Costo per recuperare un giorno perso
-  RECOVERY_COST_PER_DAY: 2,
+// Streak rewards configuration - Fallback defaults (dynamic values from useGameConfigStore)
+export const STREAK_REWARDS = DEFAULT_STREAK_CONFIG;
+
+// Dynamic streak config helper
+const getDynamicStreakConfig = () => {
+  try {
+    return useGameConfigStore.getState().getStreakConfig();
+  } catch {
+    return STREAK_REWARDS;
+  }
 };
 
 interface StreakReward {
@@ -252,7 +248,7 @@ export const useStreakStore = create<StreakState>()(
             console.log('[StreakStore] Same day, not yet claimed');
           } else if (isYesterday(state.lastLoginDate)) {
             // Login consecutivo - incrementa streak
-            newStreak = Math.min(state.currentStreak + 1, STREAK_REWARDS.MAX_STREAK);
+            newStreak = Math.min(state.currentStreak + 1, getDynamicStreakConfig().MAX_STREAK);
             isNewDay = true;
             console.log('[StreakStore] Consecutive login! Incrementing to:', newStreak);
           } else {
@@ -268,25 +264,26 @@ export const useStreakStore = create<StreakState>()(
           const weekInCycle = Math.ceil(dayInCycle / 7);
           const isDay7 = dayInWeek === 7;
 
-          // Calcola XP e crediti
-          const xp = isDay7 ? STREAK_REWARDS.DAY_7_XP : STREAK_REWARDS.DAILY_XP;
+          // Calcola XP e crediti (dynamic from game config)
+          const cfg = getDynamicStreakConfig();
+          const xp = isDay7 ? cfg.DAY_7_XP : cfg.DAILY_XP;
           let credits = 0;
           if (isDay7) {
-            credits = STREAK_REWARDS.DAY_7_CREDITS; // 1 credito per giorno 7
+            credits = cfg.DAY_7_CREDITS;
 
             // Aggiungi bonus settimanale extra
             switch (weekInCycle) {
               case 1:
-                credits += STREAK_REWARDS.WEEK_1_CREDITS; // +1 credito
+                credits += cfg.WEEK_1_CREDITS;
                 break;
               case 2:
-                credits += STREAK_REWARDS.WEEK_2_CREDITS; // +2 crediti
+                credits += cfg.WEEK_2_CREDITS;
                 break;
               case 3:
-                credits += STREAK_REWARDS.WEEK_3_CREDITS; // +3 crediti
+                credits += cfg.WEEK_3_CREDITS;
                 break;
               case 4:
-                credits += STREAK_REWARDS.WEEK_4_CREDITS; // +5 crediti
+                credits += cfg.WEEK_4_CREDITS;
                 break;
             }
           }
@@ -356,10 +353,10 @@ export const useStreakStore = create<StreakState>()(
       getRecoveryCost: () => {
         const state = get();
         const missed = state.missedDays || calculateMissedDays(state.lastLoginDate);
-        return missed * STREAK_REWARDS.RECOVERY_COST_PER_DAY;
+        return missed * getDynamicStreakConfig().RECOVERY_COST_PER_DAY;
       },
 
-      // Recupera la streak usando crediti (2 crediti per ogni giorno perso)
+      // Recupera la streak usando crediti (dynamic cost per giorno perso)
       recoverStreak: async () => {
         const state = get();
 
@@ -369,7 +366,7 @@ export const useStreakStore = create<StreakState>()(
         }
 
         const missed = state.missedDays || calculateMissedDays(state.lastLoginDate);
-        const totalCost = missed * STREAK_REWARDS.RECOVERY_COST_PER_DAY;
+        const totalCost = missed * getDynamicStreakConfig().RECOVERY_COST_PER_DAY;
 
         console.log('[StreakStore] Attempting to recover streak - missed days:', missed, 'cost:', totalCost);
 

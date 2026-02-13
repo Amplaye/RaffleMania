@@ -28,9 +28,14 @@ $winners = $wpdb->get_results(
             background: white;
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            overflow: hidden;
             margin-top: 20px;
+            max-height: 650px;
+            overflow-y: auto;
         }
+        .rafflemania-table-container::-webkit-scrollbar { width: 6px; }
+        .rafflemania-table-container::-webkit-scrollbar-track { background: #f8f9fa; }
+        .rafflemania-table-container::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+        .rafflemania-table-container::-webkit-scrollbar-thumb:hover { background: #ccc; }
         .rafflemania-table {
             width: 100%;
             border-collapse: collapse;

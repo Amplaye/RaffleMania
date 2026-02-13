@@ -7,6 +7,25 @@ namespace RaffleMania;
 class NotificationHelper {
 
     /**
+     * Get the notification icon URL from WordPress uploads
+     */
+    private static function get_icon_url() {
+        return 'https://www.rafflemania.it/wp-content/uploads/2026/02/rafflemania-icon.png';
+    }
+
+    /**
+     * Determine the correct Authorization header based on the API key format.
+     * Organization API keys (start with "os_") use "Key" prefix.
+     * REST API keys use "Basic" prefix.
+     */
+    private static function get_auth_header($api_key) {
+        if (strpos($api_key, 'os_') === 0) {
+            return 'Key ' . $api_key;
+        }
+        return 'Basic ' . $api_key;
+    }
+
+    /**
      * Send push notification to all users
      */
     public static function send_to_all($title, $message, $data = []) {
@@ -14,6 +33,7 @@ class NotificationHelper {
         $api_key = get_option('rafflemania_onesignal_api_key');
 
         if (empty($app_id) || empty($api_key)) {
+            error_log('[RaffleMania OneSignal] ERROR: app_id or api_key not configured');
             return false;
         }
 
@@ -36,6 +56,7 @@ class NotificationHelper {
         $api_key = get_option('rafflemania_onesignal_api_key');
 
         if (empty($app_id) || empty($api_key)) {
+            error_log('[RaffleMania OneSignal] ERROR: app_id or api_key not configured');
             return false;
         }
 
@@ -59,6 +80,7 @@ class NotificationHelper {
         $api_key = get_option('rafflemania_onesignal_api_key');
 
         if (empty($app_id) || empty($api_key)) {
+            error_log('[RaffleMania OneSignal] ERROR: app_id or api_key not configured');
             return false;
         }
 
@@ -75,22 +97,29 @@ class NotificationHelper {
     }
 
     /**
-     * Send to all users excluding those with a specific tag set to 'disabled'
-     * Uses OneSignal filters instead of included_segments
+     * Send to all users excluding those with a specific tag set to 'disabled'.
+     * Uses OneSignal filters with OR logic to include:
+     *   - Users who have the tag set to something other than 'disabled'
+     *   - Users who don't have the tag at all (default = enabled)
      */
     public static function send_to_all_excluding_tag($exclude_tag, $title, $message, $data = []) {
         $app_id = get_option('rafflemania_onesignal_app_id');
         $api_key = get_option('rafflemania_onesignal_api_key');
 
         if (empty($app_id) || empty($api_key)) {
+            error_log('[RaffleMania OneSignal] ERROR: app_id or api_key not configured');
             return false;
         }
 
-        // Filter: tag != 'disabled' (includes users who never set the tag)
+        // FIX: OneSignal's != filter does NOT include users without the tag.
+        // We need OR logic: (tag != 'disabled') OR (tag not_exists)
+        // This ensures users who never set the preference still receive the notification.
         $payload = [
             'app_id' => $app_id,
             'filters' => [
                 ['field' => 'tag', 'key' => $exclude_tag, 'relation' => '!=', 'value' => 'disabled'],
+                ['operator' => 'OR'],
+                ['field' => 'tag', 'key' => $exclude_tag, 'relation' => 'not_exists'],
             ],
             'headings' => ['en' => $title, 'it' => $title],
             'contents' => ['en' => $message, 'it' => $message],
@@ -177,19 +206,40 @@ class NotificationHelper {
      * Send HTTP request to OneSignal API
      */
     private static function send_request($payload, $api_key) {
-        $icon_url = 'https://www.rafflemania.it/wp-content/uploads/2026/02/rafflemania-icon.png';
+        // FIX: OneSignal requires 'data' to be a JSON object {}, not an array [].
+        // An empty PHP array [] encodes as JSON [] (array), causing:
+        // "Data must be a valid JSON object" error.
+        // Cast to (object) so empty arrays become {} and associative arrays stay objects.
+        if (isset($payload['data'])) {
+            $payload['data'] = (object) $payload['data'];
+        }
 
-        // Android: large_icon shows as notification image, small_icon for status bar
+        $icon_url = self::get_icon_url();
+
+        // Android notification icons
         $payload['large_icon'] = $icon_url;
-        $payload['small_icon'] = 'ic_launcher';
+        // small_icon must reference a drawable resource name (monochrome, transparent PNG).
+        // 'ic_stat_onesignal_default' is OneSignal's built-in default.
+        // To use a custom icon, add a monochrome drawable named 'ic_notification' in Android res.
+        $payload['small_icon'] = 'ic_stat_onesignal_default';
+
+        // iOS: rich media attachment (shows as thumbnail on the right of the notification)
+        $payload['ios_attachments'] = ['logo' => $icon_url];
+
+        // iOS: badge count increment
+        $payload['ios_badgeType'] = 'Increase';
+        $payload['ios_badgeCount'] = 1;
 
         $json_body = json_encode($payload);
-        error_log('[RaffleMania OneSignal] Sending notification: ' . substr($json_body, 0, 500));
+        $auth_header = self::get_auth_header($api_key);
+
+        error_log('[RaffleMania OneSignal] Sending notification with auth: ' . substr($auth_header, 0, 12) . '...');
+        error_log('[RaffleMania OneSignal] Payload: ' . substr($json_body, 0, 800));
 
         $response = wp_remote_post('https://api.onesignal.com/notifications', [
             'headers' => [
-                'Content-Type' => 'application/json',
-                'Authorization' => 'Key ' . $api_key
+                'Content-Type' => 'application/json; charset=utf-8',
+                'Authorization' => $auth_header
             ],
             'body' => $json_body,
             'timeout' => 30
@@ -204,7 +254,89 @@ class NotificationHelper {
         $status_code = wp_remote_retrieve_response_code($response);
         error_log('[RaffleMania OneSignal] Response (HTTP ' . $status_code . '): ' . $response_body);
 
+        // Check for HTTP-level errors
+        if ($status_code < 200 || $status_code >= 300) {
+            error_log('[RaffleMania OneSignal] ERROR: API returned HTTP ' . $status_code);
+
+            // If 401, the auth format might be wrong - try the other format
+            if ($status_code === 401) {
+                error_log('[RaffleMania OneSignal] AUTH FAILED - trying alternate auth format...');
+                $alt_auth = (strpos($auth_header, 'Basic ') === 0)
+                    ? 'Key ' . $api_key
+                    : 'Basic ' . $api_key;
+
+                $retry_response = wp_remote_post('https://api.onesignal.com/notifications', [
+                    'headers' => [
+                        'Content-Type' => 'application/json; charset=utf-8',
+                        'Authorization' => $alt_auth
+                    ],
+                    'body' => $json_body,
+                    'timeout' => 30
+                ]);
+
+                if (!is_wp_error($retry_response)) {
+                    $retry_status = wp_remote_retrieve_response_code($retry_response);
+                    $retry_body = wp_remote_retrieve_body($retry_response);
+                    error_log('[RaffleMania OneSignal] Retry with alt auth (HTTP ' . $retry_status . '): ' . $retry_body);
+
+                    if ($retry_status >= 200 && $retry_status < 300) {
+                        // Alt format worked - use the retry response
+                        $response_body = $retry_body;
+                        $status_code = $retry_status;
+                        error_log('[RaffleMania OneSignal] SUCCESS with alternate auth format (' . substr($alt_auth, 0, 8) . '...). Consider updating your API key format in settings.');
+                    }
+                }
+            }
+
+            // Still failed after retry
+            if ($status_code < 200 || $status_code >= 300) {
+                return false;
+            }
+        }
+
         $body = json_decode($response_body, true);
+
+        // Check for OneSignal API-level errors
+        if (isset($body['errors']) && !empty($body['errors'])) {
+            $errors_str = is_array($body['errors']) ? implode(', ', $body['errors']) : json_encode($body['errors']);
+            error_log('[RaffleMania OneSignal] API ERRORS: ' . $errors_str);
+            return false;
+        }
+
+        // OneSignal API v2 doesn't return recipients in the immediate response for segment-based sends.
+        // Fetch the notification details to get the actual recipients count.
+        if ($body && isset($body['id']) && !empty($body['id']) && !isset($body['recipients'])) {
+            $app_id = $payload['app_id'] ?? '';
+            $notif_id = $body['id'];
+            usleep(1500000); // Wait 1.5s for OneSignal to process
+
+            $detail_response = wp_remote_get(
+                "https://api.onesignal.com/notifications/{$notif_id}?app_id={$app_id}",
+                [
+                    'headers' => [
+                        'Authorization' => self::get_auth_header($api_key),
+                    ],
+                    'timeout' => 10,
+                ]
+            );
+
+            if (!is_wp_error($detail_response)) {
+                $detail_body = json_decode(wp_remote_retrieve_body($detail_response), true);
+                if ($detail_body) {
+                    $successful = (int)($detail_body['successful'] ?? 0);
+                    $failed = (int)($detail_body['failed'] ?? 0);
+                    $remaining = (int)($detail_body['remaining'] ?? 0);
+
+                    $body['recipients'] = $successful;
+                    if ($body['recipients'] == 0 && $remaining > 0) {
+                        // Still queuing - use remaining as estimate
+                        $body['recipients'] = $remaining;
+                    }
+                    error_log('[RaffleMania OneSignal] Delivery stats - successful: ' . $successful . ', failed: ' . $failed . ', remaining: ' . $remaining);
+                }
+            }
+        }
+
         return $body;
     }
 }

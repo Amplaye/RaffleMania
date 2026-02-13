@@ -98,26 +98,51 @@ function rafflemania_ajax_dbcheck_handler() {
     ]);
 }
 
+// AJAX endpoint for bulk rewards recipient preview (admin only)
+add_action('wp_ajax_rafflemania_preview_recipients', 'rafflemania_ajax_preview_recipients');
+
+function rafflemania_ajax_preview_recipients() {
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Non autorizzato'], 403);
+    }
+    global $wpdb;
+    $table_users = $wpdb->prefix . 'rafflemania_users';
+    $target = sanitize_text_field($_POST['target'] ?? 'all');
+    $where = "is_active = 1";
+    if ($target === 'level_range') {
+        $min_level = max(0, intval($_POST['min_level'] ?? 0));
+        $max_level = max(0, intval($_POST['max_level'] ?? 10));
+        $where .= $wpdb->prepare(" AND level >= %d AND level <= %d", $min_level, $max_level);
+    }
+    $count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_users} WHERE {$where}");
+    wp_send_json_success(['count' => $count]);
+}
+
 function rafflemania_ajax_settings_handler() {
-    $xp_watch_ad = (int) get_option('rafflemania_xp_watch_ad', 10);
-    $xp_daily_streak = (int) get_option('rafflemania_xp_daily_streak', 10);
-    $xp_credit_ticket = (int) get_option('rafflemania_xp_credit_ticket', 5);
-    $credits_per_ticket = (int) get_option('rafflemania_credits_per_ticket', 5);
-    $referral_bonus = (int) get_option('rafflemania_referral_bonus', 10);
+    // Read from new JSON wp_options (set by admin panel)
+    $xp_rewards = json_decode(get_option('rafflemania_xp_rewards', '{}'), true) ?: [];
+    $streak_config = json_decode(get_option('rafflemania_streak_config', '{}'), true) ?: [];
+    $daily_limits = json_decode(get_option('rafflemania_daily_limits', '{}'), true) ?: [];
+    $referral_config = json_decode(get_option('rafflemania_referral_config', '{}'), true) ?: [];
 
     wp_send_json_success([
         'xp' => [
-            'watch_ad' => $xp_watch_ad,
-            'daily_streak' => $xp_daily_streak,
-            'credit_ticket' => $xp_credit_ticket,
-            'skip_ad' => $xp_watch_ad * 2,
-            'purchase_credits' => 25,
-            'win_prize' => 250,
-            'referral' => 50,
+            'watch_ad' => $xp_rewards['watch_ad'] ?? 3,
+            'purchase_ticket' => $xp_rewards['purchase_ticket'] ?? 2,
+            'skip_ad' => $xp_rewards['skip_ad'] ?? 0,
+            'purchase_credits' => $xp_rewards['purchase_credits'] ?? 0,
+            'win_prize' => $xp_rewards['win_prize'] ?? 0,
+            'referral' => $xp_rewards['referral'] ?? 0,
+            'daily_streak' => $streak_config['daily_xp'] ?? 5,
+            'credit_ticket' => $xp_rewards['purchase_ticket'] ?? 2,
         ],
         'credits' => [
-            'per_ticket' => $credits_per_ticket,
-            'referral_bonus' => $referral_bonus,
+            'per_ticket' => $daily_limits['credits_per_ticket'] ?? 5,
+            'referral_bonus' => $referral_config['referrer_credits'] ?? 15,
         ],
+        'xp_rewards' => $xp_rewards,
+        'streak_config' => $streak_config,
+        'daily_limits' => $daily_limits,
+        'referral_config' => $referral_config,
     ]);
 }

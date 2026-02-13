@@ -10,6 +10,8 @@ export {useAvatarStore, AVATARS, FRAMES} from './useAvatarStore';
 export type {Avatar, Frame} from './useAvatarStore';
 export {useLeaderboardStore} from './useLeaderboardStore';
 export {useExtractionStore} from './useExtractionStore';
+export {useGameConfigStore} from './useGameConfigStore';
+export type {LevelConfig, ShopPackage} from './useGameConfigStore';
 export {useSettingsStore, getXPRewards} from './useSettingsStore';
 export {useReferralStore, REFERRAL_REWARDS} from './useReferralStore';
 export type {ReferredUser, ReferrerInfo} from './useReferralStore';

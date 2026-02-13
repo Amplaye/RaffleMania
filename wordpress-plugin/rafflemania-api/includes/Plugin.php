@@ -47,6 +47,12 @@ class Plugin {
         // Cron for scheduled extractions
         add_action('rafflemania_check_extractions', [$this, 'check_scheduled_extractions']);
 
+        // Daily cleanup cron
+        add_action('rafflemania_daily_cleanup', [$this, 'perform_daily_cleanup']);
+        if (!wp_next_scheduled('rafflemania_daily_cleanup')) {
+            wp_schedule_event(time(), 'daily', 'rafflemania_daily_cleanup');
+        }
+
         // Force re-schedule to fix previously broken cron registration
         $cron_fix_version = get_option('rafflemania_cron_fix_version', '0');
         if ($cron_fix_version < 2) {
@@ -130,6 +136,16 @@ class Plugin {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/ChatController.php';
         $chat = new API\ChatController();
         $chat->register_routes();
+
+        // Notification endpoints (admin push management) - v2.0
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/NotificationController.php';
+        $notifications = new API\NotificationController();
+        $notifications->register_routes();
+
+        // Admin endpoints (user management, bulk rewards, force actions) - v2.0
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/AdminController.php';
+        $admin = new API\AdminController();
+        $admin->register_routes();
     }
 
     public function add_admin_menu() {
@@ -190,6 +206,42 @@ class Plugin {
 
         add_submenu_page(
             'rafflemania',
+            'Economia di Gioco',
+            'Economia',
+            'manage_options',
+            'rafflemania-economy',
+            [$this, 'render_economy_page']
+        );
+
+        add_submenu_page(
+            'rafflemania',
+            'Contenuti App',
+            'Contenuti',
+            'manage_options',
+            'rafflemania-content',
+            [$this, 'render_content_page']
+        );
+
+        add_submenu_page(
+            'rafflemania',
+            'Notifiche Push',
+            'Notifiche',
+            'manage_options',
+            'rafflemania-notifications',
+            [$this, 'render_notifications_page']
+        );
+
+        add_submenu_page(
+            'rafflemania',
+            'Ricompense Globali',
+            'Ricompense',
+            'manage_options',
+            'rafflemania-rewards',
+            [$this, 'render_rewards_page']
+        );
+
+        add_submenu_page(
+            'rafflemania',
             'Supporto Chat',
             'Supporto',
             'manage_options',
@@ -238,6 +290,24 @@ class Plugin {
 
     public function render_shipments_page() {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/shipments.php';
+    }
+
+    public function render_economy_page() {
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/game-economy.php';
+    }
+
+    public function render_content_page() {
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/app-content.php';
+    }
+
+    public function render_notifications_page() {
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/notifications.php';
+    }
+
+    public function render_rewards_page() {
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'admin/bulk-rewards.php';
     }
 
     /**
@@ -341,6 +411,10 @@ class Plugin {
         foreach ($expired_prizes as $prize) {
             $this->perform_extraction($prize);
         }
+
+        // Process scheduled notifications
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/NotificationController.php';
+        API\NotificationController::process_scheduled();
     }
 
     private function perform_extraction($prize) {
@@ -557,5 +631,94 @@ class Plugin {
             }
             update_option('rafflemania_notif_db_version', '1.5');
         }
+
+        // Migration 2.0: Admin panel tables + seed data
+        $admin_db_version = get_option('rafflemania_admin_panel_db_version', '0');
+        if (version_compare($admin_db_version, '2.0', '<')) {
+            require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/Activator.php';
+            Activator::activate();
+        }
+
+        // Migration 2.1: Add admin_notes and is_banned to users table
+        if (version_compare($admin_db_version, '2.1', '<')) {
+            $table_users = $wpdb->prefix . 'rafflemania_users';
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_users}'");
+            if ($table_exists) {
+                $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_users}");
+                $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+                if (!in_array('is_banned', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_users} ADD COLUMN is_banned tinyint(1) DEFAULT 0 AFTER is_active");
+                }
+                if (!in_array('ban_reason', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_users} ADD COLUMN ban_reason varchar(500) DEFAULT NULL AFTER is_banned");
+                }
+                if (!in_array('admin_notes', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_users} ADD COLUMN admin_notes text DEFAULT NULL AFTER ban_reason");
+                }
+                if (!in_array('last_login_at', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_users} ADD COLUMN last_login_at datetime DEFAULT NULL AFTER updated_at");
+                }
+            }
+            update_option('rafflemania_admin_panel_db_version', '2.1');
+        }
+    }
+
+    /**
+     * Daily cleanup - removes old data to keep DB lean
+     */
+    public function perform_daily_cleanup() {
+        global $wpdb;
+
+        error_log('[RaffleMania Cleanup] Daily cleanup started at ' . current_time('mysql'));
+
+        $cleaned = [];
+
+        // 1. Delete used/expired tickets older than 90 days
+        $table_tickets = $wpdb->prefix . 'rafflemania_tickets';
+        $deleted = $wpdb->query("DELETE FROM {$table_tickets} WHERE status IN ('used','expired') AND created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)");
+        if ($deleted) $cleaned[] = "tickets: {$deleted}";
+
+        // 2. Delete old notification_log entries (older than 90 days)
+        $table_notif = $wpdb->prefix . 'rafflemania_notification_log';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_notif}'");
+        if ($table_exists) {
+            $deleted = $wpdb->query("DELETE FROM {$table_notif} WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)");
+            if ($deleted) $cleaned[] = "notification_log: {$deleted}";
+        }
+
+        // 3. Delete old admin_actions_log entries (older than 180 days)
+        $table_log = $wpdb->prefix . 'rafflemania_admin_actions_log';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_log}'");
+        if ($table_exists) {
+            $deleted = $wpdb->query("DELETE FROM {$table_log} WHERE created_at < DATE_SUB(NOW(), INTERVAL 180 DAY)");
+            if ($deleted) $cleaned[] = "admin_actions_log: {$deleted}";
+        }
+
+        // 4. Delete old bulk_rewards_log entries (older than 90 days)
+        $table_bulk = $wpdb->prefix . 'rafflemania_bulk_rewards_log';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_bulk}'");
+        if ($table_exists) {
+            $deleted = $wpdb->query("DELETE FROM {$table_bulk} WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)");
+            if ($deleted) $cleaned[] = "bulk_rewards_log: {$deleted}";
+        }
+
+        // 5. Delete old daily_stats (older than 365 days)
+        $table_stats = $wpdb->prefix . 'rafflemania_daily_stats';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_stats}'");
+        if ($table_exists) {
+            $deleted = $wpdb->query("DELETE FROM {$table_stats} WHERE stat_date < DATE_SUB(CURDATE(), INTERVAL 365 DAY)");
+            if ($deleted) $cleaned[] = "daily_stats: {$deleted}";
+        }
+
+        // 6. Invalidate API caches
+        wp_cache_delete('rafflemania_levels', 'rafflemania');
+        wp_cache_delete('rafflemania_shop_packages', 'rafflemania');
+        wp_cache_delete('rafflemania_streak_config', 'rafflemania');
+        wp_cache_delete('rafflemania_game_config', 'rafflemania');
+        wp_cache_delete('rafflemania_app_content', 'rafflemania');
+
+        $summary = empty($cleaned) ? 'nothing to clean' : implode(', ', $cleaned);
+        error_log("[RaffleMania Cleanup] Completed: {$summary}");
     }
 }

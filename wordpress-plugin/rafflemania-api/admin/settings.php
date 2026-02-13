@@ -1,5 +1,5 @@
 <?php
-// Settings Page v1.5 - 2026-02-02 - Firebase Support
+// Settings Page v2.0 - Cleaned up, XP/Credits moved to Economia page
 if (!defined('ABSPATH')) exit;
 
 // Handle save
@@ -7,18 +7,7 @@ $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_settings_nonce'])) {
     if (wp_verify_nonce($_POST['rafflemania_settings_nonce'], 'rafflemania_settings_action')) {
 
-        // Credits settings
-        update_option('rafflemania_credits_per_ticket', intval($_POST['credits_per_ticket']));
-
-        // Referral bonus
-        update_option('rafflemania_referral_bonus', intval($_POST['referral_bonus']));
-
-        // XP rewards
-        update_option('rafflemania_xp_watch_ad', intval($_POST['xp_watch_ad']));
-        update_option('rafflemania_xp_daily_streak', intval($_POST['xp_daily_streak']));
-        update_option('rafflemania_xp_credit_ticket', intval($_POST['xp_credit_ticket']));
-
-        // Push notifications (OneSignal - Free)
+        // Push notifications (OneSignal)
         update_option('rafflemania_onesignal_app_id', sanitize_text_field($_POST['onesignal_app_id']));
         update_option('rafflemania_onesignal_api_key', sanitize_text_field($_POST['onesignal_api_key']));
 
@@ -29,31 +18,91 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_settings_
         // Contact email
         update_option('rafflemania_contact_email', sanitize_email($_POST['contact_email']));
 
+        // Admin key
+        if (!empty($_POST['admin_api_key'])) {
+            update_option('rafflemania_admin_api_key', sanitize_text_field($_POST['admin_api_key']));
+        }
+
         $message = 'Impostazioni salvate con successo!';
     }
 }
 
-// Get current settings
-$credits_per_ticket = get_option('rafflemania_credits_per_ticket', 5);
-$referral_bonus = get_option('rafflemania_referral_bonus', 10);
-$xp_watch_ad = get_option('rafflemania_xp_watch_ad', 10);
-$xp_daily_streak = get_option('rafflemania_xp_daily_streak', 10);
-$xp_credit_ticket = get_option('rafflemania_xp_credit_ticket', 5);
 $contact_email = get_option('rafflemania_contact_email', get_option('admin_email'));
 $jwt_secret = get_option('rafflemania_jwt_secret', '');
+$admin_api_key = get_option('rafflemania_admin_api_key', '');
 ?>
 
-<div class="wrap">
+<div class="wrap rafflemania-settings-wrap">
     <h1>
-        <span class="dashicons dashicons-admin-settings" style="font-size: 30px; margin-right: 10px;"></span>
+        <span class="dashicons dashicons-admin-settings" style="font-size: 30px; margin-right: 10px; color: #FF6B00;"></span>
         Impostazioni RaffleMania
     </h1>
 
     <?php if ($message): ?>
-    <div class="notice notice-success is-dismissible"><p><?php echo esc_html($message); ?></p></div>
+    <div class="rafflemania-toast rafflemania-toast-success">
+        <span class="dashicons dashicons-yes-alt"></span> <?php echo esc_html($message); ?>
+    </div>
     <?php endif; ?>
 
     <style>
+        .rafflemania-settings-wrap { }
+
+        .rafflemania-toast {
+            position: fixed;
+            top: 40px;
+            right: 20px;
+            z-index: 99999;
+            padding: 14px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            animation: slideIn 0.4s ease-out, fadeOut 0.4s ease-in 3.5s forwards;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .rafflemania-toast-success { background: #d4edda; color: #155724; border-left: 4px solid #28a745; }
+
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; visibility: hidden; } }
+
+        /* Quick links */
+        .rafflemania-quick-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .rafflemania-quick-link {
+            background: white;
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            text-decoration: none;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .rafflemania-quick-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            border-left-color: #FF6B00;
+            color: #FF6B00;
+        }
+        .rafflemania-quick-link .dashicons {
+            font-size: 20px;
+            color: #FF6B00;
+        }
+        .rafflemania-quick-link span:last-child {
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        /* Settings grid */
         .rafflemania-settings {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -73,29 +122,32 @@ $jwt_secret = get_option('rafflemania_jwt_secret', '');
             display: flex;
             align-items: center;
             gap: 10px;
+            color: #333;
         }
-        .rafflemania-form-row {
-            margin-bottom: 16px;
-        }
+        .rafflemania-form-row { margin-bottom: 16px; }
         .rafflemania-form-row label {
             display: block;
             font-weight: 600;
             margin-bottom: 6px;
+            color: #444;
         }
         .rafflemania-form-row input[type="text"],
         .rafflemania-form-row input[type="number"],
         .rafflemania-form-row input[type="email"],
         .rafflemania-form-row input[type="password"] {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
+            padding: 10px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
         }
-        .rafflemania-form-row small {
-            color: #666;
-            display: block;
-            margin-top: 4px;
+        .rafflemania-form-row input:focus {
+            border-color: #FF6B00;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(255,107,0,0.1);
         }
+        .rafflemania-form-row small { color: #888; display: block; margin-top: 4px; }
         .rafflemania-info-box {
             background: #f0f8ff;
             border: 1px solid #b8daff;
@@ -108,10 +160,13 @@ $jwt_secret = get_option('rafflemania_jwt_secret', '');
             padding: 2px 8px;
             border-radius: 4px;
             word-break: break-all;
+            font-size: 13px;
         }
         .button-primary {
             background: #FF6B00 !important;
             border-color: #FF6B00 !important;
+            border-radius: 8px !important;
+            padding: 8px 24px !important;
         }
         .button-primary:hover {
             background: #e55d00 !important;
@@ -119,69 +174,47 @@ $jwt_secret = get_option('rafflemania_jwt_secret', '');
         }
     </style>
 
+    <!-- Quick Links to new admin pages -->
+    <div class="rafflemania-quick-links">
+        <a href="<?php echo admin_url('admin.php?page=rafflemania-economy'); ?>" class="rafflemania-quick-link">
+            <span class="dashicons dashicons-chart-area"></span>
+            <span>Economia di Gioco</span>
+        </a>
+        <a href="<?php echo admin_url('admin.php?page=rafflemania-content'); ?>" class="rafflemania-quick-link">
+            <span class="dashicons dashicons-admin-page"></span>
+            <span>Contenuti App</span>
+        </a>
+        <a href="<?php echo admin_url('admin.php?page=rafflemania-notifications'); ?>" class="rafflemania-quick-link">
+            <span class="dashicons dashicons-bell"></span>
+            <span>Notifiche Push</span>
+        </a>
+        <a href="<?php echo admin_url('admin.php?page=rafflemania-rewards'); ?>" class="rafflemania-quick-link">
+            <span class="dashicons dashicons-awards"></span>
+            <span>Ricompense Globali</span>
+        </a>
+    </div>
+
     <form method="post">
         <?php wp_nonce_field('rafflemania_settings_action', 'rafflemania_settings_nonce'); ?>
 
         <div class="rafflemania-settings">
 
-            <!-- Credits Settings -->
-            <div class="rafflemania-settings-card">
-                <h2><span class="dashicons dashicons-money-alt"></span> Crediti</h2>
-
-                <div class="rafflemania-form-row">
-                    <label>Crediti per Biglietto</label>
-                    <input type="number" name="credits_per_ticket" min="1" value="<?php echo esc_attr($credits_per_ticket); ?>">
-                    <small>Quanti crediti servono per ottenere un biglietto</small>
-                </div>
-
-                <div class="rafflemania-form-row">
-                    <label>Bonus Referral</label>
-                    <input type="number" name="referral_bonus" min="0" value="<?php echo esc_attr($referral_bonus); ?>">
-                    <small>Crediti bonus per chi invita e chi viene invitato</small>
-                </div>
-            </div>
-
-            <!-- XP Settings -->
-            <div class="rafflemania-settings-card">
-                <h2><span class="dashicons dashicons-star-filled"></span> Esperienza (XP)</h2>
-
-                <div class="rafflemania-form-row">
-                    <label>XP per Ads Guardata</label>
-                    <input type="number" name="xp_watch_ad" min="0" value="<?php echo esc_attr($xp_watch_ad); ?>">
-                </div>
-
-                <div class="rafflemania-form-row">
-                    <label>XP Base Streak Giornaliera</label>
-                    <input type="number" name="xp_daily_streak" min="0" value="<?php echo esc_attr($xp_daily_streak); ?>">
-                    <small>XP base, aumenta con i giorni consecutivi</small>
-                </div>
-
-                <div class="rafflemania-form-row">
-                    <label>XP per Biglietto con Crediti</label>
-                    <input type="number" name="xp_credit_ticket" min="0" value="<?php echo esc_attr($xp_credit_ticket); ?>">
-                    <small>XP guadagnati quando si acquista un biglietto con crediti</small>
-                </div>
-            </div>
-
             <!-- Notifications -->
             <div class="rafflemania-settings-card">
-                <h2><span class="dashicons dashicons-bell"></span> Notifiche Push (OneSignal - Gratuito)</h2>
+                <h2><span class="dashicons dashicons-bell"></span> Notifiche Push (OneSignal)</h2>
 
                 <div class="rafflemania-info-box" style="background: #e8f5e9; border-color: #4caf50;">
-                    <strong>💡 OneSignal è gratuito!</strong><br>
-                    Registrati su <a href="https://onesignal.com" target="_blank">onesignal.com</a> per ottenere App ID e API Key gratuiti.
+                    <strong>OneSignal</strong> - Registrati su <a href="https://onesignal.com" target="_blank">onesignal.com</a> per le push notification gratuite.
                 </div>
 
                 <div class="rafflemania-form-row">
                     <label>OneSignal App ID</label>
                     <input type="text" name="onesignal_app_id" value="<?php echo esc_attr(get_option('rafflemania_onesignal_app_id', '')); ?>">
-                    <small>Il tuo OneSignal App ID (gratuito)</small>
                 </div>
 
                 <div class="rafflemania-form-row">
                     <label>OneSignal REST API Key</label>
                     <input type="password" name="onesignal_api_key" value="<?php echo esc_attr(get_option('rafflemania_onesignal_api_key', '')); ?>">
-                    <small>La tua REST API Key di OneSignal</small>
                 </div>
             </div>
 
@@ -190,31 +223,35 @@ $jwt_secret = get_option('rafflemania_jwt_secret', '');
                 <h2><span class="dashicons dashicons-format-chat"></span> Firebase (Chat Supporto)</h2>
 
                 <div class="rafflemania-info-box" style="background: #fff3e0; border-color: #ff9800;">
-                    <strong>🔥 Firebase Firestore</strong><br>
-                    Per la chat di supporto. Vai su <a href="https://console.firebase.google.com" target="_blank">Firebase Console</a> → Project Settings per ottenere le credenziali.
+                    <strong>Firebase Firestore</strong> - Per la chat di supporto. <a href="https://console.firebase.google.com" target="_blank">Firebase Console</a>
                 </div>
 
                 <div class="rafflemania-form-row">
                     <label>Firebase Project ID</label>
                     <input type="text" name="firebase_project_id" value="<?php echo esc_attr(get_option('rafflemania_firebase_project_id', '')); ?>" placeholder="es. rafflemania-12345">
-                    <small>Il Project ID del tuo progetto Firebase</small>
                 </div>
 
                 <div class="rafflemania-form-row">
                     <label>Firebase Web API Key</label>
                     <input type="password" name="firebase_api_key" value="<?php echo esc_attr(get_option('rafflemania_firebase_api_key', '')); ?>">
-                    <small>La Web API Key (opzionale per regole pubbliche)</small>
+                    <small>Opzionale per regole pubbliche</small>
                 </div>
             </div>
 
-            <!-- Contact -->
+            <!-- Contact & Admin -->
             <div class="rafflemania-settings-card">
-                <h2><span class="dashicons dashicons-email"></span> Contatto</h2>
+                <h2><span class="dashicons dashicons-email"></span> Contatto & Sicurezza</h2>
 
                 <div class="rafflemania-form-row">
                     <label>Email Contatto</label>
                     <input type="email" name="contact_email" value="<?php echo esc_attr($contact_email); ?>">
                     <small>Email per notifiche admin e contatti utenti</small>
+                </div>
+
+                <div class="rafflemania-form-row">
+                    <label>Admin API Key</label>
+                    <input type="password" name="admin_api_key" value="<?php echo esc_attr($admin_api_key); ?>" placeholder="Lascia vuoto per mantenere attuale">
+                    <small>Chiave per l'accesso API da app esterne (header X-Admin-Key)</small>
                 </div>
             </div>
 
@@ -230,18 +267,20 @@ $jwt_secret = get_option('rafflemania_jwt_secret', '');
                 <div class="rafflemania-info-box">
                     <strong>JWT Secret:</strong><br>
                     <code><?php echo esc_html(substr($jwt_secret, 0, 20) . '...'); ?></code>
-                    <br><small>Generato automaticamente, non modificare</small>
+                    <br><small>Generato automaticamente</small>
                 </div>
 
                 <div class="rafflemania-info-box">
-                    <strong>Endpoints Principali:</strong>
-                    <ul style="margin: 10px 0 0 20px;">
-                        <li><code>POST /auth/register</code></li>
-                        <li><code>POST /auth/login</code></li>
-                        <li><code>GET /prizes</code></li>
-                        <li><code>POST /tickets</code></li>
-                        <li><code>GET /users/me</code></li>
-                        <li><code>GET /winners</code></li>
+                    <strong>Nuovi Endpoint Admin v2.0:</strong>
+                    <ul style="margin: 10px 0 0 20px; font-size: 13px;">
+                        <li><code>GET /settings/game-config</code> - Config economia</li>
+                        <li><code>GET /settings/levels</code> - Livelli</li>
+                        <li><code>GET /settings/shop-packages</code> - Pacchetti shop</li>
+                        <li><code>GET /settings/streak-config</code> - Config streak</li>
+                        <li><code>GET /settings/app-content</code> - Contenuti app</li>
+                        <li><code>POST /notifications/broadcast</code> - Push broadcast</li>
+                        <li><code>POST /admin/bulk-reward</code> - Ricompense globali</li>
+                        <li><code>GET /admin/user/{id}/full-profile</code> - Profilo completo</li>
                     </ul>
                 </div>
             </div>
@@ -260,18 +299,27 @@ $jwt_secret = get_option('rafflemania_jwt_secret', '');
                     'rafflemania_winners' => 'Vincitori',
                     'rafflemania_transactions' => 'Transazioni',
                     'rafflemania_streaks' => 'Streak',
-                    'rafflemania_referrals' => 'Referral'
+                    'rafflemania_referrals' => 'Referral',
+                    'rafflemania_levels' => 'Livelli',
+                    'rafflemania_shop_packages' => 'Pacchetti Shop',
+                    'rafflemania_notification_log' => 'Log Notifiche',
+                    'rafflemania_admin_actions_log' => 'Log Azioni Admin',
                 ];
 
                 foreach ($tables as $table => $label):
                     $full_table = $wpdb->prefix . $table;
-                    $count = $wpdb->get_var("SELECT COUNT(*) FROM {$full_table}");
+                    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$full_table}'");
+                    $count = $table_exists ? $wpdb->get_var("SELECT COUNT(*) FROM {$full_table}") : '-';
                 ?>
-                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
-                    <span><?php echo $label; ?></span>
-                    <strong><?php echo number_format($count); ?> record</strong>
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                    <span style="color: #555;"><?php echo $label; ?></span>
+                    <strong style="color: <?php echo $table_exists ? '#333' : '#dc3545'; ?>;"><?php echo $table_exists ? number_format($count) . ' record' : 'Non presente'; ?></strong>
                 </div>
                 <?php endforeach; ?>
+
+                <div style="margin-top: 12px; font-size: 12px; color: #999;">
+                    DB Version: <?php echo get_option('rafflemania_admin_panel_db_version', 'N/A'); ?>
+                </div>
             </div>
 
         </div>
@@ -281,3 +329,9 @@ $jwt_secret = get_option('rafflemania_jwt_secret', '');
         </p>
     </form>
 </div>
+
+<script>
+setTimeout(function() {
+    document.querySelectorAll('.rafflemania-toast').forEach(function(t) { t.style.display = 'none'; });
+}, 4000);
+</script>

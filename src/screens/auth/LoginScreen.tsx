@@ -205,6 +205,7 @@ interface LoginScreenProps {
 const REMEMBER_ME_KEY = '@rafflemania_remember_me';
 const SAVED_EMAIL_KEY = '@rafflemania_saved_email';
 const SAVED_PASSWORD_SERVICE = 'rafflemania_saved_password';
+const SAVED_LOGIN_METHOD_KEY = '@rafflemania_login_method';
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const [email, setEmail] = useState('');
@@ -221,7 +222,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const {login, loginAsGuest, loginWithGoogle, loginWithApple, resendVerificationEmail, isLoading} = useAuthStore();
   const [socialLoading, setSocialLoading] = useState<'google' | 'apple' | null>(null);
 
-  // Load saved credentials on mount
+  // Load saved credentials on mount and auto-login for social accounts
   useEffect(() => {
     const loadSavedCredentials = async () => {
       try {
@@ -232,7 +233,30 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
           if (savedEmail) {
             setEmail(savedEmail);
           }
-          // Load saved password from secure storage
+
+          // Check if last login was via social provider - auto-trigger it
+          const lastMethod = await AsyncStorage.getItem(SAVED_LOGIN_METHOD_KEY);
+          if (lastMethod === 'apple' && Platform.OS === 'ios') {
+            // Auto-trigger Apple Sign-In
+            setSocialLoading('apple');
+            try {
+              await loginWithApple();
+              return; // Success - no need to load password
+            } catch {
+              setSocialLoading(null);
+              // Fall through to normal login screen
+            }
+          } else if (lastMethod === 'google') {
+            setSocialLoading('google');
+            try {
+              await loginWithGoogle();
+              return;
+            } catch {
+              setSocialLoading(null);
+            }
+          }
+
+          // Load saved password from secure storage (for email/password accounts)
           const savedPassword = await Keychain.getGenericPassword({service: SAVED_PASSWORD_SERVICE});
           if (savedPassword) {
             setPassword(savedPassword.password);
@@ -243,6 +267,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
       }
     };
     loadSavedCredentials();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Generate simple neon orange particles
@@ -315,11 +340,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
       if (rememberMe) {
         await AsyncStorage.setItem(REMEMBER_ME_KEY, 'true');
         await AsyncStorage.setItem(SAVED_EMAIL_KEY, email);
+        await AsyncStorage.setItem(SAVED_LOGIN_METHOD_KEY, 'email');
         // Save password securely
         await Keychain.setGenericPassword('password', password, {service: SAVED_PASSWORD_SERVICE});
       } else {
         await AsyncStorage.removeItem(REMEMBER_ME_KEY);
         await AsyncStorage.removeItem(SAVED_EMAIL_KEY);
+        await AsyncStorage.removeItem(SAVED_LOGIN_METHOD_KEY);
         // Clear saved password
         await Keychain.resetGenericPassword({service: SAVED_PASSWORD_SERVICE});
       }
@@ -380,6 +407,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     setSocialLoading('google');
     try {
       const result = await loginWithGoogle();
+      // Save login method for auto-login next time
+      await AsyncStorage.setItem(SAVED_LOGIN_METHOD_KEY, 'google');
       if (result?.isNewUser) {
         setTimeout(() => showReferralInput(), 500);
       }
@@ -394,6 +423,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     setSocialLoading('apple');
     try {
       const result = await loginWithApple();
+      // Save login method for auto-login next time
+      await AsyncStorage.setItem(SAVED_LOGIN_METHOD_KEY, 'apple');
       if (result?.isNewUser) {
         setTimeout(() => showReferralInput(), 500);
       }

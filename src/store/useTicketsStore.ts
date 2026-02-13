@@ -43,11 +43,18 @@ const mapApiTicketToTicket = (apiTicket: any): Ticket => ({
   wonAt: apiTicket.wonAt || apiTicket.won_at,
 });
 
-// Limiti giornalieri secondo il documento
-export const DAILY_LIMITS = {
-  MAX_TICKETS_PER_DAY: 60,        // Massimo 60 biglietti al giorno
-  MAX_ADS_PER_DAY: 72,            // 1 ad ogni 20 min = 3/ora * 24 = 72
-  AD_COOLDOWN_MINUTES: 20,        // Cooldown tra ads in minuti
+import {useGameConfigStore, DEFAULT_DAILY_LIMITS} from './useGameConfigStore';
+
+// Limiti giornalieri - Fallback defaults (dynamic values from useGameConfigStore)
+export const DAILY_LIMITS = DEFAULT_DAILY_LIMITS;
+
+// Dynamic daily limits helper
+const getDynamicDailyLimits = () => {
+  try {
+    return useGameConfigStore.getState().getDailyLimits();
+  } catch {
+    return DAILY_LIMITS;
+  }
 };
 
 interface TicketsState {
@@ -184,7 +191,7 @@ export const useTicketsStore = create<TicketsState>()(
 
     // Check if user can purchase more tickets today
     const currentPurchased = get().todayTicketsPurchased;
-    const remainingToday = DAILY_LIMITS.MAX_TICKETS_PER_DAY - currentPurchased;
+    const remainingToday = getDynamicDailyLimits().MAX_TICKETS_PER_DAY - currentPurchased;
 
     if (remainingToday <= 0) {
       throw new Error('Hai raggiunto il limite di 60 biglietti giornalieri. Riprova domani!');
@@ -275,7 +282,7 @@ export const useTicketsStore = create<TicketsState>()(
     const effectiveAdsWatched = isNewDay ? 0 : state.todayAdsWatched;
 
     // Check limite ads giornaliere
-    if (effectiveAdsWatched >= DAILY_LIMITS.MAX_ADS_PER_DAY) {
+    if (effectiveAdsWatched >= getDynamicDailyLimits().MAX_ADS_PER_DAY) {
       return false;
     }
 
@@ -284,7 +291,7 @@ export const useTicketsStore = create<TicketsState>()(
       const lastWatched = new Date(state.lastAdWatchedAt);
       const now = new Date();
       const diffMinutes = (now.getTime() - lastWatched.getTime()) / (1000 * 60);
-      if (diffMinutes < DAILY_LIMITS.AD_COOLDOWN_MINUTES) {
+      if (diffMinutes < getDynamicDailyLimits().AD_COOLDOWN_MINUTES) {
         return false;
       }
     }
@@ -297,7 +304,7 @@ export const useTicketsStore = create<TicketsState>()(
     const today = new Date().toISOString().split('T')[0];
     const isNewDay = state.lastResetDate !== today;
     const effectiveTickets = isNewDay ? 0 : state.todayTicketsPurchased;
-    return effectiveTickets < DAILY_LIMITS.MAX_TICKETS_PER_DAY;
+    return effectiveTickets < getDynamicDailyLimits().MAX_TICKETS_PER_DAY;
   },
 
   getTicketsPurchasedToday: () => {
@@ -314,7 +321,7 @@ export const useTicketsStore = create<TicketsState>()(
     const lastWatched = new Date(state.lastAdWatchedAt);
     const now = new Date();
     const diffMinutes = (now.getTime() - lastWatched.getTime()) / (1000 * 60);
-    const remaining = DAILY_LIMITS.AD_COOLDOWN_MINUTES - diffMinutes;
+    const remaining = getDynamicDailyLimits().AD_COOLDOWN_MINUTES - diffMinutes;
     return remaining > 0 ? Math.ceil(remaining) : 0;
   },
 
@@ -325,7 +332,7 @@ export const useTicketsStore = create<TicketsState>()(
     const lastWatched = new Date(state.lastAdWatchedAt);
     const now = new Date();
     const diffSeconds = (now.getTime() - lastWatched.getTime()) / 1000;
-    const cooldownSeconds = DAILY_LIMITS.AD_COOLDOWN_MINUTES * 60;
+    const cooldownSeconds = getDynamicDailyLimits().AD_COOLDOWN_MINUTES * 60;
     const remaining = cooldownSeconds - diffSeconds;
     return remaining > 0 ? Math.ceil(remaining) : 0;
   },

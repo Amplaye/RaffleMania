@@ -3,12 +3,18 @@ import {persist, createJSONStorage} from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useAuthStore} from './useAuthStore';
 import apiClient from '../services/apiClient';
+import {useGameConfigStore, DEFAULT_REFERRAL_REWARDS} from './useGameConfigStore';
 
-// Referral rewards configuration
-export const REFERRAL_REWARDS = {
-  DAYS_REQUIRED: 7,          // Days the referred user must be active
-  REFERRER_CREDITS: 15,      // Credits for the person who referred
-  REFERRED_CREDITS: 15,      // Credits for the person who was referred
+// Referral rewards - Fallback defaults (dynamic values from useGameConfigStore)
+export const REFERRAL_REWARDS = DEFAULT_REFERRAL_REWARDS;
+
+// Dynamic referral config helper
+const getDynamicReferralRewards = () => {
+  try {
+    return useGameConfigStore.getState().getReferralRewards();
+  } catch {
+    return REFERRAL_REWARDS;
+  }
 };
 
 // Referred user tracking
@@ -99,7 +105,7 @@ const mapApiReferral = (apiUser: any): ReferredUser => ({
   joinedAt: apiUser.joined_at || apiUser.joinedAt || apiUser.created_at || new Date().toISOString(),
   daysActive: apiUser.days_active || apiUser.daysActive || 0,
   lastActiveDate: apiUser.last_active_date || apiUser.lastActiveDate || null,
-  isCompleted: apiUser.is_completed || apiUser.isCompleted || (apiUser.days_active || 0) >= REFERRAL_REWARDS.DAYS_REQUIRED,
+  isCompleted: apiUser.is_completed || apiUser.isCompleted || (apiUser.days_active || 0) >= getDynamicReferralRewards().DAYS_REQUIRED,
   rewardClaimed: apiUser.reward_claimed || apiUser.rewardClaimed || false,
 });
 
@@ -261,12 +267,12 @@ export const useReferralStore = create<ReferralState>()(
             let newDaysActive = state.referrer.daysActive;
 
             if (lastDate === yesterdayStr) {
-              newDaysActive = Math.min(state.referrer.daysActive + 1, REFERRAL_REWARDS.DAYS_REQUIRED);
+              newDaysActive = Math.min(state.referrer.daysActive + 1, getDynamicReferralRewards().DAYS_REQUIRED);
             } else if (lastDate === null) {
               newDaysActive = 1;
             }
 
-            const isCompleted = newDaysActive >= REFERRAL_REWARDS.DAYS_REQUIRED;
+            const isCompleted = newDaysActive >= getDynamicReferralRewards().DAYS_REQUIRED;
 
             console.log('[ReferralStore] Local activity update:', {
               lastDate,
@@ -311,10 +317,10 @@ export const useReferralStore = create<ReferralState>()(
           let newDaysActive = user.daysActive;
 
           if (lastDate === yesterdayStr || lastDate === null) {
-            newDaysActive = Math.min(user.daysActive + 1, REFERRAL_REWARDS.DAYS_REQUIRED);
+            newDaysActive = Math.min(user.daysActive + 1, getDynamicReferralRewards().DAYS_REQUIRED);
           }
 
-          const isCompleted = newDaysActive >= REFERRAL_REWARDS.DAYS_REQUIRED;
+          const isCompleted = newDaysActive >= getDynamicReferralRewards().DAYS_REQUIRED;
 
           console.log('[ReferralStore] Updating referred user activity:', {
             userId,
@@ -374,7 +380,7 @@ export const useReferralStore = create<ReferralState>()(
         // Local claim (fallback)
         const updatedUsers = state.referredUsers.map(user => {
           if (user.isCompleted && !user.rewardClaimed) {
-            referrerReward += REFERRAL_REWARDS.REFERRER_CREDITS;
+            referrerReward += getDynamicReferralRewards().REFERRER_CREDITS;
             return {...user, rewardClaimed: true};
           }
           return user;
@@ -382,7 +388,7 @@ export const useReferralStore = create<ReferralState>()(
 
         let updatedReferrer = state.referrer;
         if (state.referrer && state.referrer.isCompleted && !state.referrer.rewardClaimed) {
-          referredReward = REFERRAL_REWARDS.REFERRED_CREDITS;
+          referredReward = getDynamicReferralRewards().REFERRED_CREDITS;
           updatedReferrer = {...state.referrer, rewardClaimed: true};
         }
 
@@ -417,8 +423,8 @@ export const useReferralStore = create<ReferralState>()(
 
       getTotalCreditsEarned: () => {
         const state = get();
-        const fromReferrals = state.referredUsers.filter(u => u.rewardClaimed).length * REFERRAL_REWARDS.REFERRER_CREDITS;
-        const fromBeingReferred = state.referrer?.rewardClaimed ? REFERRAL_REWARDS.REFERRED_CREDITS : 0;
+        const fromReferrals = state.referredUsers.filter(u => u.rewardClaimed).length * getDynamicReferralRewards().REFERRER_CREDITS;
+        const fromBeingReferred = state.referrer?.rewardClaimed ? getDynamicReferralRewards().REFERRED_CREDITS : 0;
         return fromReferrals + fromBeingReferred;
       },
 
@@ -467,8 +473,8 @@ export const useReferralStore = create<ReferralState>()(
         }
 
         const today = formatDate(new Date());
-        const newDaysActive = Math.min(days, REFERRAL_REWARDS.DAYS_REQUIRED);
-        const isCompleted = newDaysActive >= REFERRAL_REWARDS.DAYS_REQUIRED;
+        const newDaysActive = Math.min(days, getDynamicReferralRewards().DAYS_REQUIRED);
+        const isCompleted = newDaysActive >= getDynamicReferralRewards().DAYS_REQUIRED;
 
         console.log('[ReferralStore] Simulating days for user:', {
           userId,

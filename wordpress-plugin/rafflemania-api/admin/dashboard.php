@@ -290,12 +290,35 @@ $recent_winners = $wpdb->get_results(
             padding: 24px;
             margin-bottom: 24px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            max-height: 500px;
+            display: flex;
+            flex-direction: column;
         }
         .rm-section h3 {
             margin: 0 0 20px 0;
             padding-bottom: 12px;
             border-bottom: 2px solid #FF6B00;
             color: #333;
+            flex-shrink: 0;
+        }
+        .rm-section .rm-table-scroll {
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+        }
+        .rm-section .rm-table-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .rm-section .rm-table-scroll::-webkit-scrollbar-track {
+            background: #f8f9fa;
+            border-radius: 3px;
+        }
+        .rm-section .rm-table-scroll::-webkit-scrollbar-thumb {
+            background: #ddd;
+            border-radius: 3px;
+        }
+        .rm-section .rm-table-scroll::-webkit-scrollbar-thumb:hover {
+            background: #ccc;
         }
 
         /* Table styling */
@@ -484,6 +507,7 @@ $recent_winners = $wpdb->get_results(
         <div class="rm-section">
             <h3>Premi</h3>
             <?php if (!empty($all_prizes)): ?>
+            <div class="rm-table-scroll">
             <table class="rm-table">
                 <thead>
                     <tr>
@@ -515,6 +539,7 @@ $recent_winners = $wpdb->get_results(
                     <?php endforeach; ?>
                 </tbody>
             </table>
+            </div>
             <?php else: ?>
             <p style="color: #666; text-align: center; padding: 20px;">Nessun premio attivo</p>
             <?php endif; ?>
@@ -524,6 +549,7 @@ $recent_winners = $wpdb->get_results(
         <div class="rm-section">
             <h3>Timer Attivi</h3>
             <?php if (!empty($active_timers)): ?>
+            <div class="rm-table-scroll">
             <table class="rm-table">
                 <thead>
                     <tr>
@@ -560,6 +586,7 @@ $recent_winners = $wpdb->get_results(
                     <?php endforeach; ?>
                 </tbody>
             </table>
+            </div>
             <?php else: ?>
             <p style="color: #666; text-align: center; padding: 20px;">Nessun timer attivo</p>
             <?php endif; ?>
@@ -569,6 +596,7 @@ $recent_winners = $wpdb->get_results(
         <div class="rm-section">
             <h3>Ultime Estrazioni</h3>
             <?php if (!empty($recent_draws)): ?>
+            <div class="rm-table-scroll">
             <table class="rm-table">
                 <thead>
                     <tr>
@@ -596,6 +624,7 @@ $recent_winners = $wpdb->get_results(
                     <?php endforeach; ?>
                 </tbody>
             </table>
+            </div>
             <?php else: ?>
             <p style="color: #666; text-align: center; padding: 20px;">Nessuna estrazione ancora</p>
             <?php endif; ?>
@@ -606,6 +635,7 @@ $recent_winners = $wpdb->get_results(
     <div class="rm-section">
         <h3>Ultimi Vincitori</h3>
         <?php if (!empty($recent_winners)): ?>
+        <div class="rm-table-scroll">
         <table class="rm-table">
             <thead>
                 <tr>
@@ -632,6 +662,7 @@ $recent_winners = $wpdb->get_results(
                 <?php endforeach; ?>
             </tbody>
         </table>
+        </div>
         <?php else: ?>
         <p style="color: #666; text-align: center; padding: 20px;">Nessun vincitore ancora</p>
         <?php endif; ?>

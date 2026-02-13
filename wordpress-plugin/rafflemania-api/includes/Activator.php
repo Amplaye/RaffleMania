@@ -8,8 +8,10 @@ class Activator {
 
     public static function activate() {
         self::create_tables();
+        self::create_admin_panel_tables();
         self::migrate_referrals_table();
         self::insert_default_data();
+        self::insert_admin_panel_defaults();
         flush_rewrite_rules();
     }
 
@@ -334,5 +336,249 @@ class Activator {
                 'timer_status' => 'waiting'
             ]));
         }
+    }
+
+    /**
+     * Create admin panel tables (levels, shop packages, notification log, etc.)
+     */
+    private static function create_admin_panel_tables() {
+        global $wpdb;
+        $charset_collate = $wpdb->get_charset_collate();
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+
+        // Levels table
+        $table_levels = $wpdb->prefix . 'rafflemania_levels';
+        $sql_levels = "CREATE TABLE {$table_levels} (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            level int(11) NOT NULL,
+            name varchar(100) NOT NULL,
+            min_xp int(11) NOT NULL DEFAULT 0,
+            max_xp int(11) NOT NULL DEFAULT 0,
+            icon varchar(50) DEFAULT 'star',
+            color varchar(20) DEFAULT '#FF6B00',
+            credit_reward int(11) DEFAULT 0,
+            sort_order int(11) DEFAULT 0,
+            is_active tinyint(1) DEFAULT 1,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY level (level),
+            KEY sort_order (sort_order),
+            KEY is_active (is_active)
+        ) {$charset_collate};";
+        dbDelta($sql_levels);
+
+        // Shop packages table
+        $table_packages = $wpdb->prefix . 'rafflemania_shop_packages';
+        $sql_packages = "CREATE TABLE {$table_packages} (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            credits int(11) NOT NULL,
+            price decimal(10,2) NOT NULL,
+            discount_label varchar(50) DEFAULT NULL,
+            badge varchar(50) DEFAULT NULL,
+            iap_product_id varchar(100) DEFAULT NULL,
+            sort_order int(11) DEFAULT 0,
+            is_active tinyint(1) DEFAULT 1,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY sort_order (sort_order),
+            KEY is_active (is_active)
+        ) {$charset_collate};";
+        dbDelta($sql_packages);
+
+        // Notification log table
+        $table_notif_log = $wpdb->prefix . 'rafflemania_notification_log';
+        $sql_notif_log = "CREATE TABLE {$table_notif_log} (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            title varchar(255) NOT NULL,
+            body text NOT NULL,
+            target_type varchar(50) DEFAULT 'all',
+            target_filter text DEFAULT NULL,
+            status enum('draft','scheduled','sent','failed') DEFAULT 'draft',
+            scheduled_at datetime DEFAULT NULL,
+            sent_at datetime DEFAULT NULL,
+            recipients_count int(11) DEFAULT 0,
+            onesignal_response text DEFAULT NULL,
+            created_by bigint(20) UNSIGNED DEFAULT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY status (status),
+            KEY scheduled_at (scheduled_at)
+        ) {$charset_collate};";
+        dbDelta($sql_notif_log);
+
+        // Admin actions log table (audit trail)
+        $table_admin_log = $wpdb->prefix . 'rafflemania_admin_actions_log';
+        $sql_admin_log = "CREATE TABLE {$table_admin_log} (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            admin_user_id bigint(20) UNSIGNED NOT NULL,
+            action_type varchar(100) NOT NULL,
+            target_user_id bigint(20) UNSIGNED DEFAULT NULL,
+            details longtext DEFAULT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY admin_user_id (admin_user_id),
+            KEY action_type (action_type),
+            KEY target_user_id (target_user_id),
+            KEY created_at (created_at)
+        ) {$charset_collate};";
+        dbDelta($sql_admin_log);
+
+        // Bulk rewards log table
+        $table_bulk_log = $wpdb->prefix . 'rafflemania_bulk_rewards_log';
+        $sql_bulk_log = "CREATE TABLE {$table_bulk_log} (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            reason varchar(255) NOT NULL,
+            credits_amount int(11) DEFAULT 0,
+            xp_amount int(11) DEFAULT 0,
+            tickets_amount int(11) DEFAULT 0,
+            target varchar(50) DEFAULT 'all',
+            target_filter text DEFAULT NULL,
+            recipients_count int(11) DEFAULT 0,
+            created_by bigint(20) UNSIGNED DEFAULT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY created_at (created_at)
+        ) {$charset_collate};";
+        dbDelta($sql_bulk_log);
+
+        // Add performance indexes on existing tables
+        $table_tickets = $wpdb->prefix . 'rafflemania_tickets';
+        $table_draws = $wpdb->prefix . 'rafflemania_draws';
+        $table_streaks = $wpdb->prefix . 'rafflemania_streaks';
+
+        // Composite index on tickets (user_id + prize_id)
+        $idx = $wpdb->get_results("SHOW INDEX FROM {$table_tickets} WHERE Key_name = 'idx_user_prize'");
+        if (empty($idx)) {
+            $wpdb->query("ALTER TABLE {$table_tickets} ADD INDEX idx_user_prize (user_id, prize_id)");
+        }
+
+        // Composite index on draws (prize_id + status)
+        $idx = $wpdb->get_results("SHOW INDEX FROM {$table_draws} WHERE Key_name = 'idx_prize_status'");
+        if (empty($idx)) {
+            $wpdb->query("ALTER TABLE {$table_draws} ADD INDEX idx_prize_status (prize_id, status)");
+        }
+
+        // Composite index on streaks (user_id + streak_day)
+        $idx = $wpdb->get_results("SHOW INDEX FROM {$table_streaks} WHERE Key_name = 'idx_user_streak'");
+        if (empty($idx)) {
+            $wpdb->query("ALTER TABLE {$table_streaks} ADD INDEX idx_user_streak (user_id, streak_day)");
+        }
+    }
+
+    /**
+     * Insert default admin panel data (levels, shop packages, wp_options configs)
+     */
+    private static function insert_admin_panel_defaults() {
+        global $wpdb;
+
+        // === LEVELS (seed from React Native hardcoded values) ===
+        $table_levels = $wpdb->prefix . 'rafflemania_levels';
+        $count = $wpdb->get_var("SELECT COUNT(*) FROM {$table_levels}");
+        if ($count == 0) {
+            $levels = [
+                ['level' => 0, 'name' => 'Principiante', 'min_xp' => 0, 'max_xp' => 1000, 'icon' => 'leaf', 'color' => '#FF6B00', 'credit_reward' => 0, 'sort_order' => 0],
+                ['level' => 1, 'name' => 'Novizio', 'min_xp' => 1000, 'max_xp' => 2200, 'icon' => 'flash', 'color' => '#FF6B00', 'credit_reward' => 5, 'sort_order' => 1],
+                ['level' => 2, 'name' => 'Apprendista', 'min_xp' => 2200, 'max_xp' => 3800, 'icon' => 'compass', 'color' => '#FF6B00', 'credit_reward' => 10, 'sort_order' => 2],
+                ['level' => 3, 'name' => 'Esploratore', 'min_xp' => 3800, 'max_xp' => 5800, 'icon' => 'map', 'color' => '#FF6B00', 'credit_reward' => 20, 'sort_order' => 3],
+                ['level' => 4, 'name' => 'Avventuriero', 'min_xp' => 5800, 'max_xp' => 8300, 'icon' => 'shield', 'color' => '#FF6B00', 'credit_reward' => 35, 'sort_order' => 4],
+                ['level' => 5, 'name' => 'Veterano', 'min_xp' => 8300, 'max_xp' => 11500, 'icon' => 'medal', 'color' => '#FF6B00', 'credit_reward' => 50, 'sort_order' => 5],
+                ['level' => 6, 'name' => 'Campione', 'min_xp' => 11500, 'max_xp' => 15500, 'icon' => 'ribbon', 'color' => '#FF6B00', 'credit_reward' => 65, 'sort_order' => 6],
+                ['level' => 7, 'name' => 'Maestro', 'min_xp' => 15500, 'max_xp' => 20500, 'icon' => 'star', 'color' => '#FF6B00', 'credit_reward' => 80, 'sort_order' => 7],
+                ['level' => 8, 'name' => 'Leggenda', 'min_xp' => 20500, 'max_xp' => 26500, 'icon' => 'diamond', 'color' => '#FF6B00', 'credit_reward' => 90, 'sort_order' => 8],
+                ['level' => 9, 'name' => 'Mito', 'min_xp' => 26500, 'max_xp' => 33500, 'icon' => 'flame', 'color' => '#FF6B00', 'credit_reward' => 95, 'sort_order' => 9],
+                ['level' => 10, 'name' => 'Divinita', 'min_xp' => 33500, 'max_xp' => 999999, 'icon' => 'trophy', 'color' => '#FFD700', 'credit_reward' => 100, 'sort_order' => 10],
+            ];
+            foreach ($levels as $level) {
+                $wpdb->insert($table_levels, array_merge($level, ['is_active' => 1]));
+            }
+        }
+
+        // === SHOP PACKAGES (seed from React Native CREDIT_PACKAGES) ===
+        $table_packages = $wpdb->prefix . 'rafflemania_shop_packages';
+        $count = $wpdb->get_var("SELECT COUNT(*) FROM {$table_packages}");
+        if ($count == 0) {
+            $packages = [
+                ['credits' => 10, 'price' => 0.99, 'discount_label' => null, 'badge' => null, 'iap_product_id' => 'credits_10', 'sort_order' => 1],
+                ['credits' => 25, 'price' => 1.99, 'discount_label' => null, 'badge' => null, 'iap_product_id' => 'credits_25', 'sort_order' => 2],
+                ['credits' => 60, 'price' => 2.99, 'discount_label' => '-50%', 'badge' => 'most popular', 'iap_product_id' => 'credits_60', 'sort_order' => 3],
+                ['credits' => 100, 'price' => 4.49, 'discount_label' => null, 'badge' => null, 'iap_product_id' => 'credits_100', 'sort_order' => 4],
+                ['credits' => 250, 'price' => 9.99, 'discount_label' => null, 'badge' => null, 'iap_product_id' => 'credits_250', 'sort_order' => 5],
+                ['credits' => 600, 'price' => 19.99, 'discount_label' => null, 'badge' => null, 'iap_product_id' => 'credits_600', 'sort_order' => 6],
+                ['credits' => 1000, 'price' => 29.99, 'discount_label' => '-69%', 'badge' => null, 'iap_product_id' => 'credits_1000', 'sort_order' => 7],
+                ['credits' => 2500, 'price' => 59.99, 'discount_label' => '-76%', 'badge' => null, 'iap_product_id' => 'credits_2500', 'sort_order' => 8],
+                ['credits' => 6000, 'price' => 99.99, 'discount_label' => '-83%', 'badge' => 'best value', 'iap_product_id' => 'credits_6000', 'sort_order' => 9],
+            ];
+            foreach ($packages as $pkg) {
+                $wpdb->insert($table_packages, array_merge($pkg, ['is_active' => 1]));
+            }
+        }
+
+        // === WP_OPTIONS CONFIG (seed from React Native hardcoded values) ===
+
+        // Streak config
+        if (!get_option('rafflemania_streak_config')) {
+            update_option('rafflemania_streak_config', json_encode([
+                'daily_xp' => 5,
+                'day_7_xp' => 10,
+                'day_7_credits' => 1,
+                'week_1_credits' => 1,
+                'week_2_credits' => 2,
+                'week_3_credits' => 3,
+                'week_4_credits' => 5,
+                'max_streak' => 1000,
+                'recovery_cost_per_day' => 2,
+            ]));
+        }
+
+        // Daily limits
+        if (!get_option('rafflemania_daily_limits')) {
+            update_option('rafflemania_daily_limits', json_encode([
+                'max_tickets' => 60,
+                'max_ads' => 72,
+                'cooldown_minutes' => 20,
+            ]));
+        }
+
+        // XP rewards
+        if (!get_option('rafflemania_xp_rewards')) {
+            update_option('rafflemania_xp_rewards', json_encode([
+                'watch_ad' => 3,
+                'purchase_ticket' => 2,
+                'skip_ad' => 0,
+                'purchase_credits' => 0,
+                'win_prize' => 0,
+                'referral' => 0,
+            ]));
+        }
+
+        // Referral config
+        if (!get_option('rafflemania_referral_config')) {
+            update_option('rafflemania_referral_config', json_encode([
+                'days_required' => 7,
+                'referrer_credits' => 15,
+                'referred_credits' => 15,
+            ]));
+        }
+
+        // App content
+        if (!get_option('rafflemania_app_content')) {
+            update_option('rafflemania_app_content', json_encode([
+                'referral_steps' => [
+                    ['icon' => 'share-social-outline', 'title' => 'Condividi il codice', 'description' => 'Invia il tuo codice personale ai tuoi amici'],
+                    ['icon' => 'person-add-outline', 'title' => "L'amico si registra", 'description' => 'Il tuo amico si iscrive usando il tuo codice'],
+                    ['icon' => 'calendar-outline', 'title' => '7 giorni attivi', 'description' => "L'amico deve essere attivo per 7 giorni consecutivi"],
+                    ['icon' => 'gift-outline', 'title' => 'Entrambi vincete!', 'description' => 'Tu e il tuo amico ricevete 15 crediti ciascuno'],
+                ],
+                'faq' => [],
+                'rules' => '',
+                'privacy_url' => '',
+                'terms_url' => '',
+            ]));
+        }
+
+        // Save admin panel DB version
+        update_option('rafflemania_admin_panel_db_version', '2.0');
     }
 }

@@ -335,14 +335,22 @@ export const useAuthStore = create<AuthState>()(
       }
 
       // Send Apple token to backend for verification/registration
-      const apiResponse = await apiClient.post('/auth/apple', {
+      // Note: email and full_name can be null from Apple (subsequent logins or "Hide My Email")
+      // WordPress REST API rejects null for string params, so only include if truthy
+      const applePayload: Record<string, string> = {
         identity_token: identityToken,
         apple_user_id: appleUserId,
-        email: email,
-        full_name: fullName
-          ? [fullName.givenName, fullName.familyName].filter(Boolean).join(' ')
-          : null,
-      });
+      };
+      if (email) {
+        applePayload.email = email;
+      }
+      if (fullName) {
+        const name = [fullName.givenName, fullName.familyName].filter(Boolean).join(' ');
+        if (name) {
+          applePayload.full_name = name;
+        }
+      }
+      const apiResponse = await apiClient.post('/auth/apple', applePayload);
 
       const {user, tokens, isNewUser} = apiResponse.data.data;
       await tokenManager.setTokens(tokens.access_token, tokens.refresh_token);
@@ -516,8 +524,14 @@ export const useAuthStore = create<AuthState>()(
 
       const response = await apiClient.get('/auth/verify');
       if (response.data.success) {
+        const user = mapApiUserToUser(response.data.data.user);
+
+        // Link returning user to OneSignal for push notifications
+        OneSignal.login(String(user.id));
+        syncNotificationTags();
+
         set({
-          user: mapApiUserToUser(response.data.data.user),
+          user,
           token,
           isAuthenticated: true,
           sessionActive: true,

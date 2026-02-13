@@ -15,6 +15,7 @@ import {AnimatedBackground} from '../../components/common';
 import apiClient from '../../services/apiClient';
 import {API_CONFIG} from '../../utils/constants';
 import {useAuthStore, useCreditsStore, useTicketsStore} from '../../store';
+import {useGameConfigStore, DEFAULT_SHOP_PACKAGES} from '../../store/useGameConfigStore';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -29,18 +30,8 @@ interface ShopScreenProps {
   navigation: any;
 }
 
-// Credit Package data
-const CREDIT_PACKAGES = [
-  {id: '1', credits: 10, price: 0.99, badge: null, discount: null},
-  {id: '2', credits: 25, price: 1.99, badge: null, discount: null},
-  {id: '3', credits: 60, price: 2.99, badge: 'most popular', discount: '-50%'},
-  {id: '4', credits: 100, price: 4.49, badge: null, discount: null},
-  {id: '5', credits: 250, price: 9.99, badge: null, discount: null},
-  {id: '6', credits: 600, price: 19.99, badge: null, discount: null},
-  {id: '7', credits: 1000, price: 29.99, badge: null, discount: '-69%'},
-  {id: '8', credits: 2500, price: 59.99, badge: null, discount: '-76%'},
-  {id: '9', credits: 6000, price: 99.99, badge: 'best value', discount: '-83%'},
-];
+// Credit Package data - fallback defaults (dynamic from useGameConfigStore)
+const CREDIT_PACKAGES = DEFAULT_SHOP_PACKAGES;
 
 // Credit Package Card
 interface CreditPackageProps {
@@ -85,6 +76,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
   const token = useAuthStore(state => state.token);
   const {addCredits} = useCreditsStore();
   const {getAdCooldownSeconds, incrementAdsWatched} = useTicketsStore();
+  const shopPackages = useGameConfigStore(s => s.shopPackages);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
@@ -224,7 +216,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
 
           {/* Credit Packages Grid */}
           <View style={styles.packagesGrid}>
-            {CREDIT_PACKAGES.map((pkg) => (
+            {shopPackages.map((pkg) => (
               <CreditPackageCard
                 key={pkg.id}
                 package_={pkg}
