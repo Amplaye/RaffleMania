@@ -15,6 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import {SvgUri} from 'react-native-svg';
 import LinearGradient from 'react-native-linear-gradient';
 import {AnimatedBackground, StreakModal, StreakRecoveryModal, ExtractionResultModal, UrgencyBorderEffect, FlipCountdownTimer, TicketSuccessModal, TicketSuccessInfo} from '../../components/common';
 import {getTotalPoolTickets} from '../../services/mock';
@@ -655,7 +656,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
           {/* Ticket Counter */}
           <View style={styles.ticketCounterRow}>
             <View style={styles.creditsDisplay}>
-              <Ionicons name="wallet" size={16} color={COLORS.primary} />
+              <SvgUri
+                uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg"
+                width={18}
+                height={18}
+              />
               <Text style={[styles.creditsText, {color: colors.text}]}>
                 {user?.credits ?? 0} crediti
               </Text>
