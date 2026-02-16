@@ -38,6 +38,7 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
   const {prizes} = usePrizesStore();
   const user = useAuthStore(state => state.user);
 
+  const {myWins} = usePrizesStore();
   const [deliveryStatus, setDeliveryStatus] = useState<'processing' | 'delivered'>('processing');
   const [deliveredAt, setDeliveredAt] = useState<string | null>(null);
 
@@ -86,7 +87,15 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
       return;
     }
 
-    // Fetch from API
+    // Check myWins for delivery status (most reliable - already fetched)
+    const winRecord = myWins.find(w => w.ticketId === ticket.id);
+    if (winRecord?.deliveryStatus) {
+      setDeliveryStatus(winRecord.deliveryStatus as 'processing' | 'delivered');
+      if (winRecord.deliveredAt) setDeliveredAt(winRecord.deliveredAt);
+      return;
+    }
+
+    // Fallback: fetch from dedicated API endpoint
     const fetchDeliveryStatus = async () => {
       try {
         if (API_CONFIG.USE_MOCK_DATA) return;
@@ -101,7 +110,7 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
     };
 
     fetchDeliveryStatus();
-  }, [ticket?.isWinner, ticket?.id, ticket?.deliveryStatus, ticket?.deliveredAt]);
+  }, [ticket?.isWinner, ticket?.id, ticket?.deliveryStatus, ticket?.deliveredAt, myWins]);
 
   // Winner glow animation
   useEffect(() => {

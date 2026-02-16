@@ -1,16 +1,17 @@
 import {create} from 'zustand';
 import {LeaderboardEntry, LeaderboardType} from '../types';
+import apiClient from '../services/apiClient';
+import {API_CONFIG} from '../utils/constants';
 import {
   getAdsLeaderboard,
   getWinsLeaderboard,
-  injectCurrentUser,
 } from '../services/mock';
 
 // Calcola il timestamp della prossima mezzanotte
 const getNextMidnight = (): number => {
   const now = new Date();
   const nextMidnight = new Date(now);
-  nextMidnight.setHours(24, 0, 0, 0); // Prossima mezzanotte
+  nextMidnight.setHours(24, 0, 0, 0);
   return nextMidnight.getTime();
 };
 
@@ -18,7 +19,7 @@ const getNextMidnight = (): number => {
 const getLastMidnight = (): number => {
   const now = new Date();
   const lastMidnight = new Date(now);
-  lastMidnight.setHours(0, 0, 0, 0); // Ultima mezzanotte
+  lastMidnight.setHours(0, 0, 0, 0);
   return lastMidnight.getTime();
 };
 
@@ -47,6 +48,18 @@ const formatTimeToNextUpdate = (): string => {
   return `${minutes}m`;
 };
 
+// Map API leaderboard entry to app type
+const mapApiEntry = (entry: any, type: string, currentUserId?: string): LeaderboardEntry => ({
+  id: String(entry.userId),
+  rank: entry.rank,
+  userId: String(entry.userId),
+  displayName: entry.username || 'Utente',
+  avatarUrl: entry.avatarUrl || undefined,
+  level: entry.level || 1,
+  value: type === 'wins' ? (entry.winsCount || 0) : (entry.xp || 0),
+  isCurrentUser: currentUserId ? String(entry.userId) === String(currentUserId) : false,
+});
+
 interface LeaderboardState {
   adsLeaderboard: LeaderboardEntry[];
   winsLeaderboard: LeaderboardEntry[];
@@ -59,16 +72,13 @@ interface LeaderboardState {
   currentUserWinsRank: number | null;
 
   // Actions
-  fetchLeaderboards: (currentUserId?: string, userAdsCount?: number, userWinsCount?: number, userLevel?: number, userDisplayName?: string, userAvatarUrl?: string) => Promise<void>;
+  fetchLeaderboards: (currentUserId?: string) => Promise<void>;
   setActiveTab: (tab: LeaderboardType) => void;
-  startMidnightCheck: (currentUserId?: string, userAdsCount?: number, userWinsCount?: number, userLevel?: number, userDisplayName?: string, userAvatarUrl?: string) => void;
+  startMidnightCheck: (currentUserId?: string) => void;
   stopMidnightCheck: () => void;
   getLastUpdateDate: () => string;
   getTimeToNextUpdate: () => string;
   shouldRefresh: () => boolean;
-  // Debug
-  debugSetUserRank: (rank: number, displayName: string, avatarUrl?: string) => void;
-  debugResetUserRank: () => void;
 }
 
 export const useLeaderboardStore = create<LeaderboardState>((set, get) => ({
@@ -82,104 +92,89 @@ export const useLeaderboardStore = create<LeaderboardState>((set, get) => ({
   currentUserAdsRank: null,
   currentUserWinsRank: null,
 
-  fetchLeaderboards: async (
-    currentUserId?: string,
-    userAdsCount?: number,
-    userWinsCount?: number,
-    userLevel?: number,
-    userDisplayName?: string,
-    userAvatarUrl?: string,
-  ) => {
+  fetchLeaderboards: async (currentUserId?: string) => {
     set({isLoading: true});
 
-    // Simula chiamata API
-    await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
-
-    let adsData = getAdsLeaderboard(currentUserId);
-    let winsData = getWinsLeaderboard(currentUserId);
-
-    // Inietta l'utente corrente se ha dati validi
-    if (currentUserId && userDisplayName && userLevel !== undefined) {
-      if (userAdsCount !== undefined && userAdsCount > 0) {
-        adsData = injectCurrentUser(adsData, {
-          id: currentUserId,
-          displayName: userDisplayName,
-          level: userLevel,
-          value: userAdsCount,
-          avatarUrl: userAvatarUrl,
+    try {
+      if (API_CONFIG.USE_MOCK_DATA) {
+        await new Promise<void>(resolve => setTimeout(resolve, 500));
+        const adsData = getAdsLeaderboard(currentUserId);
+        const winsData = getWinsLeaderboard(currentUserId);
+        const userAdsEntry = adsData.find(e => e.isCurrentUser);
+        const userWinsEntry = winsData.find(e => e.isCurrentUser);
+        set({
+          adsLeaderboard: adsData,
+          winsLeaderboard: winsData,
+          isLoading: false,
+          lastUpdated: getLastMidnight(),
+          nextUpdateAt: getNextMidnight(),
+          currentUserAdsRank: userAdsEntry?.rank || null,
+          currentUserWinsRank: userWinsEntry?.rank || null,
         });
+        return;
       }
 
-      if (userWinsCount !== undefined && userWinsCount > 0) {
-        winsData = injectCurrentUser(winsData, {
-          id: currentUserId,
-          displayName: userDisplayName,
-          level: userLevel,
-          value: userWinsCount,
-          avatarUrl: userAvatarUrl,
-        });
-      }
+      // Fetch both leaderboards from API in parallel
+      const [xpResponse, winsResponse] = await Promise.all([
+        apiClient.get('/users/leaderboard', {params: {type: 'xp', limit: 100}}),
+        apiClient.get('/users/leaderboard', {params: {type: 'wins', limit: 100}}),
+      ]);
+
+      const xpData = xpResponse.data?.data?.leaderboard || [];
+      const winsData = winsResponse.data?.data?.leaderboard || [];
+
+      const adsLeaderboard = xpData.map((entry: any) => mapApiEntry(entry, 'xp', currentUserId));
+      const winsLeaderboard = winsData.map((entry: any) => mapApiEntry(entry, 'wins', currentUserId));
+
+      const userAdsEntry = adsLeaderboard.find((e: LeaderboardEntry) => e.isCurrentUser);
+      const userWinsEntry = winsLeaderboard.find((e: LeaderboardEntry) => e.isCurrentUser);
+
+      set({
+        adsLeaderboard,
+        winsLeaderboard,
+        isLoading: false,
+        lastUpdated: getLastMidnight(),
+        nextUpdateAt: getNextMidnight(),
+        currentUserAdsRank: userAdsEntry?.rank || null,
+        currentUserWinsRank: userWinsEntry?.rank || null,
+      });
+    } catch (error) {
+      console.log('[Leaderboard] API fetch failed, using mock data:', error);
+      // Fallback to mock data
+      const adsData = getAdsLeaderboard(currentUserId);
+      const winsData = getWinsLeaderboard(currentUserId);
+      set({
+        adsLeaderboard: adsData,
+        winsLeaderboard: winsData,
+        isLoading: false,
+        lastUpdated: getLastMidnight(),
+        nextUpdateAt: getNextMidnight(),
+      });
     }
-
-    // Calcola la posizione dell'utente
-    const userAdsEntry = adsData.find(e => e.isCurrentUser);
-    const userWinsEntry = winsData.find(e => e.isCurrentUser);
-
-    set({
-      adsLeaderboard: adsData,
-      winsLeaderboard: winsData,
-      isLoading: false,
-      lastUpdated: getLastMidnight(), // L'aggiornamento è sempre riferito all'ultima mezzanotte
-      nextUpdateAt: getNextMidnight(),
-      currentUserAdsRank: userAdsEntry?.rank || null,
-      currentUserWinsRank: userWinsEntry?.rank || null,
-    });
   },
 
   setActiveTab: (tab: LeaderboardType) => {
     set({activeTab: tab});
   },
 
-  // Verifica se è necessario aggiornare (se è passata la mezzanotte dall'ultimo fetch)
   shouldRefresh: () => {
     const {lastUpdated} = get();
     if (!lastUpdated) return true;
-
     const lastMidnight = getLastMidnight();
     return lastUpdated < lastMidnight;
   },
 
-  // Avvia il controllo periodico per la mezzanotte
-  startMidnightCheck: (
-    currentUserId?: string,
-    userAdsCount?: number,
-    userWinsCount?: number,
-    userLevel?: number,
-    userDisplayName?: string,
-    userAvatarUrl?: string,
-  ) => {
+  startMidnightCheck: (currentUserId?: string) => {
     const {midnightCheckInterval, shouldRefresh, fetchLeaderboards} = get();
 
-    // Non creare un nuovo intervallo se ne esiste già uno
-    if (midnightCheckInterval) {
-      return;
-    }
+    if (midnightCheckInterval) return;
 
-    // Controlla ogni minuto se è passata la mezzanotte
     const intervalId = setInterval(() => {
       if (shouldRefresh()) {
-        fetchLeaderboards(
-          currentUserId,
-          userAdsCount,
-          userWinsCount,
-          userLevel,
-          userDisplayName,
-          userAvatarUrl,
-        );
+        fetchLeaderboards(currentUserId);
       }
-      // Aggiorna sempre il tempo rimanente
       set({nextUpdateAt: getNextMidnight()});
-    }, 60000) as unknown as number; // Controlla ogni minuto
+    }, 60000) as unknown as number;
 
     set({midnightCheckInterval: intervalId});
   },
@@ -200,83 +195,5 @@ export const useLeaderboardStore = create<LeaderboardState>((set, get) => ({
 
   getTimeToNextUpdate: () => {
     return formatTimeToNextUpdate();
-  },
-
-  // Debug: inserisce l'utente a una posizione specifica (solo nella classifica attiva)
-  debugSetUserRank: (rank: number, displayName: string, avatarUrl?: string) => {
-    const {adsLeaderboard, winsLeaderboard, activeTab} = get();
-
-    const createUserEntry = (position: number, leaderboard: LeaderboardEntry[]): LeaderboardEntry[] => {
-      // Rimuovi eventuali entry precedenti dell'utente
-      const filtered = leaderboard.filter(e => !e.isCurrentUser);
-
-      // Crea la nuova entry per l'utente
-      const userEntry: LeaderboardEntry = {
-        id: 'debug-user',
-        rank: position,
-        userId: 'debug-user-id',
-        displayName: displayName,
-        avatarUrl: avatarUrl,
-        level: 10,
-        value: position === 1 ? 9999 : Math.max(1000 - position * 10, 100),
-        isCurrentUser: true,
-      };
-
-      // Inserisci l'utente nella posizione corretta e riordina
-      const result = [...filtered];
-
-      // Aggiorna i rank di tutti
-      result.forEach((entry, idx) => {
-        if (idx + 1 >= position) {
-          entry.rank = idx + 2; // Shifta di 1 per fare spazio
-        }
-      });
-
-      // Inserisci l'utente
-      result.splice(position - 1, 0, userEntry);
-
-      // Limita a 100 entries
-      return result.slice(0, 100);
-    };
-
-    // Aggiorna SOLO la classifica attiva, non entrambe
-    if (activeTab === 'ads') {
-      set({
-        adsLeaderboard: createUserEntry(rank, adsLeaderboard),
-        currentUserAdsRank: rank,
-      });
-    } else {
-      set({
-        winsLeaderboard: createUserEntry(rank, winsLeaderboard),
-        currentUserWinsRank: rank,
-      });
-    }
-  },
-
-  // Debug: rimuove l'utente dalla classifica attiva
-  debugResetUserRank: () => {
-    const {adsLeaderboard, winsLeaderboard, activeTab} = get();
-
-    const removeUser = (leaderboard: LeaderboardEntry[]): LeaderboardEntry[] => {
-      const filtered = leaderboard.filter(e => !e.isCurrentUser);
-      // Riassegna i rank
-      filtered.forEach((entry, idx) => {
-        entry.rank = idx + 1;
-      });
-      return filtered;
-    };
-
-    // Rimuovi SOLO dalla classifica attiva
-    if (activeTab === 'ads') {
-      set({
-        adsLeaderboard: removeUser(adsLeaderboard),
-        currentUserAdsRank: null,
-      });
-    } else {
-      set({
-        winsLeaderboard: removeUser(winsLeaderboard),
-        currentUserWinsRank: null,
-      });
-    }
   },
 }));

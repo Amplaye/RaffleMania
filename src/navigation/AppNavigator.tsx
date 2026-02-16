@@ -22,7 +22,6 @@ import {SettingsScreen} from '../screens/settings';
 import {TicketDetailScreen} from '../screens/ticketdetail';
 import {LevelDetailScreen} from '../screens/leveldetail';
 import {PrizeDetailScreen} from '../screens/prizedetail';
-import {AvatarCustomizationScreen} from '../screens/avatar';
 import {LeaderboardScreen} from '../screens/leaderboard';
 import {EmailVerificationScreen} from '../screens/auth';
 import {StreakScreen} from '../screens/streak';
@@ -39,7 +38,6 @@ export type RootStackParamList = {
   Settings: undefined;
   MyWins: undefined;
   LevelDetail: undefined;
-  AvatarCustomization: undefined;
   Leaderboard: undefined;
   EmailVerification: {email?: string; token?: string};
   Streak: undefined;
@@ -157,11 +155,6 @@ const MainStack: React.FC = () => {
         options={{title: 'Sistema Livelli'}}
       />
       <Stack.Screen
-        name="AvatarCustomization"
-        component={AvatarCustomizationScreen}
-        options={{title: 'Personalizza Avatar'}}
-      />
-      <Stack.Screen
         name="Leaderboard"
         component={LeaderboardScreen}
         options={{title: 'Classifica'}}
@@ -256,6 +249,41 @@ export const AppNavigator: React.FC = () => {
       });
     }
   }, [getTicketsForPrize]);
+
+  // Handle extraction for prizes whose timer expired while user was offline
+  // Triggers server-side extraction via POST /draws (has deduplication) then shows missed popup
+  const handleOfflineExtraction = useCallback(async (prize: Prize) => {
+    console.log(`[Timer] Handling offline extraction for prize ${prize.id}`);
+
+    try {
+      // Trigger extraction on server (has deduplication - safe to call multiple times)
+      const numericPrizeId = parseInt(prize.id.replace(/\D/g, ''), 10) || parseInt(prize.id, 10);
+      const response = await apiClient.post('/draws', {
+        prize_id: numericPrizeId,
+        timer_started_at: prize.timerStartedAt,
+      });
+
+      const draw = response.data?.data?.draw;
+      if (draw && draw.winningNumber) {
+        // Publish to Firebase for other clients
+        if (prize.timerStartedAt) {
+          publishDrawResult(prize.id, draw.winningNumber, prize.timerStartedAt);
+        }
+        console.log(`[Timer] Offline extraction completed: #${draw.winningNumber}`);
+      }
+    } catch (error) {
+      console.log('[Timer] Offline extraction trigger failed:', error);
+    }
+
+    // Reset prize locally
+    resetPrizeAfterExtraction(prize.id);
+    clearTicketsForPrize(prize.id);
+
+    // Trigger missed extraction check to show popup
+    setTimeout(() => {
+      fetchMissedExtractions();
+    }, 1500);
+  }, [resetPrizeAfterExtraction, clearTicketsForPrize, fetchMissedExtractions]);
 
   // Poll server once for extraction result (used as publisher for Firebase)
   const pollServerOnce = useCallback(async (prizeId: string): Promise<number | null> => {
@@ -406,11 +434,29 @@ export const AppNavigator: React.FC = () => {
           }
           console.log(`[Extraction] Last chance server poll succeeded: #${winningNumber}`);
         } else {
-          // Server truly unavailable - extraction result unknown
-          // Show 0 as winning number to indicate no result
-          console.warn('[Extraction] No result from server after 10s - server may be down');
-          winningNumber = 0;
-          isWinner = false;
+          // No draw found on server - trigger extraction via POST /draws
+          console.log('[Extraction] No draw on server - triggering extraction...');
+          try {
+            const numericPrizeId = parseInt(prize.id.replace(/\D/g, ''), 10) || parseInt(prize.id, 10);
+            const drawResponse = await apiClient.post('/draws', {
+              prize_id: numericPrizeId,
+              timer_started_at: timerStartedAt,
+            });
+            const draw = drawResponse.data?.data?.draw;
+            if (draw && draw.winningNumber) {
+              winningNumber = draw.winningNumber;
+              isWinner = userNumbers.includes(winningNumber);
+              moveTicketsToPast(prize.id, winningNumber, prize.name, prize.imageUrl);
+              if (timerStartedAt) {
+                publishDrawResult(prize.id, winningNumber, timerStartedAt);
+              }
+              console.log(`[Extraction] Triggered server extraction: #${winningNumber}`);
+            }
+          } catch (error) {
+            console.warn('[Extraction] Failed to trigger extraction:', error);
+            winningNumber = 0;
+            isWinner = false;
+          }
         }
       }
     }
@@ -436,8 +482,10 @@ export const AppNavigator: React.FC = () => {
     // Mark extraction complete locally
     completePrizeExtraction(prize.id, winningNumber);
 
-    // Update last seen draw timestamp
-    AsyncStorage.setItem('rafflemania_last_seen_draw_timestamp', new Date().toISOString());
+    // Update last seen draw timestamp only if we got a valid result
+    if (winningNumber > 0) {
+      AsyncStorage.setItem('rafflemania_last_seen_draw_timestamp', new Date().toISOString());
+    }
 
     // Clean up tickets and reset prize for next round
     setTimeout(() => {
@@ -585,12 +633,12 @@ export const AppNavigator: React.FC = () => {
           waitForExtractionResult(prize);
         }
 
-        // Stale timer cleanup: if expired by more than 60 seconds, the extraction
-        // window has passed. Reset the prize to avoid stuck 0:00:00 timers.
+        // Stale timer: expired by more than 60 seconds - user was offline
+        // Trigger server extraction (POST /draws with deduplication) and show missed popup
         if (remainingSeconds === 0 && diffSeconds < -60 && !extractedDrawIds.current.has(drawId)) {
           extractedDrawIds.current.add(drawId);
-          console.log(`[Timer] Stale countdown detected for prize ${prize.id} (expired ${Math.abs(diffSeconds)}s ago). Resetting.`);
-          resetPrizeAfterExtraction(prize.id);
+          console.log(`[Timer] Stale countdown detected for prize ${prize.id} (expired ${Math.abs(diffSeconds)}s ago). Triggering offline extraction.`);
+          handleOfflineExtraction(prize);
         }
       }
 
@@ -607,7 +655,7 @@ export const AppNavigator: React.FC = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [prizes, isAuthenticated, sessionActive, waitForExtractionResult]);
+  }, [prizes, isAuthenticated, sessionActive, waitForExtractionResult, handleOfflineExtraction]);
 
   // Determine urgency intensity based on remaining time
   const getUrgencyIntensity = (): 'low' | 'medium' | 'high' => {

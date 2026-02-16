@@ -405,7 +405,15 @@ class DrawsController extends WP_REST_Controller {
             if ($random_ticket) {
                 $winning_number = (int) $random_ticket->ticket_number;
             } else {
-                // No active tickets exist - return error instead of fake number
+                // No active tickets exist - full reset prize for next round
+                $wpdb->update($table_prizes, [
+                    'timer_status' => 'waiting',
+                    'current_ads' => 0,
+                    'scheduled_at' => null,
+                    'timer_started_at' => null,
+                    'extracted_at' => current_time('mysql'),
+                ], ['id' => $prize_id]);
+
                 return new WP_REST_Response([
                     'success' => false,
                     'message' => 'Nessun biglietto attivo per questo premio',
@@ -478,9 +486,12 @@ class DrawsController extends WP_REST_Controller {
         // Track daily draw stat
         $this->track_daily_stat('draws_made');
 
-        // Update prize status
+        // Reset prize for next round (full reset like cron extraction)
         $wpdb->update($table_prizes, [
-            'timer_status' => 'completed',
+            'timer_status' => 'waiting',
+            'current_ads' => 0,
+            'scheduled_at' => null,
+            'timer_started_at' => null,
             'extracted_at' => current_time('mysql')
         ], ['id' => $prize_id]);
 

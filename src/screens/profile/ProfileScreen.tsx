@@ -1,9 +1,9 @@
 import React, {useEffect, useState} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Image, Modal, TextInput} from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Modal, TextInput} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer, Card} from '../../components/common';
-import {useAuthStore, useTicketsStore, useThemeStore, useLevelStore, LEVELS, useAvatarStore, debugTicketsStorage} from '../../store';
+import {useAuthStore, useTicketsStore, useThemeStore, useLevelStore, LEVELS, debugTicketsStorage} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -284,10 +284,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
   const {user, updateDisplayName, refreshUserData} = useAuthStore();
   const {pastTickets, activeTickets} = useTicketsStore();
   const {theme, toggleTheme} = useThemeStore();
-  const {getSelectedAvatar, getSelectedFrame, customPhotoUri} = useAvatarStore();
   const [showNameModal, setShowNameModal] = useState(false);
-
-  console.log('ProfileScreen: mounted, pastTickets=', pastTickets.length, 'winners=', pastTickets.filter(t => t.isWinner).length);
 
   // Refresh user data on mount to get latest wins count
   useEffect(() => {
@@ -295,10 +292,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
     // Debug: check AsyncStorage contents
     debugTicketsStorage();
   }, [refreshUserData]);
-
-  // Get current avatar and frame
-  const currentAvatar = getSelectedAvatar();
-  const currentFrame = getSelectedFrame();
 
   // Use the higher value between backend wins count and local count
   // This ensures local wins are shown even if backend hasn't synced
@@ -368,36 +361,22 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
 
   return (
     <ScreenContainer>
-      {/* Profile Header - Avatar Inline with Name/Email - Clickable for Avatar Customization */}
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => navigation.navigate('AvatarCustomization')}>
-        <Card style={[styles.profileCard, neon.glowSubtle]}>
-          {/* Edit Icon in top right */}
-          <View style={styles.editIconContainer}>
-            <Ionicons name="pencil" size={18} color={colors.primary} />
-          </View>
+      {/* Profile Header */}
+      <Card style={[styles.profileCard, neon.glowSubtle]}>
           <View style={styles.profileHeaderRow}>
-            {/* Avatar with Frame - frame as border only */}
+            {/* Avatar with initials */}
             <View style={styles.avatarContainer}>
               <LinearGradient
-                colors={currentFrame.colors}
+                colors={[COLORS.primary, '#FF8500']}
                 start={{x: 0, y: 0}}
                 end={{x: 1, y: 1}}
                 style={styles.avatarFrame}>
-                <View style={[styles.avatarInner, {backgroundColor: colors.card, margin: currentFrame.borderWidth}]}>
-                  {/* Mostra foto custom o icona avatar */}
-                  {customPhotoUri ? (
-                    <Image
-                      source={{uri: customPhotoUri}}
-                      style={styles.avatarPhoto}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={[styles.avatarIcon, {backgroundColor: currentAvatar.color + '20'}]}>
-                      <Ionicons name={currentAvatar.icon as any} size={32} color={currentAvatar.color} />
-                    </View>
-                  )}
+                <View style={[styles.avatarInner, {backgroundColor: colors.card, margin: 3}]}>
+                  <View style={[styles.avatarIcon, {backgroundColor: COLORS.primary + '20'}]}>
+                    <Text style={{fontSize: 24, fontFamily: FONT_FAMILY.bold, fontWeight: FONT_WEIGHT.bold, color: COLORS.primary}}>
+                      {(user?.displayName || 'U').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
                 </View>
               </LinearGradient>
             </View>
@@ -435,7 +414,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
             </View>
           </View>
         </Card>
-      </TouchableOpacity>
 
       {/* Level Card - Clickable */}
       <LevelCard colors={colors} onPress={() => navigation.navigate('LevelDetail')} />

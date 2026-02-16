@@ -290,17 +290,19 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
           style={styles.actionButton}
           onPress={handleLogout}
           activeOpacity={0.8}>
-          <LinearGradient
-            colors={[colors.primary, '#E55A00']}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 0}}
-            style={styles.actionButtonGradient}>
+          <View style={styles.logoutButtonInner}>
+            <LinearGradient
+              colors={[colors.primary, '#E55A00']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 0}}
+              style={StyleSheet.absoluteFill}
+            />
             <View style={styles.actionButtonIconContainer}>
               <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
             </View>
             <Text style={styles.actionButtonText}>Esci dall'account</Text>
             <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
-          </LinearGradient>
+          </View>
         </TouchableOpacity>
 
         {/* Delete Account Button */}
@@ -479,12 +481,13 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  actionButtonGradient: {
+  logoutButtonInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: RADIUS.lg,
     minHeight: Platform.OS === 'ios' ? 56 : 48,
     paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
   },
   actionButtonIconContainer: {
     width: 40,

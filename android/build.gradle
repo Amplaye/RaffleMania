@@ -16,10 +16,10 @@ buildscript {
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
-        // OneSignal Gradle Plugin
-        classpath("gradle.plugin.com.onesignal:onesignal-gradle-plugin:[0.14.0, 0.99.99]")
         // Google Services Plugin for Firebase
         classpath("com.google.gms:google-services:4.4.4")
+        // Firebase Crashlytics Gradle Plugin
+        classpath("com.google.firebase:firebase-crashlytics-gradle:3.0.6")
     }
 }
 

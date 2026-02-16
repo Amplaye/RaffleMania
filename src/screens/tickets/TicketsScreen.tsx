@@ -449,14 +449,6 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
           ? 'Guarda una pubblicità per ottenere il tuo primo biglietto!'
           : 'Le tue vincite appariranno qui. Continua a partecipare!'}
       </Text>
-      {activeTab === 'active' && (
-        <TouchableOpacity
-          style={styles.emptyButton}
-          onPress={() => navigation.navigate('Home')}>
-          <Ionicons name="play-circle" size={20} color={COLORS.white} />
-          <Text style={styles.emptyButtonText}>Guarda Ads</Text>
-        </TouchableOpacity>
-      )}
     </View>
   );
 

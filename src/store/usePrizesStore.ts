@@ -105,6 +105,8 @@ const mapApiWinnerToWinner = (apiWinner: any): Winner => ({
   userId: String(apiWinner.user_id),
   prize: apiWinner.prize ? mapApiPrizeToPrice(apiWinner.prize) : undefined,
   shippingStatus: apiWinner.shipping_status || 'pending',
+  deliveryStatus: apiWinner.deliveryStatus || apiWinner.delivery_status || 'processing',
+  deliveredAt: apiWinner.deliveredAt || apiWinner.delivered_at || undefined,
   shippingAddress: apiWinner.shipping_address,
   trackingNumber: apiWinner.tracking_number,
   createdAt: apiWinner.won_at || apiWinner.created_at,
@@ -228,16 +230,16 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
       }
 
       // Use server timer state - trust the server as source of truth for sync across users
-      // But reset stale countdown prizes where scheduledAt is far in the past (>60s)
-      // to avoid stuck 0:00:00 timers on app start
+      // But reset stale countdown prizes where scheduledAt is in the past
+      // to avoid briefly flashing timers on app start/navigation
       const now = Date.now();
       const mergedPrizes = apiPrizes.map((newPrize: Prize) => {
         if (
           newPrize.timerStatus === 'countdown' &&
           newPrize.scheduledAt &&
-          new Date(newPrize.scheduledAt).getTime() < now - 60000
+          new Date(newPrize.scheduledAt).getTime() < now
         ) {
-          // scheduledAt is more than 60 seconds in the past - extraction already happened
+          // scheduledAt is in the past - extraction already happened
           return {
             ...newPrize,
             timerStatus: 'waiting' as PrizeTimerStatus,

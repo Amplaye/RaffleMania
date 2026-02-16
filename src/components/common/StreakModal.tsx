@@ -10,8 +10,11 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import {SvgUri} from 'react-native-svg';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {SPACING, FONT_WEIGHT, FONT_FAMILY, RADIUS} from '../../utils/constants';
+
+const CREDITS_ICON_URI = 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg';
 
 interface StreakReward {
   xp: number;
@@ -167,6 +170,16 @@ export const StreakModal: React.FC<StreakModalProps> = ({
                 style={styles.gradientBg}
               />
 
+              {/* Close Button */}
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={handleClose}
+                activeOpacity={0.7}
+                hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+              >
+                <Ionicons name="close" size={22} color="#E53935" />
+              </TouchableOpacity>
+
               {/* Header */}
               <View style={styles.header}>
                 <Text style={[styles.headerTitle, {color: isDark ? '#FFD700' : '#FF6B00'}]}>Daily Login</Text>
@@ -280,7 +293,7 @@ export const StreakModal: React.FC<StreakModalProps> = ({
                               </Text>
                               {isDay7 && dayReward.credits > 0 && (
                                 <View style={styles.bonusTag}>
-                                  <Ionicons name="logo-usd" size={10} color="#fff" />
+                                  <SvgUri uri={CREDITS_ICON_URI} width={12} height={12} />
                                   <Text style={styles.bonusText}>+{dayReward.credits}</Text>
                                 </View>
                               )}
@@ -348,6 +361,20 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderRadius: RADIUS.xl,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: SPACING.sm,
+    right: SPACING.sm,
+    zIndex: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#E53935',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
     alignItems: 'center',

@@ -96,6 +96,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
 
     // Firebase real-time listener per aggiornamenti istantanei
     const unsubscribe = listenToPrizeUpdates(activePrizeIds, (prizeId: string, state: LivePrizeState) => {
+      // Ignora stati countdown stale da Firebase (scheduledAt nel passato)
+      if (
+        state.timerStatus === 'countdown' &&
+        state.scheduledAt &&
+        new Date(state.scheduledAt).getTime() < Date.now()
+      ) {
+        return;
+      }
+
       // Aggiorna il premio nello store se i dati Firebase sono più recenti
       usePrizesStore.setState(s => ({
         prizes: s.prizes.map(p => {
@@ -682,9 +691,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               end={{x: 1, y: 0}}
               style={styles.watchAdGradient}>
               <Ionicons name="play-circle" size={24} color={COLORS.white} />
-              <Text style={styles.watchAdText}>
-                {isBettingLocked ? 'PUNTATE CHIUSE' : isWatchingAd ? 'CARICAMENTO...' : cooldownSeconds > 0 ? `ATTENDI ${formatAdCooldown(cooldownSeconds)}` : 'GUARDA UNA PUBBLICITÀ E RICEVI UN BIGLIETTO!'}
-              </Text>
+              {isBettingLocked ? (
+                <Text style={styles.watchAdText}>PUNTATE CHIUSE</Text>
+              ) : isWatchingAd ? (
+                <Text style={styles.watchAdText}>CARICAMENTO...</Text>
+              ) : cooldownSeconds > 0 ? (
+                <Text style={styles.watchAdText}>{`ATTENDI ${formatAdCooldown(cooldownSeconds)}`}</Text>
+              ) : (
+                <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
+                  <Text style={styles.watchAdText}>GUARDA ADS E RICEVI </Text>
+                  <SvgUri uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg" width={18} height={18} />
+                  <Text style={styles.watchAdText}> x1</Text>
+                </View>
+              )}
             </LinearGradient>
           </TouchableOpacity>
 

@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useRef} from 'react';
+import React, {useEffect, useState, useRef, useMemo, useCallback} from 'react';
 import {
   View,
   Text,
@@ -40,16 +40,18 @@ const AnimatedTab: React.FC<{
   onTabChange: (tab: TabType) => void;
 }> = ({activeTab, onTabChange}) => {
   const {neon, colors} = useThemeColors();
-  const slideAnim = useRef(new Animated.Value(activeTab === 'in_corso' ? 0 : 1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const toValue = activeTab === 'in_corso' ? 0 : 1;
-    Animated.spring(slideAnim, {
+    const anim = Animated.spring(slideAnim, {
       toValue,
       friction: 8,
       tension: 50,
       useNativeDriver: true,
-    }).start();
+    });
+    anim.start();
+    return () => anim.stop();
   }, [activeTab, slideAnim]);
 
   const translateX = slideAnim.interpolate({
@@ -252,20 +254,23 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Filter prizes by status - use sorted for active
-  const activePrizes = getSortedActivePrizes();
-  const futurePrizes = prizes.filter(p => !p.isActive && p.publishAt && new Date(p.publishAt) > new Date());
+  // Memoize filtered/sorted data to avoid recomputing on every render
+  const activePrizes = useMemo(() => getSortedActivePrizes(), [prizes, sortBy, getSortedActivePrizes]);
 
-  const handlePrizePress = (prize: Prize) => {
+  const sortedFuturePrizes = useMemo(() => {
+    const now = Date.now();
+    return prizes
+      .filter(p => !p.isActive && p.publishAt && new Date(p.publishAt).getTime() > now)
+      .sort((a, b) => {
+        if (!a.publishAt) return 1;
+        if (!b.publishAt) return -1;
+        return new Date(a.publishAt).getTime() - new Date(b.publishAt).getTime();
+      });
+  }, [prizes]);
+
+  const handlePrizePress = useCallback((prize: Prize) => {
     navigation.navigate('PrizeDetail', {prizeId: prize.id});
-  };
-
-  // Group future prizes by month based on publishAt
-  const sortedFuturePrizes = [...futurePrizes].sort((a, b) => {
-    if (!a.publishAt) return 1;
-    if (!b.publishAt) return -1;
-    return new Date(a.publishAt).getTime() - new Date(b.publishAt).getTime();
-  });
+  }, [navigation]);
 
   return (
     <LinearGradient
@@ -326,15 +331,15 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
           </View>
         )}
 
-        {/* Content based on tab */}
-        <ScrollView
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}>
-          {activeTab === 'in_corso' ? (
-            // Active Raffles
-            activePrizes.length > 0 ? (
-              activePrizes.map((prize) => (
+        {/* Content based on tab - separate ScrollViews to avoid remount crashes */}
+        {activeTab === 'in_corso' ? (
+          <ScrollView
+            key="in_corso"
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}>
+            {activePrizes.length > 0 ? (
+              activePrizes.map(prize => (
                 <PrizeListCard
                   key={prize.id}
                   prize={prize}
@@ -348,10 +353,15 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
                   Nessun raffle attivo al momento
                 </Text>
               </View>
-            )
-          ) : (
-            // Future Raffles - grouped by month
-            sortedFuturePrizes.length > 0 ? (
+            )}
+          </ScrollView>
+        ) : (
+          <ScrollView
+            key="futuri"
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}>
+            {sortedFuturePrizes.length > 0 ? (
               sortedFuturePrizes.map((prize, index) => {
                 const currentMonth = getMonthLabel(prize.publishAt);
                 const prevMonth = index > 0 ? getMonthLabel(sortedFuturePrizes[index - 1].publishAt) : '';
@@ -373,9 +383,9 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
                   Nessun raffle programmato
                 </Text>
               </View>
-            )
-          )}
-        </ScrollView>
+            )}
+          </ScrollView>
+        )}
       </View>
     </LinearGradient>
   );

@@ -2,6 +2,7 @@ import React, {useEffect} from 'react';
 import {StatusBar, View, AppState, Platform, Alert, Linking, LogBox} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {OneSignal, NotificationClickEvent} from 'react-native-onesignal';
+import crashlytics from '@react-native-firebase/crashlytics';
 import {AppNavigator} from './src/navigation';
 import {LevelUpOverlay} from './src/components/common';
 import {COLORS} from './src/utils/constants';
@@ -11,11 +12,22 @@ import {rewardEvents} from './src/services/rewardEvents';
 // Suppress all development-only yellow box warnings
 LogBox.ignoreAllLogs(true);
 
+// Disable console.log in production to avoid exposing sensitive data
+if (!__DEV__) {
+  console.log = () => {};
+  console.warn = () => {};
+  console.info = () => {};
+  console.debug = () => {};
+}
+
 // OneSignal App ID
 const ONESIGNAL_APP_ID = '7d7f743b-3dac-472e-b05d-e4445842dc0a';
 
 const App: React.FC = () => {
   useEffect(() => {
+    // Initialize Firebase Crashlytics
+    crashlytics().setCrashlyticsCollectionEnabled(true);
+
     // Initialize OneSignal
     OneSignal.initialize(ONESIGNAL_APP_ID);
 

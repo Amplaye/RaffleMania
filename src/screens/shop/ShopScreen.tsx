@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   content: {
     paddingTop: 50,
     paddingHorizontal: SPACING.md,
-    paddingBottom: 120,
+    paddingBottom: 250,
   },
   // Banner
   bannerContainer: {

@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  Image,
   TouchableOpacity,
   Animated,
   Dimensions,
@@ -12,7 +11,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer} from '../../components/common';
-import {useLeaderboardStore, useAuthStore, usePrizesStore, useLevelStore, useAvatarStore} from '../../store';
+import {useLeaderboardStore, useAuthStore} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {LeaderboardEntry, LeaderboardType} from '../../types';
 import {
@@ -127,15 +126,6 @@ const Podium = memo<{
     }
   };
 
-  const getMedalIcon = (rank: number) => {
-    switch (rank) {
-      case 1: return 'trophy';
-      case 2: return 'medal';
-      case 3: return 'medal-outline';
-      default: return 'ribbon';
-    }
-  };
-
   const PodiumItem: React.FC<{
     entry: LeaderboardEntry | undefined;
     rank: number;
@@ -153,22 +143,12 @@ const Podium = memo<{
           styles.podiumAvatarContainer,
           isCurrentUser && styles.currentUserBorder,
         ]}>
-          {entry.avatarUrl ? (
-            <Image source={{uri: entry.avatarUrl}} style={styles.podiumAvatar} />
-          ) : (
-            <LinearGradient
-              colors={medalColors}
-              style={styles.podiumAvatarPlaceholder}>
-              <Text style={styles.podiumAvatarText}>
-                {entry.displayName.charAt(0).toUpperCase()}
-              </Text>
-            </LinearGradient>
-          )}
-          {/* Medal badge */}
           <LinearGradient
             colors={medalColors}
-            style={styles.medalBadge}>
-            <Ionicons name={getMedalIcon(rank)} size={12} color="#FFF" />
+            style={styles.podiumAvatarPlaceholder}>
+            <Text style={styles.podiumAvatarText}>
+              {entry.displayName.charAt(0).toUpperCase()}
+            </Text>
           </LinearGradient>
         </View>
 
@@ -241,17 +221,13 @@ const LeaderboardRow = memo<{
 
         {/* Avatar */}
         <View style={styles.avatarContainer}>
-          {entry.avatarUrl ? (
-            <Image source={{uri: entry.avatarUrl}} style={styles.avatar} />
-          ) : (
-            <LinearGradient
-              colors={[colors.primary, colors.primaryDark]}
-              style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>
-                {entry.displayName.charAt(0).toUpperCase()}
-              </Text>
-            </LinearGradient>
-          )}
+          <LinearGradient
+            colors={[colors.primary, colors.primaryDark]}
+            style={styles.avatarPlaceholder}>
+            <Text style={styles.avatarText}>
+              {entry.displayName.charAt(0).toUpperCase()}
+            </Text>
+          </LinearGradient>
           {/* Level badge */}
           <View style={[styles.levelBadge, {backgroundColor: isDark ? '#2A2A2A' : '#F0F0F0'}]}>
             <Text style={[styles.levelText, {color: colors.primary}]}>
@@ -293,9 +269,6 @@ const LeaderboardRow = memo<{
 export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({navigation}) => {
   const {colors, isDark} = useThemeColors();
   const user = useAuthStore(state => state.user);
-  const {myWins} = usePrizesStore();
-  const {level} = useLevelStore();
-  const {customPhotoUri} = useAvatarStore();
   const {
     adsLeaderboard,
     winsLeaderboard,
@@ -307,41 +280,18 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({navigation}
     setActiveTab,
     startMidnightCheck,
     stopMidnightCheck,
-    debugSetUserRank,
-    debugResetUserRank,
   } = useLeaderboardStore();
-
-  // User stats
-  const userAdsCount = user?.watchedAdsCount || 0;
-  const userWinsCount = myWins.length;
-  // User avatar - use custom photo if available
-  const userAvatarUrl = customPhotoUri || undefined;
 
   // Fetch data on mount and start midnight check
   useEffect(() => {
-    fetchLeaderboards(
-      user?.id,
-      userAdsCount,
-      userWinsCount,
-      level,
-      user?.displayName,
-      userAvatarUrl,
-    );
-
-    startMidnightCheck(
-      user?.id,
-      userAdsCount,
-      userWinsCount,
-      level,
-      user?.displayName,
-      userAvatarUrl,
-    );
+    fetchLeaderboards(user?.id);
+    startMidnightCheck(user?.id);
 
     return () => {
       stopMidnightCheck();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, userAdsCount, userWinsCount, level, user?.displayName, userAvatarUrl]);
+  }, [user?.id]);
 
   // Memoize leaderboard data to prevent unnecessary re-renders
   const currentLeaderboard = useMemo(() =>
@@ -405,54 +355,6 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({navigation}
     </View>
   );
 
-  // Debug footer with test buttons
-  const renderFooter = () => (
-    <View style={styles.debugContainer}>
-      <Text style={[styles.debugTitle, {color: colors.textMuted}]}>
-        Debug - Test Posizioni
-      </Text>
-      <View style={styles.debugButtonsRow}>
-        <TouchableOpacity
-          style={[styles.debugButton, {backgroundColor: '#FFD700'}]}
-          onPress={() => debugSetUserRank(1, user?.displayName || 'Test User', userAvatarUrl)}>
-          <Text style={styles.debugButtonText}>#1</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.debugButton, {backgroundColor: '#C0C0C0'}]}
-          onPress={() => debugSetUserRank(2, user?.displayName || 'Test User', userAvatarUrl)}>
-          <Text style={styles.debugButtonText}>#2</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.debugButton, {backgroundColor: '#CD7F32'}]}
-          onPress={() => debugSetUserRank(3, user?.displayName || 'Test User', userAvatarUrl)}>
-          <Text style={styles.debugButtonText}>#3</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.debugButton, {backgroundColor: colors.primary}]}
-          onPress={() => debugSetUserRank(10, user?.displayName || 'Test User', userAvatarUrl)}>
-          <Text style={styles.debugButtonText}>#10</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.debugButtonsRow}>
-        <TouchableOpacity
-          style={[styles.debugButton, {backgroundColor: colors.primary}]}
-          onPress={() => debugSetUserRank(50, user?.displayName || 'Test User', userAvatarUrl)}>
-          <Text style={styles.debugButtonText}>#50</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.debugButton, {backgroundColor: colors.primary}]}
-          onPress={() => debugSetUserRank(99, user?.displayName || 'Test User', userAvatarUrl)}>
-          <Text style={styles.debugButtonText}>#99</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.debugButton, styles.debugButtonReset]}
-          onPress={debugResetUserRank}>
-          <Text style={styles.debugButtonText}>Reset</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
   return (
     <ScreenContainer scrollable={false} padded={false}>
       {/* Header */}
@@ -497,7 +399,7 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({navigation}
         keyExtractor={keyExtractor}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={!isLoading ? renderEmpty : null}
-        ListFooterComponent={renderFooter}
+        ListFooterComponent={null}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         initialNumToRender={15}
@@ -609,7 +511,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.xxl,
+    paddingBottom: 250,
   },
   podiumContainer: {
     flexDirection: 'row',
@@ -632,11 +534,6 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     padding: 2,
   },
-  podiumAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
   podiumAvatarPlaceholder: {
     width: 50,
     height: 50,
@@ -649,18 +546,6 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: '#FFF',
-  },
-  medalBadge: {
-    position: 'absolute',
-    bottom: -4,
-    right: -4,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFF',
   },
   podiumName: {
     fontSize: FONT_SIZE.sm,
@@ -741,11 +626,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginRight: SPACING.sm,
   },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
   avatarPlaceholder: {
     width: 40,
     height: 40,
@@ -804,43 +684,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.md,
     fontFamily: FONT_FAMILY.medium,
     marginTop: SPACING.md,
-  },
-  // Debug styles
-  debugContainer: {
-    marginTop: SPACING.lg,
-    marginBottom: 120,
-    padding: SPACING.md,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    borderRadius: RADIUS.lg,
-  },
-  debugTitle: {
-    fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
-    textAlign: 'center',
-    marginBottom: SPACING.md,
-  },
-  debugButtonsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  debugButton: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.md,
-    minWidth: 60,
-    alignItems: 'center',
-  },
-  debugButtonReset: {
-    backgroundColor: '#FF4444',
-  },
-  debugButtonText: {
-    color: '#FFFFFF',
-    fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
   },
 });
 

@@ -483,15 +483,6 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
               <Text style={[styles.statLabel, {color: colors.textMuted}]}>Valore</Text>
             </View>
 
-            <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
-
-            <View style={styles.statItem}>
-              <View style={[styles.statIconContainer, {backgroundColor: 'rgba(255, 107, 0, 0.1)'}]}>
-                <Ionicons name="ticket-outline" size={20} color={COLORS.primary} />
-              </View>
-              <Text style={[styles.statValue, {color: colors.text}]}>{prize.goalAds}</Text>
-              <Text style={[styles.statLabel, {color: colors.textMuted}]}>Biglietti Necessari</Text>
-            </View>
           </View>
 
           {/* Publish date for future prizes */}

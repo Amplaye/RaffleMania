@@ -144,25 +144,27 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
         return;
       }
 
-      // For each missed draw, get user's tickets for that prize
+      // For each missed draw, check user's result via check-result endpoint
       const missed: MissedExtraction[] = [];
 
       for (const draw of newDraws) {
         const prizeId = draw.prizeId;
         const winningNumber = draw.winningNumber;
         let userNumbers: number[] = [];
+        let isWinner = false;
 
-        // Try to get user's ticket numbers for this prize
+        // Use check-result endpoint which returns user's tickets and winner status
         try {
-          const ticketsResponse = await apiClient.get(`/tickets/prize/${prizeId}`);
-          const nums = ticketsResponse.data?.data?.numbers || [];
-          userNumbers = nums.map((n: any) => Number(n));
-          console.log(`[MissedExtraction] Prize ${prizeId}: user has ${userNumbers.length} tickets, winning=${winningNumber}`);
+          const checkResponse = await apiClient.get(`/draws/${draw.id}/check-result`);
+          const checkData = checkResponse.data?.data;
+          if (checkData) {
+            userNumbers = (checkData.userNumbers || []).map((n: any) => Number(n));
+            isWinner = checkData.isWinner === true;
+          }
+          console.log(`[MissedExtraction] Prize ${prizeId}: user has ${userNumbers.length} tickets, winning=${winningNumber}, isWinner=${isWinner}`);
         } catch (e) {
-          console.log(`[MissedExtraction] Could not fetch tickets for prize ${prizeId}:`, e);
+          console.log(`[MissedExtraction] Could not check result for draw ${draw.id}:`, e);
         }
-
-        const isWinner = userNumbers.includes(winningNumber);
 
         // Show to all users who had tickets
         if (userNumbers.length > 0) {

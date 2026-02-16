@@ -7,8 +7,6 @@ export type {PrizeSortOption} from './usePrizesStore';
 export {useThemeStore} from './useThemeStore';
 export {useLevelStore, XP_REWARDS, LEVELS} from './useLevelStore';
 export {useStreakStore, STREAK_REWARDS, setMidnightStreakCallback} from './useStreakStore';
-export {useAvatarStore, AVATARS, FRAMES} from './useAvatarStore';
-export type {Avatar, Frame} from './useAvatarStore';
 export {useLeaderboardStore} from './useLeaderboardStore';
 export {useExtractionStore} from './useExtractionStore';
 export {useGameConfigStore} from './useGameConfigStore';
