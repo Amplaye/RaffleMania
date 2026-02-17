@@ -12,6 +12,7 @@ class Activator {
         self::migrate_referrals_table();
         self::migrate_prizes_table();
         self::migrate_users_ad_free();
+        self::migrate_users_watched_ads();
         self::insert_default_data();
         self::insert_admin_panel_defaults();
         flush_rewrite_rules();
@@ -76,6 +77,26 @@ class Activator {
 
         // Set initial last_active_date for existing records
         $wpdb->query("UPDATE {$table_referrals} SET last_active_date = DATE(created_at) WHERE last_active_date IS NULL");
+    }
+
+    /**
+     * Add watched_ads column to users table for ad stats tracking
+     */
+    private static function migrate_users_watched_ads() {
+        global $wpdb;
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_users}'");
+        if (!$table_exists) {
+            return;
+        }
+
+        $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_users}");
+        $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+        if (!in_array('watched_ads', $existing_columns)) {
+            $wpdb->query("ALTER TABLE {$table_users} ADD COLUMN watched_ads int(11) DEFAULT 0 AFTER ad_free");
+        }
     }
 
     /**

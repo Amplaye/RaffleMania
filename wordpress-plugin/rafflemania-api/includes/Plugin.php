@@ -999,6 +999,21 @@ class Plugin {
             }
             update_option('rafflemania_admin_panel_db_version', '2.7');
         }
+
+        // Migration 2.8: Add watched_ads column to users table (needed for ad stats tracking)
+        if (version_compare($admin_db_version, '2.8', '<')) {
+            $table_users = $wpdb->prefix . 'rafflemania_users';
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_users}'");
+            if ($table_exists) {
+                $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_users}");
+                $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+                if (!in_array('watched_ads', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_users} ADD COLUMN watched_ads int(11) DEFAULT 0 AFTER ad_free");
+                }
+            }
+            update_option('rafflemania_admin_panel_db_version', '2.8');
+        }
     }
 
     /**
