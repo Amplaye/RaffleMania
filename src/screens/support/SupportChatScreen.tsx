@@ -178,7 +178,7 @@ export const SupportChatScreen: React.FC<Props> = ({navigation}) => {
               Supporto
             </Text>
             <Text style={[styles.headerSubtitle, {color: colors.textSecondary}]}>
-              Solitamente risponde entro 24h
+              Solitamente risponde entro 15 min
             </Text>
           </View>
         </View>

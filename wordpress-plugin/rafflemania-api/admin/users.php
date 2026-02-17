@@ -68,7 +68,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_user_nonc
                 if ($user) {
                     $new_pw = wp_generate_password(12, false);
                     $wpdb->update($table_users, ['password_hash' => password_hash($new_pw, PASSWORD_DEFAULT)], ['id' => $target_id]);
-                    wp_mail($user->email, 'RaffleMania - Nuova Password', "Ciao {$user->username},\n\nLa tua password è stata reimpostata.\nNuova password: {$new_pw}\n\nRaffleMania Team");
+                    require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/EmailHelper.php';
+                    $pw_body = "<tr><td style='padding:16px 40px;'>
+<h2 style='color:#1a1a1a;margin:0 0 10px;font-size:26px;font-weight:700;'>Ciao {$user->username}!</h2>
+<p style='color:#555;font-size:18px;line-height:1.6;margin:0 0 16px;'>La tua password è stata reimpostata.</p>
+<div style='background:#FFF8F0;border:2px solid #FF6B00;border-radius:12px;padding:20px;text-align:center;'>
+<div style='font-size:14px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Nuova Password</div>
+<div style='font-size:24px;font-weight:700;color:#FF6B00;font-family:Courier New,monospace;'>{$new_pw}</div>
+</div>
+<p style='color:#888;font-size:15px;line-height:1.6;margin:16px 0 0;'>Ti consigliamo di cambiarla al primo accesso.</p>
+</td></tr>";
+                    \RaffleMania\EmailHelper::send($user->email, 'RaffleMania - Nuova Password', $pw_body);
                     $wpdb->insert($table_admin_log, ['admin_user_id' => get_current_user_id(), 'action_type' => 'reset_password', 'target_user_id' => $target_id, 'details' => '{}']);
                     $message = "Password resettata e email inviata a {$user->email}";
                 }

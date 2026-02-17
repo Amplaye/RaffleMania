@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import {SvgUri} from 'react-native-svg';
 import {AnimatedBackground, FlipCountdownTimer} from '../../components/common';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
@@ -256,6 +257,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
   const [adCooldownSeconds, setAdCooldownSeconds] = useState(0);
+  const [showCreditModal, setShowCreditModal] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -343,30 +345,10 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
       console.log(`Level up! Livello ${levelUpResult.newLevel} - Premio: ${levelUpResult.creditReward} crediti`);
     }
 
-    // Genera drawId per questo premio
-    const drawId = `draw_${prize.id}_${(prize.timerStartedAt || new Date().toISOString()).replace(/[^0-9]/g, '').slice(0, 14)}`;
+    // Aggiungi 1 credito per aver guardato l'ad (no biglietto)
+    addCredits(1, 'other');
 
-    // Add new ticket and get the assigned number
-    const newTicket = await addTicket('ad', drawId, prize.id);
-
-    // Aggiungi XP per l'acquisto del biglietto (2 XP)
-    const ticketLevelUp = addXPForTicket();
-    if (ticketLevelUp) {
-      addCredits(ticketLevelUp.creditReward, 'level_up');
-      console.log(`Level up! Livello ${ticketLevelUp.newLevel} - Premio: ${ticketLevelUp.creditReward} crediti`);
-    }
-
-    // Get all user's numbers for this prize (including the new one)
-    const userNumbers = getTicketNumbersForPrize(prize.id);
-    const totalPool = getTotalPoolTickets(prize.id);
-
-    setNewTicketInfo({
-      ticketNumber: newTicket.ticketNumber,
-      prizeName: prize.name,
-      userNumbers,
-      totalPoolTickets: totalPool,
-    });
-    setShowTicketModal(true);
+    setShowCreditModal(true);
 
     setIsWatchingAd(false);
   };
@@ -482,6 +464,19 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
               <Text style={[styles.statValue, {color: colors.text}]}>€{prize.value}</Text>
               <Text style={[styles.statLabel, {color: colors.textMuted}]}>Valore</Text>
             </View>
+
+            {prize.stock > 0 && (
+              <>
+                <View style={[styles.statDivider, {backgroundColor: colors.border}]} />
+                <View style={styles.statItem}>
+                  <View style={[styles.statIconContainer, {backgroundColor: 'rgba(40, 167, 69, 0.1)'}]}>
+                    <Ionicons name="layers-outline" size={20} color="#28a745" />
+                  </View>
+                  <Text style={[styles.statValue, {color: colors.text}]}>{prize.stock}</Text>
+                  <Text style={[styles.statLabel, {color: colors.textMuted}]}>Rimanenti</Text>
+                </View>
+              </>
+            )}
 
           </View>
 
@@ -649,21 +644,17 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
               end={{x: 1, y: 0}}
               style={styles.watchButtonGradient}>
               <View style={styles.watchButtonContent}>
+                <Ionicons name="play-circle" size={24} color={COLORS.white} />
                 {isWatchingAd ? (
-                  <>
-                    <Ionicons name="hourglass" size={24} color={COLORS.white} />
-                    <Text style={styles.watchButtonText}>Caricamento...</Text>
-                  </>
+                  <Text style={styles.watchButtonText}>CARICAMENTO...</Text>
                 ) : adCooldownSeconds > 0 ? (
-                  <>
-                    <Ionicons name="time-outline" size={20} color={COLORS.white} />
-                    <Text style={styles.watchButtonText}>ATTENDI {formatAdCooldown(adCooldownSeconds)}</Text>
-                  </>
+                  <Text style={styles.watchButtonText}>{`ATTENDI ${formatAdCooldown(adCooldownSeconds)}`}</Text>
                 ) : (
-                  <>
-                    <Ionicons name="play-circle" size={20} color={COLORS.white} />
-                    <Text style={styles.watchButtonText}>GUARDA PUBBLICITÀ E RICEVI UN BIGLIETTO</Text>
-                  </>
+                  <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
+                    <Text style={styles.watchButtonText}>GUARDA ADS E RICEVI </Text>
+                    <SvgUri uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg" width={18} height={18} />
+                    <Text style={styles.watchButtonText}> x1</Text>
+                  </View>
                 )}
               </View>
             </LinearGradient>
@@ -688,6 +679,41 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
           onClose={handleCloseModal}
         />
       )}
+
+      {/* Credit Obtained Modal */}
+      <Modal
+        visible={showCreditModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreditModal(false)}>
+        <View style={styles.creditModalOverlay}>
+          <View style={[styles.creditModalContainer, {backgroundColor: colors.card}]}>
+            <View style={styles.creditModalIcon}>
+              <SvgUri
+                uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg"
+                width={64}
+                height={64}
+              />
+            </View>
+            <Text style={[styles.creditModalTitle, {color: colors.text}]}>+1 Credito!</Text>
+            <Text style={[styles.creditModalSubtitle, {color: colors.textMuted}]}>
+              Hai ottenuto 1 credito guardando la pubblicità
+            </Text>
+            <TouchableOpacity
+              style={styles.creditModalButton}
+              onPress={() => setShowCreditModal(false)}
+              activeOpacity={0.8}>
+              <LinearGradient
+                colors={[COLORS.primary, '#FF8500']}
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 0}}
+                style={styles.creditModalButtonGradient}>
+                <Text style={styles.creditModalButtonText}>OK</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 };
@@ -1358,6 +1384,56 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.white,
+  },
+  // Credit Modal
+  creditModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  creditModalContainer: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: `${COLORS.primary}40`,
+  },
+  creditModalIcon: {
+    marginBottom: SPACING.md,
+  },
+  creditModalTitle: {
+    fontSize: 28,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    marginBottom: SPACING.xs,
+  },
+  creditModalSubtitle: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    textAlign: 'center',
+    marginBottom: SPACING.lg,
+    lineHeight: 20,
+  },
+  creditModalButton: {
+    width: '100%',
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+  },
+  creditModalButtonGradient: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+  },
+  creditModalButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
   },
 });
 

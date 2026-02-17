@@ -146,9 +146,24 @@ class NotificationHelper {
      */
     public static function notify_extraction_completed($prize_name) {
         return self::send_to_all(
-            'Estrazione completata!',
-            "L'estrazione per {$prize_name} e' terminata! Apri l'applicazione per scoprire se hai vinto.",
+            'Estrazione avvenuta!',
+            "L'estrazione per {$prize_name} e' avvenuta! Entra in app per vedere il risultato.",
             ['type' => 'extraction_completed', 'prize_name' => $prize_name]
+        );
+    }
+
+    /**
+     * Notify winner user that they won a prize
+     */
+    public static function notify_winner($user_id, $prize_name) {
+        if (self::is_notification_disabled($user_id, 'winNotifications')) {
+            return false;
+        }
+        return self::send_to_user(
+            $user_id,
+            'Hai vinto!',
+            "Congratulazioni! Hai vinto {$prize_name}! Apri l'app per i dettagli.",
+            ['type' => 'winner', 'prize_name' => $prize_name]
         );
     }
 
@@ -229,6 +244,13 @@ class NotificationHelper {
         // iOS: badge count increment
         $payload['ios_badgeType'] = 'Increase';
         $payload['ios_badgeCount'] = 1;
+
+        // iOS: ensure delivery when app is closed/background
+        $payload['content_available'] = true;
+        $payload['mutable_content'] = true;
+
+        // High priority for immediate delivery on both platforms
+        $payload['priority'] = 10;
 
         $json_body = json_encode($payload);
         $auth_header = self::get_auth_header($api_key);

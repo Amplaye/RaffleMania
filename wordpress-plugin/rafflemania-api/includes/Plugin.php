@@ -23,6 +23,14 @@ class Plugin {
         // Run database migration on init (ensures columns exist)
         add_action('init', [$this, 'maybe_migrate_database']);
 
+        // Check for expired extractions on every request (rate-limited to once per 60s)
+        // This ensures extractions fire even if WP-Cron is unreliable
+        add_action('init', [$this, 'maybe_check_extractions'], 99);
+
+        // Self-ping: when a timer starts, we schedule this to fire a loopback HTTP request
+        // at extraction time, triggering WP-Cron even without external visits.
+        add_action('rafflemania_self_ping', [$this, 'do_self_ping']);
+
         // Register REST API routes
         add_action('rest_api_init', [$this, 'register_routes']);
 
@@ -146,6 +154,25 @@ class Plugin {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/AdminController.php';
         $admin = new API\AdminController();
         $admin->register_routes();
+
+        // Payments endpoints (IAP + Stripe) - v2.6
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/PaymentsController.php';
+        $payments = new API\PaymentsController();
+        $payments->register_routes();
+
+        // Public cron endpoint for external cron services
+        register_rest_route('rafflemania/v1', '/cron/run', [
+            'methods' => 'GET',
+            'callback' => [$this, 'handle_cron_endpoint'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        // Public endpoint for app to trigger extraction check (rate-limited, no secret needed)
+        register_rest_route('rafflemania/v1', '/extractions/check', [
+            'methods' => 'POST',
+            'callback' => [$this, 'handle_extraction_check'],
+            'permission_callback' => '__return_true',
+        ]);
     }
 
     public function add_admin_menu() {
@@ -400,6 +427,85 @@ class Plugin {
         return $response;
     }
 
+    /**
+     * Lightweight check on every request (rate-limited to once per 60s via transient).
+     * Ensures extractions happen even when WP-Cron doesn't fire.
+     */
+    /**
+     * Self-ping: makes a non-blocking HTTP request to the site's cron trigger,
+     * ensuring WP-Cron fires even without external traffic.
+     */
+    public function do_self_ping() {
+        $url = site_url('/wp-content/plugins/rafflemania-api/cron-trigger.php');
+        wp_remote_get($url, [
+            'timeout' => 5,
+            'blocking' => false,
+            'sslverify' => false,
+        ]);
+        error_log('[RaffleMania] Self-ping triggered: ' . $url);
+    }
+
+    public function maybe_check_extractions() {
+        if (get_transient('rafflemania_last_extraction_check')) {
+            return; // Already checked within last 30 seconds
+        }
+        set_transient('rafflemania_last_extraction_check', 1, 30);
+
+        // Quick DB check: are there any expired countdowns?
+        global $wpdb;
+        $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
+        $has_expired = $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$table_prizes}
+             WHERE timer_status = 'countdown'
+             AND scheduled_at IS NOT NULL
+             AND scheduled_at <= NOW()"
+        );
+
+        if ($has_expired > 0) {
+            $this->check_scheduled_extractions();
+        }
+    }
+
+    /**
+     * Public endpoint for the app to trigger extraction check.
+     * Rate-limited to once per 15 seconds, no authentication needed.
+     */
+    public function handle_extraction_check($request) {
+        $transient_key = 'rafflemania_app_extraction_check';
+        if (get_transient($transient_key)) {
+            return new \WP_REST_Response([
+                'success' => true,
+                'checked' => false,
+                'reason' => 'rate_limited',
+            ]);
+        }
+        set_transient($transient_key, 1, 15);
+
+        $this->check_scheduled_extractions();
+
+        return new \WP_REST_Response([
+            'success' => true,
+            'checked' => true,
+            'timestamp' => current_time('mysql'),
+        ]);
+    }
+
+    public function handle_cron_endpoint($request) {
+        $secret = $request->get_param('secret');
+        $expected = get_option('rafflemania_cron_secret', '');
+
+        if (empty($expected) || $secret !== $expected) {
+            return new \WP_REST_Response(['error' => 'Unauthorized'], 403);
+        }
+
+        $this->check_scheduled_extractions();
+
+        return new \WP_REST_Response([
+            'success' => true,
+            'timestamp' => current_time('mysql'),
+        ]);
+    }
+
     public function check_scheduled_extractions() {
         // Ensure NotificationHelper is loaded (critical in WP-Cron context)
         require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
@@ -423,7 +529,7 @@ class Plugin {
             $transient_key = 'rafflemania_reminder_' . $prize->id;
             if (!get_transient($transient_key)) {
                 NotificationHelper::notify_extraction_soon($prize->name);
-                set_transient($transient_key, 1, 600);
+                set_transient($transient_key, 1, 90);
             }
         }
 
@@ -440,12 +546,17 @@ class Plugin {
         }
 
         // Process scheduled notifications
-        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/NotificationController.php';
-        API\NotificationController::process_scheduled();
+        try {
+            require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/API/NotificationController.php';
+            API\NotificationController::process_scheduled();
+        } catch (\Throwable $e) {
+            error_log('[RaffleMania Cron] Error in process_scheduled: ' . $e->getMessage());
+        }
     }
 
     private function perform_extraction($prize) {
         error_log('[RaffleMania Cron] perform_extraction started for prize ID=' . $prize->id . ' name=' . $prize->name);
+        try {
 
         global $wpdb;
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
@@ -533,6 +644,23 @@ class Plugin {
 
         $this->track_daily_stat('winners');
 
+        // Award XP to winner
+        $xp_reward = (int) get_option('rafflemania_xp_win_prize', 250);
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+        $winner_user = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, xp, level FROM {$table_users} WHERE id = %d",
+            $winner_ticket->user_id
+        ));
+        if ($winner_user) {
+            $new_xp = (int)$winner_user->xp + $xp_reward;
+            $new_level = self::calculate_level_from_xp($new_xp);
+            $wpdb->update($table_users, [
+                'xp' => $new_xp,
+                'level' => $new_level
+            ], ['id' => $winner_user->id]);
+            error_log('[RaffleMania Cron] Awarded ' . $xp_reward . ' XP to user ' . $winner_user->id . ' (new total: ' . $new_xp . ', level: ' . $new_level . ')');
+        }
+
         // Mark winning ticket
         $wpdb->update(
             $table_tickets,
@@ -549,20 +677,53 @@ class Plugin {
         error_log('[RaffleMania Cron] Extraction completed for prize ' . $prize->name . ', winning_number=' . $winning_number . ', winner_user_id=' . $winner_ticket->user_id . ', total_tickets=' . count($tickets));
 
         // Notify all users that extraction is completed
-        NotificationHelper::notify_extraction_completed($prize->name);
+        $completion_key = 'rafflemania_completion_' . $prize->id;
+        if (!get_transient($completion_key)) {
+            NotificationHelper::notify_extraction_completed($prize->name);
+            set_transient($completion_key, 1, 60);
+        }
 
-        // Reset prize for next round
-        $wpdb->update(
-            $table_prizes,
-            [
+        // Handle stock and reset prize for next round
+        $current_stock = (int) $prize->stock;
+
+        if ($current_stock === 0) {
+            // Illimitato - reset normale
+            $wpdb->update($table_prizes, [
                 'timer_status' => 'waiting',
                 'current_ads' => 0,
                 'scheduled_at' => null,
                 'timer_started_at' => null,
                 'extracted_at' => current_time('mysql')
-            ],
-            ['id' => $prize->id]
-        );
+            ], ['id' => $prize->id]);
+        } elseif ($current_stock <= 1) {
+            // Ultima estrazione - disattivare il premio
+            $wpdb->update($table_prizes, [
+                'stock' => 0,
+                'timer_status' => 'completed',
+                'is_active' => 0,
+                'extracted_at' => current_time('mysql')
+            ], ['id' => $prize->id]);
+            error_log('[RaffleMania Cron] Prize ' . $prize->name . ' stock exhausted, deactivated.');
+        } else {
+            // Stock rimanente - decrementa e resetta per nuovo round
+            $wpdb->update($table_prizes, [
+                'stock' => $current_stock - 1,
+                'timer_status' => 'waiting',
+                'current_ads' => 0,
+                'scheduled_at' => null,
+                'timer_started_at' => null,
+                'extracted_at' => current_time('mysql')
+            ], ['id' => $prize->id]);
+            error_log('[RaffleMania Cron] Prize ' . $prize->name . ' stock decremented to ' . ($current_stock - 1));
+        }
+
+        } catch (\Throwable $e) {
+            error_log('[RaffleMania Cron] FATAL ERROR in perform_extraction for prize ' . $prize->id . ': ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine());
+            // Reset prize status so it doesn't stay stuck in 'extracting'
+            global $wpdb;
+            $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
+            $wpdb->update($table_prizes, ['timer_status' => 'waiting', 'scheduled_at' => null, 'timer_started_at' => null], ['id' => $prize->id]);
+        }
     }
 
     private function track_daily_stat($stat_name, $amount = 1) {
@@ -596,6 +757,16 @@ class Plugin {
     private function send_winner_notification($user_id, $prize) {
         require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
         NotificationHelper::notify_winner($user_id, $prize->name);
+    }
+
+    private static function calculate_level_from_xp($xp) {
+        global $wpdb;
+        $table_levels = $wpdb->prefix . 'rafflemania_levels';
+        $level = $wpdb->get_var($wpdb->prepare(
+            "SELECT level FROM {$table_levels} WHERE min_xp <= %d AND is_active = 1 ORDER BY level DESC LIMIT 1",
+            $xp
+        ));
+        return $level ? (int)$level : 1;
     }
 
     /**
@@ -765,6 +936,53 @@ class Plugin {
                 }
             }
             update_option('rafflemania_admin_panel_db_version', '2.5');
+        }
+
+        // Migration 2.6: Create rafflemania_payments table + add iap_product_id to shop_packages
+        if (version_compare($admin_db_version, '2.6', '<')) {
+            $table_payments = $wpdb->prefix . 'rafflemania_payments';
+            $charset_collate = $wpdb->get_charset_collate();
+
+            $wpdb->query("CREATE TABLE IF NOT EXISTS {$table_payments} (
+                id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+                user_id bigint(20) unsigned NOT NULL,
+                package_id bigint(20) unsigned DEFAULT NULL,
+                payment_method enum('apple_iap','google_iap','stripe') NOT NULL,
+                transaction_id varchar(255) NOT NULL,
+                receipt_data longtext DEFAULT NULL,
+                amount decimal(10,2) DEFAULT 0.00,
+                credits_awarded int(11) DEFAULT 0,
+                status enum('pending','verified','failed','refunded') DEFAULT 'pending',
+                verified_at datetime DEFAULT NULL,
+                verification_response longtext DEFAULT NULL,
+                created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                UNIQUE KEY idx_transaction_id (transaction_id),
+                KEY idx_user_id (user_id),
+                KEY idx_status (status),
+                KEY idx_created (created_at)
+            ) {$charset_collate}");
+
+            // Add iap_product_id column to shop_packages if not exists
+            $table_packages = $wpdb->prefix . 'rafflemania_shop_packages';
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_packages}'");
+            if ($table_exists) {
+                $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_packages}");
+                $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+                if (!in_array('iap_product_id', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_packages} ADD COLUMN iap_product_id varchar(100) DEFAULT NULL AFTER discount");
+
+                    // Populate iap_product_id based on credits
+                    $packages = $wpdb->get_results("SELECT id, credits FROM {$table_packages}");
+                    foreach ($packages as $pkg) {
+                        $iap_id = 'credits_' . $pkg->credits;
+                        $wpdb->update($table_packages, ['iap_product_id' => $iap_id], ['id' => $pkg->id]);
+                    }
+                }
+            }
+
+            update_option('rafflemania_admin_panel_db_version', '2.6');
         }
     }
 

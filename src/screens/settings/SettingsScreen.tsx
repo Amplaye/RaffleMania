@@ -82,20 +82,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
       value: notifications.drawReminders,
     },
     {
-      id: 'wins',
-      icon: 'trophy',
-      title: 'Notifiche vincite',
-      subtitle: 'Notifica immediatamente in caso di vincita',
-      value: notifications.winNotifications,
+      id: 'adCooldown',
+      icon: 'play-circle',
+      title: 'Notifiche pubblicità',
+      subtitle: 'Avvisa quando puoi guardare una nuova pubblicità',
+      value: notifications.adCooldownNotifications,
     },
   ];
 
   const handleToggle = (id: string) => {
-    const keyMap: Record<string, 'pushEnabled' | 'emailEnabled' | 'drawReminders' | 'winNotifications'> = {
+    const keyMap: Record<string, 'pushEnabled' | 'emailEnabled' | 'drawReminders' | 'winNotifications' | 'adCooldownNotifications'> = {
       push: 'pushEnabled',
       email: 'emailEnabled',
       reminders: 'drawReminders',
       wins: 'winNotifications',
+      adCooldown: 'adCooldownNotifications',
     };
     const key = keyMap[id];
     if (key) {
@@ -118,18 +119,33 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
       onPress: () => Linking.openURL('https://www.rafflemania.it/terms'),
     },
     {
+      id: 'faq',
+      icon: 'help-circle',
+      title: 'FAQ',
+      subtitle: 'Domande frequenti',
+      onPress: () => navigation.navigate('Faq'),
+    },
+    {
       id: 'support',
-      icon: 'chatbubbles',
+      icon: 'mail-open',
       title: 'Assistenza',
-      subtitle: 'Chatta con il supporto',
-      onPress: () => navigation.navigate('SupportChat'),
+      subtitle: 'Invia un\'email al supporto',
+      onPress: () => Linking.openURL('mailto:app.rafflemania@gmail.com?subject=Assistenza%20RaffleMania'),
     },
     {
       id: 'rate',
       icon: 'star',
       title: 'Valuta l\'app',
       subtitle: 'Lascia una recensione',
-      onPress: () => Alert.alert('Grazie!', 'Apriremo lo store per la tua recensione.'),
+      onPress: () => {
+        const storeUrl = Platform.select({
+          ios: 'https://apps.apple.com/app/id/XXXXXXXXXX', // TODO: replace with actual App Store ID
+          android: 'https://play.google.com/store/apps/details?id=com.rafflemaniaapp',
+        });
+        if (storeUrl) {
+          Linking.openURL(storeUrl);
+        }
+      },
     },
   ];
 

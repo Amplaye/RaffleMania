@@ -37,7 +37,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_prize_non
                 'goal_ads' => intval($_POST['goal_ads']),
                 'timer_duration' => intval($_POST['timer_duration']),
                 'is_active' => $is_active,
-                'publish_at' => $publish_at
+                'publish_at' => $publish_at,
+                'stock' => max(0, intval($_POST['stock'] ?? 1))
             ];
 
             if ($action === 'create') {
@@ -127,11 +128,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_prize_non
                         'extracted_at' => current_time('mysql')
                     ]);
 
-                    // Update prize status
-                    $wpdb->update($table_prizes, [
-                        'timer_status' => 'completed',
-                        'is_active' => 0
-                    ], ['id' => $prize_id]);
+                    // Update prize status with stock logic
+                    $current_stock = (int) $prize->stock;
+                    if ($current_stock === 0) {
+                        // Illimitato - reset per nuovo round
+                        $wpdb->update($table_prizes, [
+                            'timer_status' => 'waiting',
+                            'current_ads' => 0,
+                            'scheduled_at' => null,
+                            'timer_started_at' => null,
+                            'extracted_at' => current_time('mysql')
+                        ], ['id' => $prize_id]);
+                    } elseif ($current_stock <= 1) {
+                        // Ultima estrazione - disattivare
+                        $wpdb->update($table_prizes, [
+                            'stock' => 0,
+                            'timer_status' => 'completed',
+                            'is_active' => 0,
+                            'extracted_at' => current_time('mysql')
+                        ], ['id' => $prize_id]);
+                    } else {
+                        // Stock rimanente - decrementa e resetta
+                        $wpdb->update($table_prizes, [
+                            'stock' => $current_stock - 1,
+                            'timer_status' => 'waiting',
+                            'current_ads' => 0,
+                            'scheduled_at' => null,
+                            'timer_started_at' => null,
+                            'extracted_at' => current_time('mysql')
+                        ], ['id' => $prize_id]);
+                    }
 
                     // Log action
                     $wpdb->insert($table_log, [
@@ -585,6 +611,12 @@ if (isset($_GET['edit'])) {
                 </div>
 
                 <div class="rafflemania-form-row">
+                    <label>Stock (quantità disponibile)</label>
+                    <input type="number" name="stock" min="0" value="<?php echo esc_attr($editing->stock ?? 1); ?>">
+                    <p class="description" style="font-size: 12px; color: #888; margin-top: 4px;">Numero di estrazioni prima che il premio si disattivi. 0 = illimitato.</p>
+                </div>
+
+                <div class="rafflemania-form-row">
                     <label>
                         <input type="checkbox" name="is_active" <?php checked($editing->is_active ?? true, 1); ?>>
                         Premio Attivo
@@ -697,6 +729,11 @@ if (isset($_GET['edit'])) {
                 <div class="prize-meta-row" style="margin-top: 10px;">
                     <span>Biglietti Venduti</span>
                     <strong><?php echo number_format($ticket_count); ?></strong>
+                </div>
+
+                <div class="prize-meta-row">
+                    <span>Stock</span>
+                    <strong><?php echo (int)$prize->stock === 0 ? '∞ Illimitato' : (int)$prize->stock . ' rimanenti'; ?></strong>
                 </div>
 
                 <!-- Countdown Timer -->

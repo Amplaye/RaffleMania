@@ -11,7 +11,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer} from '../../components/common';
-import {useTicketsStore, usePrizesStore} from '../../store';
+import {useTicketsStore, usePrizesStore, useAuthStore} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {Ticket} from '../../types';
 import {
@@ -99,12 +99,17 @@ const WinningTicketCard: React.FC<{
 
 export const MyWinsScreen: React.FC<MyWinsScreenProps> = ({navigation}) => {
   const {colors} = useThemeColors();
-  const {pastTickets, fetchTickets} = useTicketsStore();
-  const {prizes} = usePrizesStore();
+  const {pastTickets, forceRefreshTickets} = useTicketsStore();
+  const {prizes, myWins, fetchMyWins} = usePrizesStore();
+  const user = useAuthStore(state => state.user);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    fetchTickets();
+    // Force refresh to get latest winning tickets from server
+    forceRefreshTickets();
+    if (user?.id) {
+      fetchMyWins(user.id);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -113,13 +118,19 @@ export const MyWinsScreen: React.FC<MyWinsScreenProps> = ({navigation}) => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchTickets();
+    await forceRefreshTickets();
+    if (user?.id) {
+      await fetchMyWins(user.id);
+    }
     setRefreshing(false);
   };
 
   const renderItem = ({item, index}: {item: Ticket; index: number}) => {
     const prize = prizes.find(p => p.id === item.prizeId);
-    const displayPrizeName = item.prizeName || prize?.name || 'Premio';
+    // Also check myWins for prize name (most reliable for completed prizes)
+    const winRecord = myWins.find(w => w.ticketId === item.id)
+      || myWins.find(w => w.prizeId === item.prizeId);
+    const displayPrizeName = item.prizeName || prize?.name || winRecord?.prize?.name || 'Premio';
 
     return (
       <WinningTicketCard

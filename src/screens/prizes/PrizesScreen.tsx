@@ -9,6 +9,7 @@ import {
   StatusBar,
   Animated,
   Dimensions,
+  Linking,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -284,7 +285,10 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
 
       <View style={styles.content}>
         {/* Banner Pubblicitario */}
-        <View style={[styles.bannerContainer, {backgroundColor: colors.card}]}>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => Linking.openURL('mailto:app.rafflemania@gmail.com?subject=Richiesta%20Sponsorizzazione%20Banner%20RaffleMania')}
+          style={[styles.bannerContainer, {backgroundColor: colors.card}]}>
           <View style={styles.bannerContent}>
             <View style={styles.bannerIcon}>
               <Ionicons name="megaphone" size={20} color={COLORS.primary} />
@@ -297,7 +301,7 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
               <Text style={styles.bannerBadgeText}>AD</Text>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Animated Tabs */}
         <View style={styles.tabWrapper}>

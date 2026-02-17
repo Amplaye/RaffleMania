@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Modal, TextInput} from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Modal, TextInput, Linking, Platform} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer, Card} from '../../components/common';
@@ -463,7 +463,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
       <View style={styles.supportButtonsContainer}>
         <TouchableOpacity
           style={styles.supportButton}
-          onPress={() => Alert.alert('Feedback', 'Funzionalita in arrivo!')}>
+          onPress={() => Linking.openURL('mailto:app.rafflemania@gmail.com?subject=Feedback%20RaffleMania')}>
           <Ionicons name="help-circle-outline" size={22} color={colors.primary} />
           <Text style={[styles.supportButtonText, {color: colors.primary}]}>Invia Feedback</Text>
         </TouchableOpacity>

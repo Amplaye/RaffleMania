@@ -176,7 +176,7 @@ $recent_winners = $wpdb->get_results(
      LEFT JOIN {$table_users} u ON w.user_id = u.id
      LEFT JOIN {$table_prizes} p ON w.prize_id = p.id
      ORDER BY w.won_at DESC
-     LIMIT 5"
+     LIMIT 20"
 );
 ?>
 
@@ -256,7 +256,7 @@ $recent_winners = $wpdb->get_results(
         /* Stats grid inside boxes */
         .rm-stats-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 16px;
         }
         @media (max-width: 768px) {
@@ -443,20 +443,12 @@ $recent_winners = $wpdb->get_results(
                     <div class="rm-stat-label">Vincitori</div>
                 </div>
                 <div class="rm-stat-item purple">
-                    <div class="rm-stat-value"><?php echo number_format($total_logins); ?></div>
-                    <div class="rm-stat-label">Login</div>
-                </div>
-                <div class="rm-stat-item purple">
                     <div class="rm-stat-value"><?php echo number_format($total_ads_watched); ?></div>
                     <div class="rm-stat-label">Ads Viste</div>
                 </div>
                 <div class="rm-stat-item purple">
                     <div class="rm-stat-value"><?php echo number_format($total_credits_spent); ?></div>
                     <div class="rm-stat-label">Crediti Usati</div>
-                </div>
-                <div class="rm-stat-item purple">
-                    <div class="rm-stat-value"><?php echo number_format($total_prizes); ?></div>
-                    <div class="rm-stat-label">Premi Attivi</div>
                 </div>
             </div>
         </div>
@@ -465,10 +457,6 @@ $recent_winners = $wpdb->get_results(
         <div class="rm-box">
             <h3><?php echo esc_html($period_label); ?><span><?php echo esc_html($date_display); ?></span></h3>
             <div class="rm-stats-grid">
-                <div class="rm-stat-item">
-                    <div class="rm-stat-value"><?php echo number_format((int)($period_stats->logins ?? 0)); ?></div>
-                    <div class="rm-stat-label">Login</div>
-                </div>
                 <div class="rm-stat-item">
                     <div class="rm-stat-value"><?php echo number_format((int)($period_stats->tickets_created ?? 0)); ?></div>
                     <div class="rm-stat-label">Biglietti</div>
@@ -492,10 +480,6 @@ $recent_winners = $wpdb->get_results(
                 <div class="rm-stat-item">
                     <div class="rm-stat-value"><?php echo number_format((int)($period_stats->winners ?? 0)); ?></div>
                     <div class="rm-stat-label">Vittorie</div>
-                </div>
-                <div class="rm-stat-item">
-                    <div class="rm-stat-value">-</div>
-                    <div class="rm-stat-label">-</div>
                 </div>
             </div>
         </div>

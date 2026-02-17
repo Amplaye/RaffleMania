@@ -51,16 +51,16 @@ export const DEFAULT_REFERRAL_REWARDS = {
   REFERRED_CREDITS: 15,
 };
 
-export const DEFAULT_SHOP_PACKAGES = [
-  {id: '1', credits: 10, price: 0.99, badge: null, discount: null},
-  {id: '2', credits: 25, price: 1.99, badge: null, discount: null},
-  {id: '3', credits: 60, price: 2.99, badge: 'most popular', discount: '-50%'},
-  {id: '4', credits: 100, price: 4.49, badge: null, discount: null},
-  {id: '5', credits: 250, price: 9.99, badge: null, discount: null},
-  {id: '6', credits: 600, price: 19.99, badge: null, discount: null},
-  {id: '7', credits: 1000, price: 29.99, badge: null, discount: '-69%'},
-  {id: '8', credits: 2500, price: 59.99, badge: null, discount: '-76%'},
-  {id: '9', credits: 6000, price: 99.99, badge: 'best value', discount: '-83%'},
+export const DEFAULT_SHOP_PACKAGES: ShopPackage[] = [
+  {id: '1', credits: 10, price: 0.99, badge: null, discount: null, iapProductId: 'credits_10'},
+  {id: '2', credits: 25, price: 1.99, badge: null, discount: null, iapProductId: 'credits_25'},
+  {id: '3', credits: 60, price: 2.99, badge: 'most popular', discount: '-50%', iapProductId: 'credits_60'},
+  {id: '4', credits: 100, price: 4.49, badge: null, discount: null, iapProductId: 'credits_100'},
+  {id: '5', credits: 250, price: 9.99, badge: null, discount: null, iapProductId: 'credits_250'},
+  {id: '6', credits: 600, price: 19.99, badge: null, discount: null, iapProductId: 'credits_600'},
+  {id: '7', credits: 1000, price: 29.99, badge: null, discount: '-69%', iapProductId: 'credits_1000'},
+  {id: '8', credits: 2500, price: 59.99, badge: null, discount: '-76%', iapProductId: 'credits_2500'},
+  {id: '9', credits: 6000, price: 99.99, badge: 'best value', discount: '-83%', iapProductId: 'credits_6000'},
 ];
 
 export interface LevelConfig {
@@ -79,6 +79,7 @@ export interface ShopPackage {
   price: number;
   badge: string | null;
   discount: string | null;
+  iapProductId?: string;
 }
 
 interface GameConfigState {
@@ -207,6 +208,7 @@ export const useGameConfigStore = create<GameConfigState>()(
                 price: parseFloat(p.price),
                 badge: p.badge || null,
                 discount: p.discount || null,
+                iapProductId: p.iap_product_id || 'credits_' + p.credits,
               }));
             }
           }

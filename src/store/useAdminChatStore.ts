@@ -97,7 +97,7 @@ export const useAdminChatStore = create<AdminChatState>((set, get) => ({
       chatsQuery,
       snapshot => {
         const rooms: ChatRoom[] = [];
-        snapshot.forEach(docSnap => {
+        snapshot.forEach((docSnap: any) => {
           const data = docSnap.data();
           rooms.push({
             id: docSnap.id,
@@ -137,7 +137,7 @@ export const useAdminChatStore = create<AdminChatState>((set, get) => ({
       messagesQuery,
       snapshot => {
         const messages: ChatMessage[] = [];
-        snapshot.forEach(docSnap => {
+        snapshot.forEach((docSnap: any) => {
           const data = docSnap.data();
           messages.push({
             id: docSnap.id,
@@ -229,7 +229,7 @@ export const useAdminChatStore = create<AdminChatState>((set, get) => ({
 
       // Batch update all unread messages
       const batch = writeBatch(db);
-      unreadMessages.forEach(docSnap => {
+      unreadMessages.forEach((docSnap: any) => {
         batch.update(docSnap.ref, {read: true});
       });
 

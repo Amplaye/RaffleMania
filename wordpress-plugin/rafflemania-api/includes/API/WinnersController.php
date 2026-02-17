@@ -134,7 +134,7 @@ class WinnersController extends WP_REST_Controller {
         global $wpdb;
         $table_winners = $wpdb->prefix . 'rafflemania_winners';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $winner_id = $request->get_param('id');
         $shipping_address = $request->get_param('shipping_address');
 
@@ -176,18 +176,22 @@ class WinnersController extends WP_REST_Controller {
             $winner->prize_id
         ));
 
-        wp_mail(
-            $admin_email,
-            'RaffleMania - Nuovo premio da spedire',
-            "Un utente ha riscosso un premio!\n\n" .
-            "Premio: {$prize->name}\n" .
-            "Indirizzo:\n" .
-            "{$shipping_address['fullName']}\n" .
-            "{$shipping_address['address']}\n" .
-            "{$shipping_address['postalCode']} {$shipping_address['city']}\n" .
-            "{$shipping_address['country']}\n" .
-            (isset($shipping_address['phone']) ? "Tel: {$shipping_address['phone']}" : '')
-        );
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/EmailHelper.php';
+        $phone_html = isset($shipping_address['phone']) ? "<br>Tel: " . esc_html($shipping_address['phone']) : '';
+        $body = "<tr><td style='padding:16px 40px;'>
+<h2 style='color:#1a1a1a;margin:0 0 10px;font-size:22px;font-weight:700;'>Nuovo premio da spedire!</h2>
+<p style='color:#555;font-size:16px;line-height:1.6;margin:0 0 16px;'>Un utente ha riscosso un premio.</p>
+<div style='background:#FFF8F0;border:2px solid #FF6B00;border-radius:12px;padding:20px;'>
+<p style='margin:0 0 8px;font-size:18px;font-weight:700;color:#FF6B00;'>" . esc_html($prize->name) . "</p>
+<p style='margin:0;font-size:15px;color:#333;line-height:1.6;'>
+" . esc_html($shipping_address['fullName']) . "<br>
+" . esc_html($shipping_address['address']) . "<br>
+" . esc_html($shipping_address['postalCode']) . " " . esc_html($shipping_address['city']) . "<br>
+" . esc_html($shipping_address['country']) . "{$phone_html}
+</p>
+</div>
+</td></tr>";
+        \RaffleMania\EmailHelper::send($admin_email, 'RaffleMania - Nuovo premio da spedire', $body);
 
         return new WP_REST_Response([
             'success' => true,
@@ -209,7 +213,7 @@ class WinnersController extends WP_REST_Controller {
             return false;
         }
 
-        $request->set_attribute('user_id', $payload['user_id']);
+        $request->set_param('_auth_user_id', $payload['user_id']);
         return true;
     }
 
@@ -249,7 +253,7 @@ class WinnersController extends WP_REST_Controller {
         global $wpdb;
         $table_winners = $wpdb->prefix . 'rafflemania_winners';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $ticket_id = $request->get_param('ticket_id');
 
         $winner = $wpdb->get_row($wpdb->prepare(
@@ -337,19 +341,9 @@ class WinnersController extends WP_REST_Controller {
      * Send delivery confirmation email with logo, prize details, voucher code
      */
     private function send_delivery_email($email, $username, $prize_name, $prize_value, $prize_image = '', $voucher_code = '', $delivery_notes = '') {
-        // Get logo from WordPress media library
-        $logo_attachment = get_posts([
-            'post_type' => 'attachment',
-            'post_status' => 'inherit',
-            'posts_per_page' => 1,
-            's' => 'logo',
-            'orderby' => 'date',
-            'order' => 'DESC',
-        ]);
-        $logo_url = !empty($logo_attachment) ? wp_get_attachment_url($logo_attachment[0]->ID) : 'https://www.rafflemania.it/wp-content/uploads/2026/02/rafflemania-icon.png';
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/EmailHelper.php';
 
         $prize_value_formatted = number_format($prize_value, 2, ',', '.');
-        $year = date('Y');
 
         $prize_image_html = '';
         if (!empty($prize_image)) {
@@ -367,16 +361,7 @@ class WinnersController extends WP_REST_Controller {
             $notes_section = "<tr><td style='padding: 0 40px 16px;'><div style='background: #f0f7ff; border-left: 4px solid #4A90D9; border-radius: 0 8px 8px 0; padding: 16px 20px;'><div style='font-size: 15px; font-weight: 600; color: #4A90D9; margin-bottom: 6px;'>Istruzioni</div><div style='font-size: 16px; color: #333; line-height: 1.5;'>{$escaped_notes}</div></div></td></tr>";
         }
 
-        $subject = "RaffleMania - Il tuo premio \"{$prize_name}\" e stato consegnato!";
-        $message = "<!DOCTYPE html><html lang='it'><head><meta charset='UTF-8'></head>
-<body style='margin:0;padding:0;background-color:#f4f4f4;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;'>
-<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='background-color:#f4f4f4;'>
-<tr><td align='center' style='padding:20px 10px;'>
-<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='600' style='max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;'>
-<tr><td style='padding:32px 40px;text-align:center;'>
-<img src='{$logo_url}' alt='RaffleMania' width='160' height='160' style='width:160px;height:160px;border-radius:20px;display:block;margin:0 auto;'/>
-</td></tr>
-<tr><td style='padding:16px 40px 0;'>
+        $body = "<tr><td style='padding:16px 40px 0;'>
 <h2 style='color:#1a1a1a;margin:0 0 10px;font-size:26px;font-weight:700;'>Ciao {$username}!</h2>
 <p style='color:#555;font-size:18px;line-height:1.6;margin:0;'>Ottime notizie! Il tuo premio e stato <strong style='color:#FF6B00;'>consegnato con successo</strong>.</p>
 </td></tr>
@@ -391,22 +376,10 @@ class WinnersController extends WP_REST_Controller {
 </td></tr>
 {$voucher_section}
 {$notes_section}
-<tr><td style='padding:0 40px 32px;'><div style='background:#f9f9f9;border-radius:12px;padding:20px;text-align:center;'><p style='color:#666;font-size:16px;line-height:1.5;margin:0;'>Hai domande sul tuo premio? Contatta il nostro supporto direttamente dall'app RaffleMania.</p></div></td></tr>
-<tr><td style='background-color:#fafafa;padding:20px 40px;text-align:center;border-top:1px solid #eee;'>
-<p style='color:#aaa;font-size:13px;margin:0;'>&copy; {$year} RaffleMania. Tutti i diritti riservati.</p>
-</td></tr>
-</table></td></tr></table>
-</body></html>";
+<tr><td style='padding:0 40px 32px;'><div style='background:#f9f9f9;border-radius:12px;padding:20px;text-align:center;'><p style='color:#666;font-size:16px;line-height:1.5;margin:0;'>Hai domande sul tuo premio? Contatta il nostro supporto direttamente dall'app RaffleMania.</p></div></td></tr>";
 
-        $headers = [
-            'Content-Type: text/html; charset=UTF-8',
-            'From: RaffleMania <noreply@rafflemania.it>',
-            'Reply-To: supporto@rafflemania.it',
-            'X-Mailer: RaffleMania/1.0',
-            'MIME-Version: 1.0',
-        ];
-
-        $result = wp_mail($email, $subject, $message, $headers);
+        $subject = "RaffleMania - Il tuo premio \"{$prize_name}\" e stato consegnato!";
+        $result = \RaffleMania\EmailHelper::send($email, $subject, $body, true);
 
         if (!$result) {
             error_log("[RaffleMania] Failed to send delivery email to {$email}");

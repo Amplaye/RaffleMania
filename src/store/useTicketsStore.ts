@@ -104,6 +104,9 @@ interface TicketsState {
 
   // Cleanup: rimuovi ticket attivi per premi già estratti
   cleanupExtractedTickets: () => Promise<void>;
+
+  // Force refresh from API (resets isInitialized)
+  forceRefreshTickets: () => Promise<void>;
 }
 
 export const useTicketsStore = create<TicketsState>()(
@@ -154,8 +157,28 @@ export const useTicketsStore = create<TicketsState>()(
         ...apiPastTickets.filter((t: Ticket) => !localWinners.some(w => w.id === t.id || w.prizeId === t.prizeId)),
       ];
 
+      // Trust the API as source of truth for active tickets.
+      // If API returns 0 active tickets, clear local cache (those prizes were extracted).
+      // Only keep local active tickets if they are for prizes that still exist on server.
+      let finalActiveTickets = apiActiveTickets;
+      if (apiActiveTickets.length === 0 && localActiveTickets.length > 0) {
+        // API says no active tickets - only keep local ones for currently active prizes
+        try {
+          const {usePrizesStore} = await import('./usePrizesStore');
+          const activePrizeIds = new Set(
+            usePrizesStore.getState().prizes
+              .filter(p => p.isActive && p.timerStatus === 'countdown')
+              .map(p => String(p.id))
+          );
+          finalActiveTickets = localActiveTickets.filter(t => activePrizeIds.has(String(t.prizeId)));
+          console.log(`[TicketsStore] API returned 0 active tickets. Kept ${finalActiveTickets.length}/${localActiveTickets.length} local tickets (for active countdown prizes)`);
+        } catch {
+          finalActiveTickets = [];
+        }
+      }
+
       set({
-        activeTickets: apiActiveTickets.length > 0 ? apiActiveTickets : localActiveTickets,
+        activeTickets: finalActiveTickets,
         pastTickets: mergedPastTickets,
         isLoading: false,
         isInitialized: true,
@@ -166,10 +189,27 @@ export const useTicketsStore = create<TicketsState>()(
     } catch {
       // API failed - KEEP local data, don't reset!
       console.log('Tickets API not available, preserving local data');
+
+      // Enrich local tickets with prize names from prizes store (for cached tickets missing prizeName)
+      try {
+        const {usePrizesStore} = await import('./usePrizesStore');
+        const allPrizes = usePrizesStore.getState().prizes;
+        if (allPrizes.length > 0) {
+          const enrichTicket = (t: Ticket): Ticket => {
+            if (t.prizeName) return t;
+            const prize = allPrizes.find(p => String(p.id) === String(t.prizeId));
+            return prize ? {...t, prizeName: prize.name, prizeImage: prize.imageUrl} : t;
+          };
+          set(state => ({
+            activeTickets: state.activeTickets.map(enrichTicket),
+            pastTickets: state.pastTickets.map(enrichTicket),
+          }));
+        }
+      } catch {}
+
       set({
         isLoading: false,
         isInitialized: true,
-        // Keep activeTickets and pastTickets as they are (persisted from AsyncStorage)
       });
 
       // Still cleanup even with local data
@@ -226,6 +266,10 @@ export const useTicketsStore = create<TicketsState>()(
       userId
     );
 
+    // Get prize name from prizes store for local display
+    const {usePrizesStore} = await import('./usePrizesStore');
+    const prize = usePrizesStore.getState().prizes.find(p => String(p.id) === String(prizeId));
+
     // Converti le assegnazioni in Ticket objects
     const newTickets: Ticket[] = assignments.map(assignment => ({
       id: assignment.ticketId,
@@ -236,6 +280,8 @@ export const useTicketsStore = create<TicketsState>()(
       source: assignment.source,
       isWinner: false,
       createdAt: assignment.createdAt,
+      prizeName: prize?.name,
+      prizeImage: prize?.imageUrl,
     }));
 
     // Aggiorna lo state in un'unica operazione atomica
@@ -665,6 +711,11 @@ export const useTicketsStore = create<TicketsState>()(
       activeTickets: activeTickets.filter(t => t.prizeId !== prizeId),
     });
     console.log(`[TicketsStore] Cleared all active tickets for prize ${prizeId}`);
+  },
+
+  forceRefreshTickets: async () => {
+    set({isInitialized: false});
+    await get().fetchTickets();
   },
 
   cleanupExtractedTickets: async () => {

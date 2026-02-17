@@ -8,14 +8,27 @@ import {
   ScrollView,
   Alert,
   Platform,
+  Modal,
+  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
+import {SvgUri} from 'react-native-svg';
 import {AnimatedBackground} from '../../components/common';
+import {PaymentMethodSheet} from '../../components/shop/PaymentMethodSheet';
 import apiClient from '../../services/apiClient';
+import {
+  initIAP,
+  purchaseWithIAP,
+  verifyAndFinishIAP,
+  createStripeIntent,
+  restorePurchases,
+  setupPurchaseListeners,
+} from '../../services/paymentService';
 import {API_CONFIG} from '../../utils/constants';
 import {useAuthStore, useCreditsStore, useTicketsStore} from '../../store';
-import {useGameConfigStore, DEFAULT_SHOP_PACKAGES} from '../../store/useGameConfigStore';
+import {useGameConfigStore, ShopPackage, DEFAULT_SHOP_PACKAGES} from '../../store/useGameConfigStore';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -25,6 +38,7 @@ import {
   FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
+import {type Purchase, type PurchaseError, ErrorCode} from 'react-native-iap';
 
 interface ShopScreenProps {
   navigation: any;
@@ -79,6 +93,11 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
   const shopPackages = useGameConfigStore(s => s.shopPackages);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [showCreditModal, setShowCreditModal] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState<ShopPackage | null>(null);
+  const [showPaymentSheet, setShowPaymentSheet] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   // Ad cooldown countdown
   useEffect(() => {
@@ -98,6 +117,65 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Setup IAP purchase listeners (ensure IAP is initialized first)
+  useEffect(() => {
+    let mounted = true;
+
+    const handlePurchaseUpdate = async (purchase: Purchase) => {
+      if (!mounted) return;
+      console.log('[Shop] Purchase update received:', purchase.productId);
+      try {
+        setIsPurchasing(true);
+        const result = await verifyAndFinishIAP(purchase);
+        if (!mounted) return;
+        if (result.success && result.creditsAwarded > 0) {
+          // Refresh user data from server (credits updated server-side)
+          await useAuthStore.getState().refreshUserData();
+          Alert.alert('Successo!', `Hai ottenuto ${result.creditsAwarded} crediti!`);
+        } else if (result.success && result.creditsAwarded === 0) {
+          Alert.alert('Info', 'Questo acquisto era già stato elaborato.');
+        }
+      } catch (error: any) {
+        console.log('[Shop] Purchase verification error:', error);
+        if (mounted) {
+          Alert.alert('Errore', 'Verifica pagamento fallita. Contatta il supporto se il problema persiste.');
+        }
+      } finally {
+        if (mounted) {
+          setIsPurchasing(false);
+          setShowPaymentSheet(false);
+          setSelectedPackage(null);
+        }
+      }
+    };
+
+    const handlePurchaseError = (error: PurchaseError) => {
+      if (!mounted) return;
+      console.log('[Shop] Purchase error:', error.code, error.message);
+      setIsPurchasing(false);
+      if (error.code !== ErrorCode.UserCancelled) {
+        Alert.alert('Errore', 'Acquisto non riuscito. Riprova.');
+      }
+    };
+
+    const initAndSetupListeners = async () => {
+      try {
+        await initIAP();
+      } catch (e) {
+        console.log('[Shop] IAP init failed (non-critical):', e);
+      }
+      if (mounted) {
+        setupPurchaseListeners(handlePurchaseUpdate, handlePurchaseError);
+      }
+    };
+
+    initAndSetupListeners();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const handleRemoveBanner = () => {
     Alert.alert(
       'Rimuovi Banner Pubblicitari',
@@ -107,7 +185,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
         {
           text: 'Acquista (0.99€)',
           onPress: () => {
-            // TODO: Implement actual purchase
+            // TODO: Implement actual purchase for ad removal
             Alert.alert('Successo!', 'I banner pubblicitari sono stati rimossi!');
           },
         },
@@ -115,36 +193,86 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
     );
   };
 
-  const handlePurchase = (package_: typeof CREDIT_PACKAGES[0]) => {
-    // TODO: Implement actual purchase with payment provider
-    Alert.alert(
-      'Acquista Crediti',
-      `Vuoi acquistare ${package_.credits} crediti per ${package_.price.toFixed(2)}€?`,
-      [
-        {text: 'Annulla', style: 'cancel'},
-        {
-          text: 'Acquista',
-          onPress: async () => {
-            // Update locally
-            addCredits(package_.credits, 'purchase');
+  const handlePurchase = (package_: ShopPackage) => {
+    setSelectedPackage(package_);
+    setShowPaymentSheet(true);
+  };
 
-            // Sync to server for authenticated users
-            const isGuestUser = token?.startsWith('guest_token_');
-            if (!API_CONFIG.USE_MOCK_DATA && !isGuestUser) {
-              try {
-                await apiClient.post('/users/me/credits/purchase', {
-                  credits: package_.credits,
-                });
-              } catch (e) {
-                console.log('[Shop] Server credit sync failed:', e);
-              }
-            }
+  const handleIAPPurchase = async () => {
+    if (!selectedPackage) return;
 
-            Alert.alert('Successo!', `Hai acquistato ${package_.credits} crediti!`);
-          },
-        },
-      ],
-    );
+    const productId = selectedPackage.iapProductId || 'credits_' + selectedPackage.credits;
+    setIsPurchasing(true);
+    setShowPaymentSheet(false);
+
+    try {
+      await purchaseWithIAP(productId);
+      // Result will come via purchaseUpdatedListener
+    } catch (error: any) {
+      setIsPurchasing(false);
+      if (error.message !== 'USER_CANCELLED') {
+        Alert.alert('Errore', 'Impossibile avviare l\'acquisto. Riprova.');
+      }
+    }
+  };
+
+  const handleStripePurchase = async () => {
+    if (!selectedPackage) return;
+
+    setIsPurchasing(true);
+    setShowPaymentSheet(false);
+
+    try {
+      // Create PaymentIntent on server
+      const {clientSecret} = await createStripeIntent(selectedPackage.id);
+
+      // Dynamically load Stripe SDK to avoid crash if native module not available
+      const stripe = require('@stripe/stripe-react-native');
+      const {error} = await stripe.confirmPayment(clientSecret, {
+        paymentMethodType: 'Card',
+      });
+
+      if (error) {
+        console.log('[Shop] Stripe error:', error.code, error.message);
+        if (error.code !== 'Canceled') {
+          Alert.alert('Errore', error.message || 'Pagamento non riuscito.');
+        }
+      } else {
+        // Payment confirmed - credits will be awarded via webhook
+        // Refresh user data after a short delay to let webhook process
+        setTimeout(async () => {
+          await useAuthStore.getState().refreshUserData();
+          Alert.alert('Successo!', `Hai ottenuto ${selectedPackage.credits} crediti!`);
+        }, 2000);
+      }
+    } catch (error: any) {
+      console.log('[Shop] Stripe purchase error:', error);
+      if (error?.message?.includes('StripeSdk') || error?.message?.includes('StripeProvider')) {
+        Alert.alert('Non disponibile', 'Il pagamento con carta non è ancora disponibile. Usa Apple Pay o Google Pay.');
+      } else {
+        Alert.alert('Errore', 'Pagamento non riuscito. Riprova.');
+      }
+    } finally {
+      setIsPurchasing(false);
+      setSelectedPackage(null);
+    }
+  };
+
+  const handleRestorePurchases = async () => {
+    setIsRestoring(true);
+    try {
+      const result = await restorePurchases();
+      if (result.restored > 0) {
+        await useAuthStore.getState().refreshUserData();
+        Alert.alert('Successo!', `${result.restored} acquisti ripristinati.`);
+      } else {
+        Alert.alert('Info', 'Nessun acquisto da ripristinare.');
+      }
+    } catch (error) {
+      Alert.alert('Errore', 'Impossibile ripristinare gli acquisti. Riprova.');
+    } finally {
+      setIsRestoring(false);
+    }
   };
 
   const handleWatchAd = async () => {
@@ -165,7 +293,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
     }
 
     setIsWatchingAd(false);
-    Alert.alert('Credito Guadagnato!', 'Hai ricevuto 1 credito gratuito!');
+    setShowCreditModal(true);
   };
 
   return (
@@ -181,7 +309,10 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           {/* Banner Pubblicitario */}
-          <View style={[styles.bannerContainer, {backgroundColor: colors.card}]}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => Linking.openURL('mailto:app.rafflemania@gmail.com?subject=Richiesta%20Sponsorizzazione%20Banner%20RaffleMania')}
+            style={[styles.bannerContainer, {backgroundColor: colors.card}]}>
             <View style={styles.bannerContent}>
               <View style={styles.bannerIcon}>
                 <Ionicons name="megaphone" size={20} color={COLORS.primary} />
@@ -194,7 +325,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
                 <Text style={styles.bannerBadgeText}>AD</Text>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
 
           {/* Info Row: Crediti Residui + Pagamenti Accettati */}
           <View style={styles.infoRow}>
@@ -229,6 +360,17 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
 
       {/* Bottom Buttons */}
       <View style={styles.bottomSection}>
+        {/* Restore Purchases Button (required by Apple) */}
+        <TouchableOpacity
+          style={[styles.restoreButton]}
+          onPress={handleRestorePurchases}
+          disabled={isRestoring}
+          activeOpacity={0.7}>
+          <Text style={[styles.restoreText, {color: colors.textMuted}]}>
+            {isRestoring ? 'Ripristino in corso...' : 'Ripristina acquisti'}
+          </Text>
+        </TouchableOpacity>
+
         {/* Remove Banner Button */}
         <TouchableOpacity
           style={[styles.removeBannerButton, {backgroundColor: colors.card}]}
@@ -242,7 +384,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
 
         {/* Watch Ad Button */}
         <TouchableOpacity
-          style={[styles.watchAdButton, {backgroundColor: colors.card}, cooldownSeconds > 0 && styles.buttonDisabled]}
+          style={[styles.watchAdButton, cooldownSeconds > 0 && styles.buttonDisabled]}
           onPress={handleWatchAd}
           disabled={isWatchingAd || cooldownSeconds > 0}
           activeOpacity={0.8}>
@@ -252,12 +394,78 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
             end={{x: 1, y: 0}}
             style={styles.watchAdGradient}>
             <Ionicons name="play-circle" size={24} color={COLORS.white} />
-            <Text style={styles.watchAdText}>
-              {isWatchingAd ? 'GUARDANDO...' : cooldownSeconds > 0 ? `ATTENDI ${formatAdCooldown(cooldownSeconds)}` : 'GUARDA PUBBLICITÀ E GUADAGNA UN CREDITO'}
-            </Text>
+            {isWatchingAd ? (
+              <Text style={styles.watchAdText}>CARICAMENTO...</Text>
+            ) : cooldownSeconds > 0 ? (
+              <Text style={styles.watchAdText}>{`ATTENDI ${formatAdCooldown(cooldownSeconds)}`}</Text>
+            ) : (
+              <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
+                <Text style={styles.watchAdText}>GUARDA ADS E RICEVI </Text>
+                <SvgUri uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg" width={18} height={18} />
+                <Text style={styles.watchAdText}> x1</Text>
+              </View>
+            )}
           </LinearGradient>
         </TouchableOpacity>
       </View>
+      {/* Payment Method Sheet */}
+      <PaymentMethodSheet
+        visible={showPaymentSheet}
+        package_={selectedPackage}
+        onSelectIAP={handleIAPPurchase}
+        onSelectStripe={handleStripePurchase}
+        onClose={() => {
+          setShowPaymentSheet(false);
+          setSelectedPackage(null);
+        }}
+        isLoading={isPurchasing}
+      />
+
+      {/* Loading overlay during purchase */}
+      {isPurchasing && (
+        <View style={styles.purchaseOverlay}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.purchaseOverlayText}>Elaborazione pagamento...</Text>
+        </View>
+      )}
+
+      {/* Credit Obtained Modal */}
+      <Modal
+        visible={showCreditModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreditModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.creditModalContainer, {backgroundColor: colors.card}]}>
+            <View style={styles.creditModalIcon}>
+              <SvgUri
+                uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg"
+                width={64}
+                height={64}
+              />
+            </View>
+            <Text style={[styles.creditModalTitle, {color: colors.text}]}>+1 Credito!</Text>
+            <Text style={[styles.creditModalSubtitle, {color: colors.textMuted}]}>
+              Hai ottenuto 1 credito guardando la pubblicità
+            </Text>
+            <Text style={[styles.creditModalBalance, {color: COLORS.primary}]}>
+              Saldo: {user?.credits ?? 0} crediti
+            </Text>
+            <TouchableOpacity
+              style={styles.creditModalButton}
+              onPress={() => setShowCreditModal(false)}
+              activeOpacity={0.8}>
+              <LinearGradient
+                colors={[COLORS.primary, '#FF8500']}
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 0}}
+                style={styles.creditModalButtonGradient}>
+                <Text style={styles.creditModalButtonText}>OK</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 };
@@ -458,10 +666,91 @@ const styles = StyleSheet.create({
   },
   watchAdText: {
     color: COLORS.white,
-    fontSize: FONT_SIZE.xs,
+    fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     paddingHorizontal: SPACING.sm,
+  },
+  // Credit Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  creditModalContainer: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: `${COLORS.primary}40`,
+  },
+  creditModalIcon: {
+    marginBottom: SPACING.md,
+  },
+  creditModalTitle: {
+    fontSize: FONT_SIZE.xxl,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    marginBottom: SPACING.xs,
+  },
+  creditModalSubtitle: {
+    fontSize: FONT_SIZE.sm,
+    fontFamily: FONT_FAMILY.regular,
+    textAlign: 'center',
+    marginBottom: SPACING.md,
+    lineHeight: 20,
+  },
+  creditModalBalance: {
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    marginBottom: SPACING.lg,
+  },
+  creditModalButton: {
+    width: '100%',
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+  },
+  creditModalButtonGradient: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+  },
+  creditModalButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  // Restore button
+  restoreButton: {
+    alignItems: 'center',
+    paddingVertical: SPACING.xs,
+  },
+  restoreText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.medium,
+    textDecorationLine: 'underline',
+  },
+  // Purchase loading overlay
+  purchaseOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  purchaseOverlayText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZE.md,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    marginTop: SPACING.md,
   },
 });
 

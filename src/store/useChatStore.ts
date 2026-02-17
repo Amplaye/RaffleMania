@@ -68,7 +68,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const messages: ChatMessage[] = [];
         let unreadCount = 0;
 
-        snapshot.forEach(docSnap => {
+        snapshot.forEach((docSnap: any) => {
           const data = docSnap.data();
           const message: ChatMessage = {
             id: docSnap.id,
@@ -171,7 +171,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // Batch update all unread messages
       const batch = writeBatch(db);
-      unreadMessages.forEach(docSnap => {
+      unreadMessages.forEach((docSnap: any) => {
         batch.update(docSnap.ref, {read: true});
       });
 

@@ -6,12 +6,62 @@ $table_winners = $wpdb->prefix . 'rafflemania_winners';
 $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
 $table_users = $wpdb->prefix . 'rafflemania_users';
 
+// Period filter
+$italy_tz = new DateTimeZone('Europe/Rome');
+$now = new DateTime('now', $italy_tz);
+$period = sanitize_text_field($_GET['period'] ?? 'all');
+$custom_date = sanitize_text_field($_GET['date'] ?? '');
+
+$date_where = '';
+$period_label = 'Tutti';
+$date_display = '';
+
+switch ($period) {
+    case 'today':
+        $date_where = $wpdb->prepare(" AND DATE(w.won_at) = %s", $now->format('Y-m-d'));
+        $period_label = 'Oggi';
+        $date_display = $now->format('d/m/Y');
+        break;
+    case 'yesterday':
+        $yesterday = (clone $now)->modify('-1 day')->format('Y-m-d');
+        $date_where = $wpdb->prepare(" AND DATE(w.won_at) = %s", $yesterday);
+        $period_label = 'Ieri';
+        $date_display = (clone $now)->modify('-1 day')->format('d/m/Y');
+        break;
+    case 'week':
+        $start = (clone $now)->modify('monday this week')->format('Y-m-d');
+        $date_where = $wpdb->prepare(" AND DATE(w.won_at) >= %s", $start);
+        $period_label = 'Questa Settimana';
+        $date_display = (clone $now)->modify('monday this week')->format('d/m') . ' - ' . $now->format('d/m/Y');
+        break;
+    case 'month':
+        $start = $now->format('Y-m-01');
+        $date_where = $wpdb->prepare(" AND DATE(w.won_at) >= %s", $start);
+        $period_label = 'Questo Mese';
+        $date_display = $now->format('F Y');
+        break;
+    case 'year':
+        $start = $now->format('Y-01-01');
+        $date_where = $wpdb->prepare(" AND DATE(w.won_at) >= %s", $start);
+        $period_label = 'Quest\'Anno';
+        $date_display = $now->format('Y');
+        break;
+    case 'custom':
+        if ($custom_date) {
+            $date_where = $wpdb->prepare(" AND DATE(w.won_at) = %s", $custom_date);
+            $period_label = 'Data Personalizzata';
+            $date_display = (new DateTime($custom_date))->format('d/m/Y');
+        }
+        break;
+}
+
 $winners = $wpdb->get_results(
     "SELECT w.*, p.name as prize_name, p.image_url as prize_image, p.value as prize_value,
             u.username, u.email
      FROM {$table_winners} w
      LEFT JOIN {$table_prizes} p ON w.prize_id = p.id
      LEFT JOIN {$table_users} u ON w.user_id = u.id
+     WHERE 1=1 {$date_where}
      ORDER BY w.won_at DESC
      LIMIT 100"
 );
@@ -23,7 +73,40 @@ $winners = $wpdb->get_results(
         Vincitori
     </h1>
 
+    <!-- Period Filter -->
+    <div style="display: flex; gap: 8px; margin: 20px 0; flex-wrap: wrap; align-items: center;">
+        <a href="?page=rafflemania-winners&period=all" class="rm-period-btn <?php echo $period === 'all' ? 'active' : ''; ?>">Tutti</a>
+        <a href="?page=rafflemania-winners&period=today" class="rm-period-btn <?php echo $period === 'today' ? 'active' : ''; ?>">Oggi</a>
+        <a href="?page=rafflemania-winners&period=yesterday" class="rm-period-btn <?php echo $period === 'yesterday' ? 'active' : ''; ?>">Ieri</a>
+        <a href="?page=rafflemania-winners&period=week" class="rm-period-btn <?php echo $period === 'week' ? 'active' : ''; ?>">Settimana</a>
+        <a href="?page=rafflemania-winners&period=month" class="rm-period-btn <?php echo $period === 'month' ? 'active' : ''; ?>">Mese</a>
+        <a href="?page=rafflemania-winners&period=year" class="rm-period-btn <?php echo $period === 'year' ? 'active' : ''; ?>">Anno</a>
+        <span style="color: #ccc; margin: 0 8px;">|</span>
+        <form method="get" style="display: flex; align-items: center; gap: 8px;">
+            <input type="hidden" name="page" value="rafflemania-winners">
+            <input type="hidden" name="period" value="custom">
+            <input type="date" name="date" style="padding: 8px 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;"
+                   value="<?php echo $period === 'custom' ? esc_attr($custom_date) : $now->format('Y-m-d'); ?>"
+                   max="<?php echo $now->format('Y-m-d'); ?>">
+            <button type="submit" class="rm-period-btn">Cerca</button>
+        </form>
+    </div>
+
     <style>
+        .rm-period-btn {
+            padding: 10px 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            text-decoration: none;
+            color: #333;
+            font-size: 14px;
+        }
+        .rm-period-btn:hover { border-color: #FF6B00; color: #FF6B00; }
+        .rm-period-btn.active { background: #FF6B00; border-color: #FF6B00; color: white; }
         .rafflemania-table-container {
             background: white;
             border-radius: 12px;

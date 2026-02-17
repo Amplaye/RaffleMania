@@ -217,25 +217,27 @@ class ChatController extends WP_REST_Controller {
         ];
 
         // Prepare email content
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/EmailHelper.php';
         $subject = "[RaffleMania] Nuovo messaggio da {$user_name}";
 
         $preview = strlen($message) > 200
             ? substr($message, 0, 200) . '...'
             : $message;
 
-        $body = "Hai ricevuto un nuovo messaggio di supporto.\n\n";
-        $body .= "Da: {$user_name}\n";
-        $body .= "ID Utente: {$user_id}\n\n";
-        $body .= "Messaggio:\n{$preview}\n\n";
-        $body .= "---\n";
-        $body .= "Rispondi dall'app RaffleMania (sezione Admin) o dal pannello WordPress.";
-
-        $headers = ['Content-Type: text/plain; charset=UTF-8'];
+        $email_body = "<tr><td style='padding:16px 40px;'>
+<h2 style='color:#1a1a1a;margin:0 0 10px;font-size:22px;font-weight:700;'>Nuovo messaggio di supporto</h2>
+<p style='color:#555;font-size:16px;line-height:1.6;margin:0 0 8px;'>Da: <strong>" . esc_html($user_name) . "</strong></p>
+<p style='color:#555;font-size:14px;margin:0 0 16px;'>ID Utente: {$user_id}</p>
+<div style='background:#f9f9f9;border-left:4px solid #FF6B00;border-radius:0 8px 8px 0;padding:16px 20px;margin-bottom:16px;'>
+<p style='color:#333;font-size:16px;line-height:1.5;margin:0;'>" . esc_html($preview) . "</p>
+</div>
+<p style='color:#888;font-size:14px;margin:0;'>Rispondi dall'app RaffleMania (sezione Admin) o dal pannello WordPress.</p>
+</td></tr>";
 
         // Send email to all admins
         $sent = false;
         foreach ($admin_emails as $email) {
-            if (wp_mail($email, $subject, $body, $headers)) {
+            if (\RaffleMania\EmailHelper::send($email, $subject, $email_body)) {
                 $sent = true;
             }
         }

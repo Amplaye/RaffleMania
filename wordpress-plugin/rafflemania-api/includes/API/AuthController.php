@@ -498,12 +498,17 @@ class AuthController extends WP_REST_Controller {
         update_user_meta($user->id, 'rafflemania_reset_expiry', $reset_expiry);
 
         // Send email
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/EmailHelper.php';
         $reset_link = home_url('/reset-password?token=' . $reset_token);
-        wp_mail(
-            $email,
-            'Reset Password - RaffleMania',
-            "Ciao {$user->username},\n\nHai richiesto il reset della password.\n\nClicca qui: {$reset_link}\n\nIl link scade tra 1 ora."
-        );
+        $body = "<tr><td style='padding:16px 40px;'>
+<h2 style='color:#1a1a1a;margin:0 0 10px;font-size:26px;font-weight:700;'>Ciao {$user->username}!</h2>
+<p style='color:#555;font-size:18px;line-height:1.6;margin:0 0 16px;'>Hai richiesto il reset della password.</p>
+<div style='text-align:center;padding:16px 0;'>
+<a href='{$reset_link}' style='display:inline-block;background:#FF6B00;color:#ffffff !important;padding:16px 36px;text-decoration:none;border-radius:10px;font-weight:700;font-size:18px;'>Resetta Password</a>
+</div>
+<p style='color:#888;font-size:15px;line-height:1.6;margin:16px 0 0;'>Il link scade tra 1 ora.</p>
+</td></tr>";
+        \RaffleMania\EmailHelper::send($email, 'Reset Password - RaffleMania', $body);
 
         return new WP_REST_Response([
             'success' => true,
@@ -512,7 +517,7 @@ class AuthController extends WP_REST_Controller {
     }
 
     public function verify_token(WP_REST_Request $request) {
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
 
         global $wpdb;
         $table_users = $wpdb->prefix . 'rafflemania_users';
@@ -550,7 +555,7 @@ class AuthController extends WP_REST_Controller {
         }
 
         // Store user_id in request for later use
-        $request->set_attribute('user_id', $payload['user_id']);
+        $request->set_param('_auth_user_id', $payload['user_id']);
         return true;
     }
 
@@ -831,32 +836,11 @@ class AuthController extends WP_REST_Controller {
     }
 
     private function send_verification_email($email, $username, $token) {
-        // Build verification URL - use the web endpoint that works
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/EmailHelper.php';
+
         $verification_url = home_url("/wp-json/rafflemania/v1/auth/verify-email-web?token={$token}");
 
-        // Get logo from WordPress media library
-        $logo_attachment = get_posts([
-            'post_type' => 'attachment',
-            'post_status' => 'inherit',
-            'posts_per_page' => 1,
-            's' => 'logo',
-            'orderby' => 'date',
-            'order' => 'DESC',
-        ]);
-        $logo_url = !empty($logo_attachment) ? wp_get_attachment_url($logo_attachment[0]->ID) : 'https://www.rafflemania.it/wp-content/uploads/2026/02/rafflemania-icon.png';
-
-        $subject = 'Verifica il tuo account RaffleMania';
-        $year = date('Y');
-
-        $message = "<!DOCTYPE html><html lang='it'><head><meta charset='UTF-8'></head>
-<body style='margin:0;padding:0;background-color:#f4f4f4;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;'>
-<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='background-color:#f4f4f4;'>
-<tr><td align='center' style='padding:20px 10px;'>
-<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='600' style='max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;'>
-<tr><td style='padding:32px 40px;text-align:center;'>
-<img src='{$logo_url}' alt='RaffleMania' width='160' height='160' style='width:160px;height:160px;border-radius:20px;display:block;margin:0 auto;'/>
-</td></tr>
-<tr><td style='padding:16px 40px 0;'>
+        $body = "<tr><td style='padding:16px 40px 0;'>
 <h2 style='color:#1a1a1a;margin:0 0 10px;font-size:26px;font-weight:700;'>Ciao {$username}!</h2>
 <p style='color:#555;font-size:18px;line-height:1.6;margin:0;'>Grazie per esserti registrato su RaffleMania! Per completare la registrazione e iniziare a vincere premi incredibili, verifica il tuo indirizzo email.</p>
 </td></tr>
@@ -870,21 +854,10 @@ class AuthController extends WP_REST_Controller {
 <tr><td style='padding:0 40px 16px;'>
 <p style='color:#555;font-size:16px;line-height:1.6;margin:0;'><strong>Il link scade tra 24 ore.</strong></p>
 <p style='color:#888;font-size:15px;line-height:1.6;margin:10px 0 0;'>Se non hai creato un account su RaffleMania, puoi ignorare questa email.</p>
-</td></tr>
-<tr><td style='background-color:#fafafa;padding:20px 40px;text-align:center;border-top:1px solid #eee;'>
-<p style='color:#aaa;font-size:13px;margin:0;'>&copy; {$year} RaffleMania. Tutti i diritti riservati.</p>
-</td></tr>
-</table></td></tr></table>
-</body></html>";
+</td></tr>";
 
-        $headers = [
-            'Content-Type: text/html; charset=UTF-8',
-            'From: RaffleMania <noreply@rafflemania.it>'
-        ];
+        $result = \RaffleMania\EmailHelper::send($email, 'Verifica il tuo account RaffleMania', $body);
 
-        $result = wp_mail($email, $subject, $message, $headers);
-
-        // Log email sending result for debugging
         if (!$result) {
             error_log("RaffleMania: Failed to send verification email to {$email}");
         } else {
@@ -1164,7 +1137,7 @@ class AuthController extends WP_REST_Controller {
             $table_users = $wpdb->prefix . 'rafflemania_users';
             $table_referrals = $wpdb->prefix . 'rafflemania_referrals';
 
-            $user_id = $request->get_attribute('user_id');
+            $user_id = $request->get_param('_auth_user_id');
             $referral_code = strtoupper(trim($request->get_param('referral_code') ?? ''));
 
             if (!$user_id) {

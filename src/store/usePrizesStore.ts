@@ -1,4 +1,6 @@
 import {create} from 'zustand';
+import {persist, createJSONStorage} from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Prize, Draw, Winner, PrizeTimerStatus} from '../types';
 import {API_CONFIG} from '../utils/constants';
 import apiClient, {getErrorMessage} from '../services/apiClient';
@@ -170,7 +172,9 @@ const sortPrizes = (prizes: Prize[], sortBy: PrizeSortOption): Prize[] => {
   return prizes; // default order (from API)
 };
 
-export const usePrizesStore = create<PrizesState>((set, get) => ({
+export const usePrizesStore = create<PrizesState>()(
+  persist(
+    (set, get) => ({
   prizes: [],
   completedDraws: [],
   recentWinners: [],
@@ -198,7 +202,7 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
 
       const response = await apiClient.get('/prizes');
       const prizesData = response.data?.data?.prizes || response.data?.prizes || [];
-      const apiPrizes = prizesData.map(mapApiPrizeToPrize);
+      const apiPrizes: Prize[] = prizesData.map(mapApiPrizeToPrize);
 
       // Extract settings from API response and update settings store
       const settingsData = response.data?.data?.settings;
@@ -229,28 +233,21 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
         }
       }
 
-      // Use server timer state - trust the server as source of truth for sync across users
-      // But reset stale countdown prizes where scheduledAt is in the past
-      // to avoid briefly flashing timers on app start/navigation
-      const now = Date.now();
-      const mergedPrizes = apiPrizes.map((newPrize: Prize) => {
-        if (
-          newPrize.timerStatus === 'countdown' &&
-          newPrize.scheduledAt &&
-          new Date(newPrize.scheduledAt).getTime() < now
-        ) {
-          // scheduledAt is in the past - extraction already happened
-          return {
-            ...newPrize,
-            timerStatus: 'waiting' as PrizeTimerStatus,
-            scheduledAt: undefined,
-            timerStartedAt: undefined,
-          };
-        }
-        return newPrize;
-      });
+      // Use server timer state as-is - trust the server as source of truth.
+      // If a prize has countdown with expired scheduledAt, keep it:
+      // the timer interval in AppNavigator will detect it and trigger
+      // handleOfflineExtraction() which calls POST /draws (with dedup).
 
-      console.log('Loaded prizes from API:', mergedPrizes.length);
+      // Preserve deactivated prizes that user has won (not returned by API anymore)
+      // so MyWinsScreen can still display prize names/images
+      const apiPrizeIds = new Set(apiPrizes.map(p => p.id));
+      const currentPrizes = get().prizes;
+      const preservedWonPrizes = currentPrizes.filter(p =>
+        !apiPrizeIds.has(p.id) && !p.isActive,
+      );
+      const mergedPrizes = [...apiPrizes, ...preservedWonPrizes];
+
+      console.log('Loaded prizes from API:', apiPrizes.length, preservedWonPrizes.length > 0 ? `(+${preservedWonPrizes.length} won prizes preserved)` : '');
       set({prizes: mergedPrizes, isLoading: false});
     } catch (error) {
       console.log('Error fetching prizes, using mock data:', getErrorMessage(error));
@@ -549,6 +546,7 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
         userId,
         prize,
         shippingStatus: 'pending',
+        deliveryStatus: 'processing',
         createdAt: new Date().toISOString(),
       };
 
@@ -602,4 +600,13 @@ export const usePrizesStore = create<PrizesState>((set, get) => ({
     const active = state.prizes.filter(p => p.isActive);
     return sortPrizes(active, state.sortBy);
   },
-}));
+}),
+    {
+      name: 'rafflemania-prizes-sort',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        sortBy: state.sortBy,
+      }),
+    },
+  ),
+);

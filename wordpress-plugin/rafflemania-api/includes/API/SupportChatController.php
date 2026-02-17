@@ -159,14 +159,22 @@ class SupportChatController extends WP_REST_Controller {
         }
 
         // Send email notification to admin
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/EmailHelper.php';
         $admin_email = get_option('rafflemania_contact_email', get_option('admin_email'));
         $subject = 'Nuovo messaggio supporto da ' . $user_name;
-        $body = "Hai ricevuto un nuovo messaggio di supporto:\n\n";
-        $body .= "Da: {$user_name} (ID: {$user_id})\n";
-        $body .= "Messaggio: {$message}\n\n";
-        $body .= "Rispondi dal pannello WordPress: " . admin_url('admin.php?page=rafflemania-support&chat=' . urlencode($user_id));
+        $admin_link = admin_url('admin.php?page=rafflemania-support&chat=' . urlencode($user_id));
+        $email_body = "<tr><td style='padding:16px 40px;'>
+<h2 style='color:#1a1a1a;margin:0 0 10px;font-size:22px;font-weight:700;'>Nuovo messaggio di supporto</h2>
+<p style='color:#555;font-size:16px;line-height:1.6;margin:0 0 16px;'>Da: <strong>" . esc_html($user_name) . "</strong> (ID: {$user_id})</p>
+<div style='background:#f9f9f9;border-left:4px solid #FF6B00;border-radius:0 8px 8px 0;padding:16px 20px;margin-bottom:16px;'>
+<p style='color:#333;font-size:16px;line-height:1.5;margin:0;'>" . esc_html($message) . "</p>
+</div>
+<div style='text-align:center;'>
+<a href='{$admin_link}' style='display:inline-block;background:#FF6B00;color:#ffffff !important;padding:14px 32px;text-decoration:none;border-radius:10px;font-weight:700;font-size:16px;'>Rispondi dal Pannello</a>
+</div>
+</td></tr>";
 
-        $email_sent = wp_mail($admin_email, $subject, $body);
+        $email_sent = \RaffleMania\EmailHelper::send($admin_email, $subject, $email_body);
 
         // Send push notification to admin devices via OneSignal
         $push_sent = false;

@@ -298,9 +298,17 @@ class AdminController extends WP_REST_Controller {
         $wpdb->update($table, ['password_hash' => $hash], ['id' => $user_id]);
 
         // Send email
-        $subject = 'RaffleMania - Nuova Password';
-        $message = "Ciao {$user->username},\n\nLa tua password è stata reimpostata.\n\nNuova password: {$new_password}\n\nTi consigliamo di cambiarla al primo accesso.\n\nRaffleMania Team";
-        wp_mail($user->email, $subject, $message);
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/EmailHelper.php';
+        $body = "<tr><td style='padding:16px 40px;'>
+<h2 style='color:#1a1a1a;margin:0 0 10px;font-size:26px;font-weight:700;'>Ciao {$user->username}!</h2>
+<p style='color:#555;font-size:18px;line-height:1.6;margin:0 0 16px;'>La tua password è stata reimpostata.</p>
+<div style='background:#FFF8F0;border:2px solid #FF6B00;border-radius:12px;padding:20px;text-align:center;'>
+<div style='font-size:14px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Nuova Password</div>
+<div style='font-size:24px;font-weight:700;color:#FF6B00;font-family:Courier New,monospace;'>{$new_password}</div>
+</div>
+<p style='color:#888;font-size:15px;line-height:1.6;margin:16px 0 0;'>Ti consigliamo di cambiarla al primo accesso.</p>
+</td></tr>";
+        \RaffleMania\EmailHelper::send($user->email, 'RaffleMania - Nuova Password', $body);
 
         $this->log_admin_action('reset_password', $user_id, []);
 

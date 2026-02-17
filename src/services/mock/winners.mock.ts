@@ -20,6 +20,7 @@ export const mockWinners: Winner[] = [
     prize: mockPrizes[1],
     user: mockUsers[0],
     shippingStatus: 'shipped',
+    deliveryStatus: 'processing',
     shippingDate: getRelativeDate(-1),
     trackingNumber: 'IT1234567890',
     createdAt: getRelativeDate(-3),
@@ -34,6 +35,7 @@ export const mockWinners: Winner[] = [
     prize: mockPrizes[3],
     user: mockUsers[1],
     shippingStatus: 'pending',
+    deliveryStatus: 'processing',
     createdAt: getRelativeDate(-1),
   },
   {
@@ -45,6 +47,7 @@ export const mockWinners: Winner[] = [
     prize: mockPrizes[4],
     user: mockUsers[2],
     shippingStatus: 'delivered',
+    deliveryStatus: 'delivered',
     shippingDate: getRelativeDate(-4),
     trackingNumber: 'IT0987654321',
     createdAt: getRelativeDate(-2),

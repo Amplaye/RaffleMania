@@ -48,7 +48,7 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
   const glowAnim = useRef(new Animated.Value(0.6)).current;
 
   const ticket = [...activeTickets, ...pastTickets].find(t => t.id === ticketId);
-  const prize = ticket?.prizeId ? prizes.find(p => p.id === ticket.prizeId) : null;
+  const prize = ticket?.prizeId ? prizes.find(p => String(p.id) === String(ticket.prizeId)) : null;
 
   const displayPrizeName = ticket?.prizeName || prize?.name || 'Premio';
   const displayPrizeImage = ticket?.prizeImage || prize?.imageUrl;
@@ -76,26 +76,35 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Refresh myWins on mount to get latest delivery status from server
+  useEffect(() => {
+    if (!ticket?.isWinner || API_CONFIG.USE_MOCK_DATA) return;
+    const userId = user?.id;
+    if (userId) {
+      usePrizesStore.getState().fetchMyWins(userId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket?.isWinner]);
+
   // Fetch delivery status for winning tickets
   useEffect(() => {
     if (!ticket?.isWinner) return;
 
-    // Check if ticket already has deliveryStatus from local state
-    if (ticket.deliveryStatus) {
-      setDeliveryStatus(ticket.deliveryStatus);
-      if (ticket.deliveredAt) setDeliveredAt(ticket.deliveredAt);
-      return;
+    // Match win record by ticketId OR by prizeId (fallback for local ticket IDs)
+    const winRecord = myWins.find(w => w.ticketId === ticket.id)
+      || myWins.find(w => w.prizeId === ticket.prizeId);
+    const localStatus = winRecord?.deliveryStatus || ticket.deliveryStatus;
+    const localDeliveredAt = winRecord?.deliveredAt || ticket.deliveredAt;
+
+    if (localStatus) {
+      setDeliveryStatus(localStatus as 'processing' | 'delivered');
+      if (localDeliveredAt) setDeliveredAt(localDeliveredAt);
     }
 
-    // Check myWins for delivery status (most reliable - already fetched)
-    const winRecord = myWins.find(w => w.ticketId === ticket.id);
-    if (winRecord?.deliveryStatus) {
-      setDeliveryStatus(winRecord.deliveryStatus as 'processing' | 'delivered');
-      if (winRecord.deliveredAt) setDeliveredAt(winRecord.deliveredAt);
-      return;
-    }
+    // If already delivered from local state, no need to check API
+    if (localStatus === 'delivered') return;
 
-    // Fallback: fetch from dedicated API endpoint
+    // Always fetch from API when status is not yet 'delivered' to get the latest
     const fetchDeliveryStatus = async () => {
       try {
         if (API_CONFIG.USE_MOCK_DATA) return;
@@ -105,7 +114,7 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
           setDeliveredAt(response.data.data.deliveredAt || null);
         }
       } catch {
-        // Non-critical - keep default 'processing'
+        // Non-critical - keep current status
       }
     };
 
@@ -747,7 +756,7 @@ const styles = StyleSheet.create({
   // Support Note
   supportNote: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: SPACING.sm,
     padding: SPACING.md,
     borderRadius: RADIUS.lg,

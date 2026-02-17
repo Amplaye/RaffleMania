@@ -188,7 +188,7 @@ class PrizesController extends WP_REST_Controller {
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
 
         $prize_id = $request->get_param('id');
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
 
         // Get prize
         $prize = $wpdb->get_row($wpdb->prepare(
@@ -292,7 +292,7 @@ class PrizesController extends WP_REST_Controller {
             return false;
         }
 
-        $request->set_attribute('user_id', $payload['user_id']);
+        $request->set_param('_auth_user_id', $payload['user_id']);
         return true;
     }
 
@@ -423,6 +423,17 @@ class PrizesController extends WP_REST_Controller {
                         \RaffleMania\NotificationHelper::notify_extraction_soon($prize->name, $remaining_min);
                         set_transient($transient_key, 1, 600);
                     }
+                }
+
+                // Schedule a one-time extraction event for the exact moment the timer expires.
+                // This ensures extraction happens even without WP-Cron traffic or external cron.
+                $extraction_time = strtotime($actual_scheduled_at);
+                $hook = 'rafflemania_check_extractions';
+                // Schedule at expiry + 5 seconds buffer
+                if ($extraction_time > time()) {
+                    wp_schedule_single_event($extraction_time + 5, $hook);
+                    // Also schedule a self-ping to trigger WP-Cron at that time
+                    wp_schedule_single_event($extraction_time + 10, 'rafflemania_self_ping');
                 }
             }
         }

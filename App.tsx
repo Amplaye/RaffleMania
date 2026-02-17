@@ -8,6 +8,8 @@ import {LevelUpOverlay} from './src/components/common';
 import {COLORS} from './src/utils/constants';
 import {navigate} from './src/services/NavigationService';
 import {rewardEvents} from './src/services/rewardEvents';
+import {extractionEvents} from './src/services/extractionEvents';
+import {initIAP, endIAPConnection} from './src/services/paymentService';
 
 // Suppress all development-only yellow box warnings
 LogBox.ignoreAllLogs(true);
@@ -27,6 +29,11 @@ const App: React.FC = () => {
   useEffect(() => {
     // Initialize Firebase Crashlytics
     crashlytics().setCrashlyticsCollectionEnabled(true);
+
+    // Initialize IAP connection (safe - catches if native module not available)
+    initIAP().then(success => {
+      console.log('[App] IAP init:', success ? 'connected' : 'failed');
+    }).catch(() => {});
 
     // Initialize OneSignal
     OneSignal.initialize(ONESIGNAL_APP_ID);
@@ -107,6 +114,27 @@ const App: React.FC = () => {
         return;
       }
 
+      // For extraction_completed notifications, show banner AND trigger missed extraction check
+      if (data?.type === 'extraction_completed') {
+        notification.display();
+        setTimeout(() => extractionEvents.emit(), 2000);
+        return;
+      }
+
+      // For prize_delivered notifications, show banner AND refresh myWins data
+      if (data?.type === 'prize_delivered') {
+        notification.display();
+        setTimeout(() => {
+          const {usePrizesStore} = require('./src/store/usePrizesStore');
+          const {useAuthStore} = require('./src/store/useAuthStore');
+          const userId = useAuthStore.getState().user?.id;
+          if (userId) {
+            usePrizesStore.getState().fetchMyWins(userId);
+          }
+        }, 1500);
+        return;
+      }
+
       notification.display();
     });
 
@@ -126,12 +154,22 @@ const App: React.FC = () => {
         navigate('MyWins');
       } else if (data?.type === 'new_prize' && data?.prize_id) {
         navigate('PrizeDetail', {prizeId: data.prize_id});
+      } else if (data?.type === 'prize_delivered') {
+        // Refresh wins data and navigate to MyWins
+        const {usePrizesStore} = require('./src/store/usePrizesStore');
+        const {useAuthStore} = require('./src/store/useAuthStore');
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) {
+          usePrizesStore.getState().fetchMyWins(userId);
+        }
+        navigate('MyWins');
       }
     });
 
     // Cleanup listeners on unmount
     return () => {
       appStateSubscription.remove();
+      endIAPConnection();
     };
   }, []);
 

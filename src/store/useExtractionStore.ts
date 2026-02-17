@@ -4,8 +4,7 @@ import {useSettingsStore} from './useSettingsStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../services/apiClient';
 import {useAuthStore} from './useAuthStore';
-
-const LAST_SEEN_DRAW_KEY = 'rafflemania_last_seen_draw_timestamp';
+const SEEN_DRAW_IDS_KEY = 'rafflemania_seen_draw_ids';
 
 export interface MissedExtraction {
   drawId: string;
@@ -98,8 +97,7 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
 
   fetchMissedExtractions: async () => {
     const state = get();
-    // Don't fetch if already showing missed modal (prevents duplicates on foreground)
-    if (state.showMissedModal) {
+    if (state.showMissedModal || state.showResultModal) {
       console.log('[MissedExtraction] Skipping - modal already visible');
       return;
     }
@@ -114,89 +112,154 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
     }
 
     try {
-      // Get last seen timestamp
-      const lastSeenStr = await AsyncStorage.getItem(LAST_SEEN_DRAW_KEY);
-      const lastSeenTimestamp = lastSeenStr ? new Date(lastSeenStr).getTime() : 0;
-      console.log(`[MissedExtraction] Last seen: ${lastSeenStr || 'never'}, timestamp: ${lastSeenTimestamp}`);
+      // Get seen draw IDs
+      const seenStr = await AsyncStorage.getItem(SEEN_DRAW_IDS_KEY);
+      const seenIds: string[] = seenStr ? JSON.parse(seenStr) : [];
+      const seenSet = new Set(seenIds);
 
-      // Fetch recent draws from server
+      // Fetch recent draws
       const drawsResponse = await apiClient.get('/draws?limit=10');
       const draws = drawsResponse.data?.data?.draws || [];
-      console.log(`[MissedExtraction] Fetched ${draws.length} draws from server`);
+
+      console.log(`[MissedExtraction] ${draws.length} draws, ${seenIds.length} seen IDs`);
 
       if (draws.length === 0) {
         return;
       }
 
-      // Filter draws that happened after last seen timestamp
-      const newDraws = draws.filter((draw: any) => {
-        const drawTime = new Date(draw.extractedAt || draw.createdAt).getTime();
-        return drawTime > lastSeenTimestamp && draw.status === 'completed';
-      });
+      // On FIRST RUN: mark all draws EXCEPT the very latest one as seen.
+      // The latest draw might be from the current session (just extracted).
+      if (seenIds.length === 0 && draws.length > 1) {
+        // Mark all except the first (most recent) as seen
+        for (let i = 1; i < draws.length; i++) {
+          seenSet.add(String(draws[i].id));
+        }
+        console.log(`[MissedExtraction] First run: marked ${draws.length - 1} old draws as seen, keeping latest (${draws[0].id})`);
+      }
 
-      console.log(`[MissedExtraction] ${newDraws.length} new draws since last seen`);
+      // Filter unseen completed draws
+      const newDraws = draws.filter((draw: any) =>
+        !seenSet.has(String(draw.id)) && draw.status === 'completed',
+      );
+
+      console.log(`[MissedExtraction] ${newDraws.length} unseen draws: ${newDraws.map((d: any) => d.id).join(',')}`);
 
       if (newDraws.length === 0) {
-        // Still update timestamp so we don't re-check old draws
-        const mostRecentDraw = draws[0];
-        const mostRecentTime = mostRecentDraw.extractedAt || mostRecentDraw.createdAt;
-        await AsyncStorage.setItem(LAST_SEEN_DRAW_KEY, mostRecentTime);
         return;
       }
 
-      // For each missed draw, check user's result via check-result endpoint
+      // Check user's result for each unseen draw
       const missed: MissedExtraction[] = [];
+      const newSeenIds: string[] = [];
 
       for (const draw of newDraws) {
-        const prizeId = draw.prizeId;
-        const winningNumber = draw.winningNumber;
-        let userNumbers: number[] = [];
-        let isWinner = false;
+        newSeenIds.push(String(draw.id));
 
-        // Use check-result endpoint which returns user's tickets and winner status
         try {
           const checkResponse = await apiClient.get(`/draws/${draw.id}/check-result`);
           const checkData = checkResponse.data?.data;
           if (checkData) {
-            userNumbers = (checkData.userNumbers || []).map((n: any) => Number(n));
-            isWinner = checkData.isWinner === true;
-          }
-          console.log(`[MissedExtraction] Prize ${prizeId}: user has ${userNumbers.length} tickets, winning=${winningNumber}, isWinner=${isWinner}`);
-        } catch (e) {
-          console.log(`[MissedExtraction] Could not check result for draw ${draw.id}:`, e);
-        }
+            const userNumbers = (checkData.userNumbers || []).map((n: any) => Number(n));
+            const isWinner = checkData.isWinner === true;
+            console.log(`[MissedExtraction] Draw ${draw.id}: ${userNumbers.length} tickets, winner=${isWinner}`);
 
-        // Show to all users who had tickets
-        if (userNumbers.length > 0) {
-          missed.push({
-            drawId: String(draw.id),
-            prizeId: String(prizeId),
-            prizeName: draw.prizeName || 'Premio',
-            prizeImage: draw.prizeImage || undefined,
-            winningNumber,
-            userNumbers,
-            isWinner,
-            extractedAt: draw.extractedAt || draw.createdAt,
-          });
+            if (userNumbers.length > 0) {
+              missed.push({
+                drawId: String(draw.id),
+                prizeId: String(draw.prizeId),
+                prizeName: draw.prizeName || 'Premio',
+                prizeImage: draw.prizeImage || undefined,
+                winningNumber: draw.winningNumber,
+                userNumbers,
+                isWinner,
+                extractedAt: draw.extractedAt || draw.createdAt,
+              });
+            }
+          }
+        } catch (e) {
+          console.log(`[MissedExtraction] check-result error for draw ${draw.id}:`, e);
         }
       }
 
-      console.log(`[MissedExtraction] ${missed.length} missed extractions with user tickets`);
+      // Save all new draw IDs as seen
+      const updatedSeenIds = [...newSeenIds, ...Array.from(seenSet)].slice(0, 50);
+      await AsyncStorage.setItem(SEEN_DRAW_IDS_KEY, JSON.stringify(updatedSeenIds));
 
       if (missed.length > 0) {
+        // Update ticket store for winning missed extractions
+        const wins = missed.filter(m => m.isWinner);
+        if (wins.length > 0) {
+          try {
+            const {useTicketsStore} = await import('./useTicketsStore');
+            const {activeTickets, pastTickets} = useTicketsStore.getState();
+            const now = new Date().toISOString();
+            let updatedActive = [...activeTickets];
+            let updatedPast = [...pastTickets];
+
+            for (const win of wins) {
+              // Find user's tickets for this prize and move to past
+              const prizeTickets = updatedActive.filter(t => String(t.prizeId) === String(win.prizeId));
+              if (prizeTickets.length > 0) {
+                const movedTickets = prizeTickets.map(ticket => ({
+                  ...ticket,
+                  isWinner: ticket.ticketNumber === win.winningNumber,
+                  wonAt: ticket.ticketNumber === win.winningNumber ? now : undefined,
+                  prizeName: ticket.ticketNumber === win.winningNumber ? win.prizeName : undefined,
+                  prizeImage: ticket.ticketNumber === win.winningNumber ? win.prizeImage : undefined,
+                }));
+                updatedActive = updatedActive.filter(t => String(t.prizeId) !== String(win.prizeId));
+                updatedPast = [...movedTickets, ...updatedPast];
+              } else {
+                // No local tickets found - check if already in past
+                const alreadyInPast = updatedPast.some(t => String(t.prizeId) === String(win.prizeId) && t.isWinner);
+                if (!alreadyInPast) {
+                  // Create a synthetic winning ticket entry so MyWins screen shows it
+                  updatedPast.unshift({
+                    id: `missed_win_${win.drawId}`,
+                    ticketNumber: win.winningNumber,
+                    userId: user?.id || '',
+                    drawId: win.drawId,
+                    prizeId: win.prizeId,
+                    source: 'ad' as const,
+                    isWinner: true,
+                    wonAt: win.extractedAt || now,
+                    prizeName: win.prizeName,
+                    prizeImage: win.prizeImage,
+                    createdAt: win.extractedAt || now,
+                  });
+                }
+              }
+            }
+
+            useTicketsStore.setState({
+              activeTickets: updatedActive,
+              pastTickets: updatedPast,
+            });
+            console.log(`[MissedExtraction] Updated ticket store for ${wins.length} wins`);
+
+            // Force refresh tickets from API to get full data (prize_name from SQL JOIN)
+            setTimeout(() => {
+              useTicketsStore.getState().forceRefreshTickets();
+            }, 2000);
+
+            // Also refresh myWins from server
+            const {usePrizesStore} = await import('./usePrizesStore');
+            if (user?.id) {
+              usePrizesStore.getState().fetchMyWins(user.id);
+            }
+          } catch (e) {
+            console.log('[MissedExtraction] Error updating ticket store:', e);
+          }
+        }
+
         set({
           missedExtractions: missed,
           currentMissedIndex: 0,
           showMissedModal: true,
         });
       }
-
-      // Update last seen timestamp to the most recent draw
-      const mostRecentDraw = draws[0];
-      const mostRecentTime = mostRecentDraw.extractedAt || mostRecentDraw.createdAt;
-      await AsyncStorage.setItem(LAST_SEEN_DRAW_KEY, mostRecentTime);
-    } catch (error) {
-      console.log('[MissedExtraction] Error fetching missed extractions:', error);
+    } catch (error: any) {
+      console.log('[MissedExtraction] Error:', error);
     }
   },
 

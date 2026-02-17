@@ -81,71 +81,12 @@ export const useCreditsStore = create<CreditsState>()(
     }
   },
 
-  purchaseCredits: async (packageId: string) => {
-    set({isPurchasing: true});
-
-    try {
-      const creditPackage = get().packages.find(p => p.id === packageId);
-      if (!creditPackage) {
-        set({isPurchasing: false});
-        return false;
-      }
-
-      if (API_CONFIG.USE_MOCK_DATA) {
-        // Simulate IAP purchase
-        await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
-
-        // Update user credits
-        const authStore = useAuthStore.getState();
-        if (authStore.user) {
-          authStore.updateUser({
-            credits: authStore.user.credits + creditPackage.credits,
-          });
-        }
-
-        // Add transaction
-        const newTransaction: Transaction = {
-          id: `trans_${Date.now()}`,
-          userId: 'user_001',
-          type: 'purchase',
-          credits: creditPackage.credits,
-          amount: creditPackage.price,
-          createdAt: new Date().toISOString(),
-        };
-
-        set(state => ({
-          transactions: [newTransaction, ...state.transactions],
-          isPurchasing: false,
-        }));
-
-        return true;
-      }
-
-      // Real API call - In production, this would involve IAP verification
-      const response = await apiClient.post('/users/me/credits/purchase', {
-        package_id: packageId,
-        // receipt: iapReceipt // From in-app purchase
-      });
-
-      if (response.data.success) {
-        // Refresh user data to get updated credits
-        const authStore = useAuthStore.getState();
-        await authStore.refreshUserData();
-
-        // Refresh transactions
-        await get().fetchTransactions();
-
-        set({isPurchasing: false});
-        return true;
-      }
-
-      set({isPurchasing: false});
-      return false;
-    } catch (error) {
-      console.error('Error purchasing credits:', getErrorMessage(error));
-      set({isPurchasing: false});
-      return false;
-    }
+  purchaseCredits: async (_packageId: string) => {
+    // Purchases are now handled directly in ShopScreen via paymentService
+    // Credits are awarded server-side after payment verification
+    // This method is kept for backward compatibility but should not be used directly
+    console.log('[CreditsStore] purchaseCredits called - use ShopScreen payment flow instead');
+    return false;
   },
 
   useCreditsForTicket: async () => {

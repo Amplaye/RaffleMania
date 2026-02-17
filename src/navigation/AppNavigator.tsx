@@ -1,11 +1,11 @@
 import React, {useEffect, useRef, useState, useCallback} from 'react';
-import {NavigationContainer, LinkingOptions} from '@react-navigation/native';
+import {NavigationContainer, LinkingOptions, NavigatorScreenParams} from '@react-navigation/native';
 import {createNativeStackNavigator, NativeStackScreenProps} from '@react-navigation/native-stack';
 import {View, Text, StyleSheet, AppState} from 'react-native';
 import {useAuthStore, usePrizesStore, useExtractionStore, useTicketsStore} from '../store';
 import {Prize} from '../types';
 import {AuthNavigator} from './AuthNavigator';
-import {TabNavigator} from './TabNavigator';
+import {TabNavigator, TabParamList} from './TabNavigator';
 import {COLORS, FONT_SIZE, FONT_WEIGHT, API_CONFIG} from '../utils/constants';
 import {ScreenContainer, Button, UrgencyBorderEffect, ExtractionStartEffect, ExtractionResultModal, MissedExtractionModal, RewardPopupModal} from '../components/common';
 import type {RewardNotification} from '../components/common';
@@ -14,6 +14,7 @@ import apiClient from '../services/apiClient';
 import {listenForDrawResult, publishDrawResult} from '../services/firebaseExtraction';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {rewardEvents} from '../services/rewardEvents';
+import {extractionEvents} from '../services/extractionEvents';
 
 // Import actual screens
 import {MyWinsScreen} from '../screens/mywins';
@@ -26,11 +27,13 @@ import {LeaderboardScreen} from '../screens/leaderboard';
 import {EmailVerificationScreen} from '../screens/auth';
 import {StreakScreen} from '../screens/streak';
 import {SupportChatScreen} from '../screens/support';
+import {FaqScreen} from '../screens/faq';
 import {AdminChatListScreen, AdminChatDetailScreen} from '../screens/admin';
+import {AvatarCustomizationScreen} from '../screens/avatar';
 
 // Stack param list
 export type RootStackParamList = {
-  MainTabs: undefined;
+  MainTabs: NavigatorScreenParams<TabParamList> | undefined;
   TicketDetail: {ticketId: string};
   PrizeDetail: {prizeId: string};
   Winners: undefined;
@@ -42,6 +45,8 @@ export type RootStackParamList = {
   EmailVerification: {email?: string; token?: string};
   Streak: undefined;
   SupportChat: undefined;
+  Faq: undefined;
+  AvatarCustomization: undefined;
   // Admin screens
   AdminChatList: undefined;
   AdminChatDetail: {userId: string; userName: string};
@@ -174,6 +179,16 @@ const MainStack: React.FC = () => {
         component={SupportChatScreen}
         options={{title: 'Assistenza'}}
       />
+      <Stack.Screen
+        name="Faq"
+        component={FaqScreen}
+        options={{title: 'FAQ'}}
+      />
+      <Stack.Screen
+        name="AvatarCustomization"
+        component={AvatarCustomizationScreen}
+        options={{title: 'Personalizza Avatar'}}
+      />
       {/* Admin Screens */}
       <Stack.Screen
         name="AdminChatList"
@@ -251,12 +266,19 @@ export const AppNavigator: React.FC = () => {
   }, [getTicketsForPrize]);
 
   // Handle extraction for prizes whose timer expired while user was offline
-  // Triggers server-side extraction via POST /draws (has deduplication) then shows missed popup
+  // First triggers server-side extraction check, then fetches result via POST /draws (with dedup)
   const handleOfflineExtraction = useCallback(async (prize: Prize) => {
     console.log(`[Timer] Handling offline extraction for prize ${prize.id}`);
 
     try {
-      // Trigger extraction on server (has deduplication - safe to call multiple times)
+      // First: trigger server-side extraction check (in case cron missed it)
+      try {
+        await apiClient.post('/extractions/check');
+      } catch (e) {
+        console.log('[Timer] Extraction check endpoint failed (non-critical)');
+      }
+
+      // Then: trigger/fetch extraction via POST /draws (has deduplication - safe to call multiple times)
       const numericPrizeId = parseInt(prize.id.replace(/\D/g, ''), 10) || parseInt(prize.id, 10);
       const response = await apiClient.post('/draws', {
         prize_id: numericPrizeId,
@@ -270,20 +292,65 @@ export const AppNavigator: React.FC = () => {
           publishDrawResult(prize.id, draw.winningNumber, prize.timerStartedAt);
         }
         console.log(`[Timer] Offline extraction completed: #${draw.winningNumber}`);
+
+        // Directly check user's result and show modal (most reliable path)
+        try {
+          const checkResponse = await apiClient.get(`/draws/${draw.id}/check-result`);
+          const checkData = checkResponse.data?.data;
+          if (checkData && checkData.userNumbers?.length > 0) {
+            const userNumbers = (checkData.userNumbers || []).map((n: any) => Number(n));
+            const isWinner = checkData.isWinner === true;
+
+            // Add to seen draw IDs to prevent duplicate in fetchMissedExtractions
+            const seenStr = await AsyncStorage.getItem('rafflemania_seen_draw_ids');
+            const seenIds: string[] = seenStr ? JSON.parse(seenStr) : [];
+            seenIds.unshift(String(draw.id));
+            await AsyncStorage.setItem('rafflemania_seen_draw_ids', JSON.stringify(seenIds.slice(0, 50)));
+
+            // Move tickets to past BEFORE clearing (preserves winning tickets)
+            moveTicketsToPast(prize.id, draw.winningNumber, draw.prizeName || prize.name, draw.prizeImage || prize.imageUrl);
+
+            // If winner, add to wins store
+            if (isWinner && user) {
+              const userTickets = getTicketsForPrize(prize.id);
+              const winnerTicket = userTickets.find(t => t.ticketNumber === draw.winningNumber);
+              if (winnerTicket) {
+                addWin(prize.id, String(draw.id), winnerTicket.id, user.id);
+              }
+            }
+
+            // Show missed extraction modal directly
+            useExtractionStore.setState({
+              missedExtractions: [{
+                drawId: String(draw.id),
+                prizeId: prize.id,
+                prizeName: draw.prizeName || prize.name,
+                prizeImage: draw.prizeImage || prize.imageUrl,
+                winningNumber: draw.winningNumber,
+                userNumbers,
+                isWinner,
+                extractedAt: draw.extractedAt,
+              }],
+              currentMissedIndex: 0,
+              showMissedModal: true,
+            });
+            console.log(`[Timer] Showing offline extraction result directly: winner=${isWinner}`);
+          }
+        } catch (e) {
+          console.log('[Timer] Direct result check failed, falling back to fetchMissedExtractions');
+          setTimeout(() => fetchMissedExtractions(), 1500);
+        }
       }
     } catch (error) {
       console.log('[Timer] Offline extraction trigger failed:', error);
+      // Fallback: try fetchMissedExtractions (extraction may have been done by server cron)
+      setTimeout(() => fetchMissedExtractions(), 1500);
     }
 
     // Reset prize locally
     resetPrizeAfterExtraction(prize.id);
     clearTicketsForPrize(prize.id);
-
-    // Trigger missed extraction check to show popup
-    setTimeout(() => {
-      fetchMissedExtractions();
-    }, 1500);
-  }, [resetPrizeAfterExtraction, clearTicketsForPrize, fetchMissedExtractions]);
+  }, [resetPrizeAfterExtraction, clearTicketsForPrize, fetchMissedExtractions, moveTicketsToPast, getTicketsForPrize, addWin, user]);
 
   // Poll server once for extraction result (used as publisher for Firebase)
   const pollServerOnce = useCallback(async (prizeId: string): Promise<number | null> => {
@@ -482,9 +549,20 @@ export const AppNavigator: React.FC = () => {
     // Mark extraction complete locally
     completePrizeExtraction(prize.id, winningNumber);
 
-    // Update last seen draw timestamp only if we got a valid result
+    // Mark draw as seen (by prize ID + timestamp combo) to prevent fetchMissedExtractions duplicate
     if (winningNumber > 0) {
-      AsyncStorage.setItem('rafflemania_last_seen_draw_timestamp', new Date().toISOString());
+      try {
+        // Try to get the actual draw DB ID from server for accurate seen tracking
+        const numericPrizeId = parseInt(prize.id.replace(/\D/g, ''), 10) || parseInt(prize.id, 10);
+        const drawsRes = await apiClient.get(`/draws/prize/${numericPrizeId}?limit=1`);
+        const recentDraw = drawsRes.data?.data?.draws?.[0];
+        if (recentDraw?.id) {
+          const seenStr = await AsyncStorage.getItem('rafflemania_seen_draw_ids');
+          const seenIds: string[] = seenStr ? JSON.parse(seenStr) : [];
+          seenIds.unshift(String(recentDraw.id));
+          await AsyncStorage.setItem('rafflemania_seen_draw_ids', JSON.stringify(seenIds.slice(0, 50)));
+        }
+      } catch {}
     }
 
     // Clean up tickets and reset prize for next round
@@ -518,10 +596,25 @@ export const AppNavigator: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated && sessionActive && !missedChecked.current) {
       missedChecked.current = true;
-      // Delay to let the app settle before checking
-      setTimeout(() => {
+
+      // Clear stale seen IDs from previous version (one-time migration)
+      AsyncStorage.getItem('rafflemania_extraction_v2_migrated').then(async (migrated) => {
+        if (!migrated) {
+          await AsyncStorage.removeItem('rafflemania_seen_draw_ids');
+          await AsyncStorage.removeItem('rafflemania_last_seen_draw_timestamp');
+          await AsyncStorage.setItem('rafflemania_extraction_v2_migrated', '1');
+          console.log('[MissedExtraction] Cleared old extraction data for v2 migration');
+        }
+      });
+
+      // Trigger server-side extraction check, then fetch missed extractions
+      apiClient.post('/extractions/check').catch(() => {});
+      const t1 = setTimeout(() => {
         fetchMissedExtractions();
-      }, 2000);
+      }, 3000);
+      return () => {
+        clearTimeout(t1);
+      };
     }
     if (!isAuthenticated || !sessionActive) {
       missedChecked.current = false;
@@ -549,10 +642,11 @@ export const AppNavigator: React.FC = () => {
 
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
-        // App came to foreground - check for missed extractions and rewards
+        // App came to foreground - trigger server extraction check, then fetch results
+        apiClient.post('/extractions/check').catch(() => {});
         setTimeout(() => {
           fetchMissedExtractions();
-        }, 1000);
+        }, 1500);
         setTimeout(() => {
           fetchRewardNotifications();
         }, 3000);
@@ -598,6 +692,15 @@ export const AppNavigator: React.FC = () => {
     });
     return unsubscribe;
   }, [isAuthenticated, sessionActive, fetchRewardNotifications]);
+
+  // Listen for extraction push notifications (server-side extractions while app is open)
+  useEffect(() => {
+    if (!isAuthenticated || !sessionActive) return;
+    const unsubscribe = extractionEvents.subscribe(() => {
+      fetchMissedExtractions();
+    });
+    return unsubscribe;
+  }, [isAuthenticated, sessionActive, fetchMissedExtractions]);
 
   // Monitor all prizes with active timers
   useEffect(() => {

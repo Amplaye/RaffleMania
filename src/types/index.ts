@@ -148,6 +148,21 @@ export interface CreditPackage {
   isPopular?: boolean;
 }
 
+// Payment Types
+export type PaymentMethod = 'apple_iap' | 'google_iap' | 'stripe';
+export type PaymentStatus = 'pending' | 'verified' | 'failed' | 'refunded';
+
+export interface PaymentRecord {
+  id: string;
+  packageId: string;
+  paymentMethod: PaymentMethod;
+  amount: number;
+  creditsAwarded: number;
+  status: PaymentStatus;
+  createdAt: string;
+  verifiedAt?: string;
+}
+
 // Auth Types
 export interface LoginCredentials {
   email: string;

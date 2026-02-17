@@ -192,7 +192,7 @@ class NotificationController extends WP_REST_Controller {
             $wpdb->update($table_log, [
                 'status' => $result ? 'sent' : 'failed',
                 'sent_at' => current_time('mysql'),
-                'recipients_count' => $result['recipients'] ?? 0,
+                'recipients_count' => is_array($result) ? ($result['recipients'] ?? 0) : 0,
                 'onesignal_response' => json_encode($result),
             ], ['id' => $notif->id]);
         }

@@ -266,7 +266,7 @@ class DrawsController extends WP_REST_Controller {
         $table_tickets = $wpdb->prefix . 'rafflemania_tickets';
         $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
 
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $draw_id = $request->get_param('id');
 
         // Get draw
@@ -315,7 +315,7 @@ class DrawsController extends WP_REST_Controller {
         $table_users = $wpdb->prefix . 'rafflemania_users';
 
         try {
-        $user_id = $request->get_attribute('user_id');
+        $user_id = $request->get_param('_auth_user_id');
         $prize_id = $request->get_param('prize_id');
         $winning_number = $request->get_param('winning_number');
         $user_ticket_id = $request->get_param('user_ticket_id');
@@ -486,14 +486,37 @@ class DrawsController extends WP_REST_Controller {
         // Track daily draw stat
         $this->track_daily_stat('draws_made');
 
-        // Reset prize for next round (full reset like cron extraction)
-        $wpdb->update($table_prizes, [
-            'timer_status' => 'waiting',
-            'current_ads' => 0,
-            'scheduled_at' => null,
-            'timer_started_at' => null,
-            'extracted_at' => current_time('mysql')
-        ], ['id' => $prize_id]);
+        // Handle stock and reset prize for next round
+        $current_stock = (int) $prize->stock;
+
+        if ($current_stock === 0) {
+            // Illimitato - reset normale
+            $wpdb->update($table_prizes, [
+                'timer_status' => 'waiting',
+                'current_ads' => 0,
+                'scheduled_at' => null,
+                'timer_started_at' => null,
+                'extracted_at' => current_time('mysql')
+            ], ['id' => $prize_id]);
+        } elseif ($current_stock <= 1) {
+            // Ultima estrazione - disattivare il premio
+            $wpdb->update($table_prizes, [
+                'stock' => 0,
+                'timer_status' => 'completed',
+                'is_active' => 0,
+                'extracted_at' => current_time('mysql')
+            ], ['id' => $prize_id]);
+        } else {
+            // Stock rimanente - decrementa e resetta
+            $wpdb->update($table_prizes, [
+                'stock' => $current_stock - 1,
+                'timer_status' => 'waiting',
+                'current_ads' => 0,
+                'scheduled_at' => null,
+                'timer_started_at' => null,
+                'extracted_at' => current_time('mysql')
+            ], ['id' => $prize_id]);
+        }
 
         // Mark all tickets for this prize as used
         $wpdb->update($table_tickets, ['status' => 'used'], ['prize_id' => $prize_id, 'status' => 'active']);
@@ -544,13 +567,10 @@ class DrawsController extends WP_REST_Controller {
         $completion_key = 'rafflemania_completion_' . $prize_id;
         if (!get_transient($completion_key)) {
             \RaffleMania\NotificationHelper::notify_extraction_completed($prize->name);
-            set_transient($completion_key, 1, 600);
+            set_transient($completion_key, 1, 60);
         }
 
-        // Send winner notification
-        if ($winner_user_id) {
-            \RaffleMania\NotificationHelper::notify_winner($winner_user_id, $prize->name);
-        }
+        // Winner notification removed - user only wants "extraction happened" notification
 
         // Get created draw
         $draw = $wpdb->get_row($wpdb->prepare(
@@ -619,7 +639,7 @@ class DrawsController extends WP_REST_Controller {
             return false;
         }
 
-        $request->set_attribute('user_id', $payload['user_id']);
+        $request->set_param('_auth_user_id', $payload['user_id']);
         return true;
     }
 

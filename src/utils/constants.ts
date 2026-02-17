@@ -248,3 +248,21 @@ export const STORAGE_KEYS = {
   USER_DATA: 'user_data',
   ONBOARDING_COMPLETE: 'onboarding_complete',
 };
+
+// Payment Configuration
+export const PAYMENT_CONFIG = {
+  // Stripe publishable key (fetched from backend, this is a fallback)
+  STRIPE_PUBLISHABLE_KEY: '', // Will be fetched from backend via create-intent
+  // IAP product IDs (must match App Store Connect / Google Play Console)
+  IAP_PRODUCT_IDS: [
+    'credits_10',
+    'credits_25',
+    'credits_60',
+    'credits_100',
+    'credits_250',
+    'credits_600',
+    'credits_1000',
+    'credits_2500',
+    'credits_6000',
+  ],
+};

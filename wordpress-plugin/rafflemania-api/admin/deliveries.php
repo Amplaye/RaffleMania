@@ -6,17 +6,6 @@ $table_winners = $wpdb->prefix . 'rafflemania_winners';
 $table_prizes = $wpdb->prefix . 'rafflemania_prizes';
 $table_users = $wpdb->prefix . 'rafflemania_users';
 
-// Get logo from WordPress media library
-$logo_attachment = get_posts([
-    'post_type' => 'attachment',
-    'post_status' => 'inherit',
-    'posts_per_page' => 1,
-    's' => 'logo',
-    'orderby' => 'date',
-    'order' => 'DESC',
-]);
-$logo_url = !empty($logo_attachment) ? wp_get_attachment_url($logo_attachment[0]->ID) : 'https://www.rafflemania.it/wp-content/uploads/2026/02/rafflemania-icon.png';
-
 // Handle deliver action
 if (isset($_POST['deliver_winner_id']) && wp_verify_nonce($_POST['_wpnonce'], 'rafflemania_deliver_prize')) {
     $winner_id = intval($_POST['deliver_winner_id']);
@@ -80,96 +69,28 @@ if (isset($_POST['deliver_winner_id']) && wp_verify_nonce($_POST['_wpnonce'], 'r
                     </tr>";
         }
 
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/EmailHelper.php';
         $prize_value_formatted = number_format($winner->prize_value, 2, ',', '.');
-        $year = date('Y');
 
         $subject = "RaffleMania - Il tuo premio \"{$winner->prize_name}\" e stato consegnato!";
-        $message = "<!DOCTYPE html>
-<html lang='it'>
-<head>
-    <meta charset='UTF-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <title>Premio Consegnato - RaffleMania</title>
-</head>
-<body style='margin: 0; padding: 0; background-color: #f4f4f4; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif;'>
-    <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='background-color: #f4f4f4;'>
-        <tr>
-            <td align='center' style='padding: 20px 10px;'>
-                <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='600' style='max-width: 600px; background-color: #ffffff; border-radius: 16px; overflow: hidden;'>
+        $body = "<tr><td style='padding:16px 40px 0;'>
+<h2 style='color:#1a1a1a;margin:0 0 10px;font-size:26px;font-weight:700;'>Ciao {$winner->username}!</h2>
+<p style='color:#555;font-size:18px;line-height:1.6;margin:0;'>Ottime notizie! Il tuo premio e stato <strong style='color:#FF6B00;'>consegnato con successo</strong>.</p>
+</td></tr>
+<tr><td style='padding:24px 40px;'>
+<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='border:2px solid #FFD700;border-radius:16px;overflow:hidden;'>
+<tr><td style='padding:24px;text-align:center;'>
+{$prize_image_html}
+<div style='font-size:24px;font-weight:700;color:#FF6B00;margin-bottom:6px;'>{$winner->prize_name}</div>
+<div style='font-size:18px;color:#888;margin-bottom:16px;'>Valore: &euro;{$prize_value_formatted}</div>
+<table role='presentation' cellspacing='0' cellpadding='0' border='0' align='center'><tr><td style='background-color:#00B894;color:#ffffff;padding:12px 32px;border-radius:24px;font-weight:700;font-size:16px;text-transform:uppercase;'>&#10003; Consegnato</td></tr></table>
+</td></tr></table>
+</td></tr>
+{$voucher_section}
+{$notes_section}
+<tr><td style='padding:0 40px 32px;'><div style='background:#f9f9f9;border-radius:12px;padding:20px;text-align:center;'><p style='color:#666;font-size:16px;line-height:1.5;margin:0;'>Hai domande sul tuo premio? Contatta il nostro supporto direttamente dall'app RaffleMania.</p></div></td></tr>";
 
-                    <!-- Header with logo -->
-                    <tr>
-                        <td style='padding: 32px 40px; text-align: center;'>
-                            <img src='{$logo_url}' alt='RaffleMania' width='160' height='160' style='width: 160px; height: 160px; border-radius: 20px; display: block; margin: 0 auto;' />
-                        </td>
-                    </tr>
-
-                    <!-- Greeting -->
-                    <tr>
-                        <td style='padding: 16px 40px 0;'>
-                            <h2 style='color: #1a1a1a; margin: 0 0 10px; font-size: 26px; font-weight: 700;'>Ciao {$winner->username}!</h2>
-                            <p style='color: #555; font-size: 18px; line-height: 1.6; margin: 0;'>Ottime notizie! Il tuo premio e stato <strong style='color: #FF6B00;'>consegnato con successo</strong>.</p>
-                        </td>
-                    </tr>
-
-                    <!-- Prize card -->
-                    <tr>
-                        <td style='padding: 24px 40px;'>
-                            <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='border: 2px solid #FFD700; border-radius: 16px; overflow: hidden;'>
-                                <tr>
-                                    <td style='padding: 24px; text-align: center;'>
-                                        {$prize_image_html}
-                                        <div style='font-size: 24px; font-weight: 700; color: #FF6B00; margin-bottom: 6px;'>{$winner->prize_name}</div>
-                                        <div style='font-size: 18px; color: #888; margin-bottom: 16px;'>Valore: &euro;{$prize_value_formatted}</div>
-                                        <table role='presentation' cellspacing='0' cellpadding='0' border='0' align='center'>
-                                            <tr>
-                                                <td style='background-color: #00B894; color: #ffffff; padding: 12px 32px; border-radius: 24px; font-weight: 700; font-size: 16px; letter-spacing: 0.5px; text-transform: uppercase;'>&#10003; Consegnato</td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-
-                    <!-- Voucher code (if present) -->
-                    {$voucher_section}
-
-                    <!-- Delivery notes (if present) -->
-                    {$notes_section}
-
-                    <!-- Support section -->
-                    <tr>
-                        <td style='padding: 0 40px 32px;'>
-                            <div style='background: #f9f9f9; border-radius: 12px; padding: 20px; text-align: center;'>
-                                <p style='color: #666; font-size: 16px; line-height: 1.5; margin: 0;'>Hai domande sul tuo premio? Contatta il nostro supporto direttamente dall'app RaffleMania.</p>
-                            </div>
-                        </td>
-                    </tr>
-
-                    <!-- Footer -->
-                    <tr>
-                        <td style='background-color: #fafafa; padding: 20px 40px; text-align: center; border-top: 1px solid #eee;'>
-                            <p style='color: #aaa; font-size: 13px; margin: 0;'>&copy; {$year} RaffleMania. Tutti i diritti riservati.</p>
-                        </td>
-                    </tr>
-
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>";
-
-        $headers = [
-            'Content-Type: text/html; charset=UTF-8',
-            'From: RaffleMania <noreply@rafflemania.it>',
-            'Reply-To: supporto@rafflemania.it',
-            'X-Mailer: RaffleMania/1.0',
-            'MIME-Version: 1.0',
-        ];
-
-        wp_mail($winner->email, $subject, $message, $headers);
+        \RaffleMania\EmailHelper::send($winner->email, $subject, $body, true);
 
         // Send push notification
         \RaffleMania\NotificationHelper::send_to_user(

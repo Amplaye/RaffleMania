@@ -549,6 +549,15 @@ class UsersController extends WP_REST_Controller {
     }
 
     public function purchase_credits(WP_REST_Request $request) {
+        // LOCKED: This endpoint is deprecated. Use /payments/verify-iap or /payments/create-intent instead.
+        // Credits are now only awarded after server-side payment verification.
+        return new WP_Error(
+            'endpoint_deprecated',
+            'Questo endpoint è stato disabilitato. Usa il nuovo sistema di pagamenti.',
+            ['status' => 410]
+        );
+
+        // --- Legacy code below (kept for reference) ---
         global $wpdb;
         $table_users = $wpdb->prefix . 'rafflemania_users';
         $table_transactions = $wpdb->prefix . 'rafflemania_transactions';
@@ -762,13 +771,24 @@ class UsersController extends WP_REST_Controller {
                 'wins' => array_map(function($w) {
                     return [
                         'id' => (int) $w->id,
+                        'ticket_id' => (string) ($w->ticket_id ?? ''),
+                        'draw_id' => (string) ($w->draw_id ?? ''),
+                        'prize_id' => (string) $w->prize_id,
+                        'user_id' => (string) $w->user_id,
                         'prizeId' => (string) $w->prize_id,
                         'prizeName' => $w->prize_name,
                         'prizeImage' => $w->prize_image,
                         'prizeValue' => (float) $w->prize_value,
                         'claimed' => (bool) $w->claimed,
                         'claimedAt' => $w->claimed_at,
-                        'wonAt' => $w->won_at
+                        'wonAt' => $w->won_at,
+                        'won_at' => $w->won_at,
+                        'deliveryStatus' => $w->delivery_status ?? 'processing',
+                        'delivery_status' => $w->delivery_status ?? 'processing',
+                        'deliveredAt' => $w->delivered_at ?? null,
+                        'delivered_at' => $w->delivered_at ?? null,
+                        'voucher_code' => $w->voucher_code ?? null,
+                        'delivery_notes' => $w->delivery_notes ?? null,
                     ];
                 }, $wins),
                 'total' => count($wins)

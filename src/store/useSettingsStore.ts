@@ -50,6 +50,7 @@ export interface NotificationPreferences {
   emailEnabled: boolean;
   drawReminders: boolean;
   winNotifications: boolean;
+  adCooldownNotifications: boolean;
 }
 
 const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -57,6 +58,7 @@ const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   emailEnabled: true,
   drawReminders: true,
   winNotifications: true,
+  adCooldownNotifications: true,
 };
 
 interface SettingsState {
@@ -229,6 +231,19 @@ export const useSettingsStore = create<SettingsState>()(
           }
         }
 
+        // Handle ad cooldown notifications - OneSignal tag filter
+        if (key === 'adCooldownNotifications') {
+          try {
+            if (value) {
+              OneSignal.User.removeTag('ad_cooldown_notifications');
+            } else {
+              OneSignal.User.addTag('ad_cooldown_notifications', 'disabled');
+            }
+          } catch (error) {
+            console.log('[Settings] Ad cooldown notifications tag failed:', error);
+          }
+        }
+
         // Update local state first
         set(state => ({
           notifications: {
@@ -251,6 +266,7 @@ export const useSettingsStore = create<SettingsState>()(
               email_enabled: prefs.emailEnabled,
               draw_reminders: prefs.drawReminders,
               win_notifications: prefs.winNotifications,
+              ad_cooldown_notifications: prefs.adCooldownNotifications,
             });
           }
         } catch (error) {
@@ -312,6 +328,13 @@ export const syncNotificationTags = async () => {
       OneSignal.User.removeTag('win_notifications');
     } else {
       OneSignal.User.addTag('win_notifications', 'disabled');
+    }
+
+    // Sync ad_cooldown_notifications tag
+    if (prefs.adCooldownNotifications) {
+      OneSignal.User.removeTag('ad_cooldown_notifications');
+    } else {
+      OneSignal.User.addTag('ad_cooldown_notifications', 'disabled');
     }
 
     // Sync push subscription state

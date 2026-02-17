@@ -19,6 +19,8 @@ export {useChatStore} from './useChatStore';
 export type {ChatMessage} from './useChatStore';
 export {useAdminChatStore} from './useAdminChatStore';
 export type {ChatRoom, ChatMessage as AdminChatMessage} from './useAdminChatStore';
+export {useAvatarStore, AVATARS, FRAMES} from './useAvatarStore';
+export type {Avatar, Frame} from './useAvatarStore';
 
 // Sync all stores after login - call this after any successful authentication
 export const syncStoresAfterLogin = async () => {
