@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {AnimatedBackground} from '../../components/common';
+import {AnimatedBackground, AdBanner} from '../../components/common';
 import {usePrizesStore} from '../../store';
 import type {PrizeSortOption} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
@@ -284,24 +284,8 @@ export const PrizesScreen: React.FC<PrizesScreenProps> = ({navigation}) => {
       <AnimatedBackground />
 
       <View style={styles.content}>
-        {/* Banner Pubblicitario */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => Linking.openURL('mailto:app.rafflemania@gmail.com?subject=Richiesta%20Sponsorizzazione%20Banner%20RaffleMania')}
-          style={[styles.bannerContainer, {backgroundColor: colors.card}]}>
-          <View style={styles.bannerContent}>
-            <View style={styles.bannerIcon}>
-              <Ionicons name="megaphone" size={20} color={COLORS.primary} />
-            </View>
-            <View style={styles.bannerTextContainer}>
-              <Text style={[styles.bannerTitle, {color: colors.text}]}>Il tuo brand qui!</Text>
-              <Text style={[styles.bannerSubtitle, {color: colors.textMuted}]}>Sponsorizza la tua azienda</Text>
-            </View>
-            <View style={styles.bannerBadge}>
-              <Text style={styles.bannerBadgeText}>AD</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
+        {/* AdMob Banner */}
+          <AdBanner />
 
         {/* Animated Tabs */}
         <View style={styles.tabWrapper}>

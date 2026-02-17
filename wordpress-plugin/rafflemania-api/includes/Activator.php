@@ -11,6 +11,7 @@ class Activator {
         self::create_admin_panel_tables();
         self::migrate_referrals_table();
         self::migrate_prizes_table();
+        self::migrate_users_ad_free();
         self::insert_default_data();
         self::insert_admin_panel_defaults();
         flush_rewrite_rules();
@@ -77,6 +78,26 @@ class Activator {
         $wpdb->query("UPDATE {$table_referrals} SET last_active_date = DATE(created_at) WHERE last_active_date IS NULL");
     }
 
+    /**
+     * Add ad_free column to users table for banner ad removal purchase
+     */
+    private static function migrate_users_ad_free() {
+        global $wpdb;
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_users}'");
+        if (!$table_exists) {
+            return;
+        }
+
+        $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_users}");
+        $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+        if (!in_array('ad_free', $existing_columns)) {
+            $wpdb->query("ALTER TABLE {$table_users} ADD COLUMN ad_free tinyint(1) DEFAULT 0 AFTER is_active");
+        }
+    }
+
     private static function create_tables() {
         global $wpdb;
         $charset_collate = $wpdb->get_charset_collate();
@@ -102,6 +123,7 @@ class Activator {
             referred_by varchar(20) DEFAULT NULL,
             push_token varchar(500) DEFAULT NULL,
             is_active tinyint(1) DEFAULT 1,
+            ad_free tinyint(1) DEFAULT 0,
             email_verified tinyint(1) DEFAULT 0,
             verification_token varchar(64) DEFAULT NULL,
             verification_token_expires datetime DEFAULT NULL,

@@ -984,6 +984,21 @@ class Plugin {
 
             update_option('rafflemania_admin_panel_db_version', '2.6');
         }
+
+        // Migration 2.7: Add ad_free column to users table
+        if (version_compare($admin_db_version, '2.7', '<')) {
+            $table_users = $wpdb->prefix . 'rafflemania_users';
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_users}'");
+            if ($table_exists) {
+                $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_users}");
+                $existing_columns = array_map(function($col) { return $col->Field; }, $columns);
+
+                if (!in_array('ad_free', $existing_columns)) {
+                    $wpdb->query("ALTER TABLE {$table_users} ADD COLUMN ad_free tinyint(1) DEFAULT 0 AFTER is_active");
+                }
+            }
+            update_option('rafflemania_admin_panel_db_version', '2.7');
+        }
     }
 
     /**

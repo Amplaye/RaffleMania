@@ -23,6 +23,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_settings_
             update_option('rafflemania_admin_api_key', sanitize_text_field($_POST['admin_api_key']));
         }
 
+        // Stripe
+        if (isset($_POST['stripe_secret_key'])) {
+            update_option('rafflemania_stripe_secret_key', sanitize_text_field($_POST['stripe_secret_key']));
+        }
+        if (isset($_POST['stripe_publishable_key'])) {
+            update_option('rafflemania_stripe_publishable_key', sanitize_text_field($_POST['stripe_publishable_key']));
+        }
+        if (isset($_POST['stripe_webhook_secret'])) {
+            update_option('rafflemania_stripe_webhook_secret', sanitize_text_field($_POST['stripe_webhook_secret']));
+        }
+
+        // Apple IAP
+        if (isset($_POST['apple_shared_secret'])) {
+            update_option('rafflemania_apple_shared_secret', sanitize_text_field($_POST['apple_shared_secret']));
+        }
+
+        // Google IAP
+        if (isset($_POST['google_service_account'])) {
+            update_option('rafflemania_google_service_account', sanitize_text_field($_POST['google_service_account']));
+        }
+
         $message = 'Impostazioni salvate con successo!';
     }
 }
@@ -238,6 +259,69 @@ $admin_api_key = get_option('rafflemania_admin_api_key', '');
                 </div>
             </div>
 
+            <!-- Payments: Stripe -->
+            <div class="rafflemania-settings-card">
+                <h2><span class="dashicons dashicons-money-alt"></span> Stripe (Carta di Credito)</h2>
+
+                <div class="rafflemania-info-box" style="background: #f3e8ff; border-color: #7c3aed;">
+                    <strong>Stripe</strong> - Pagamenti con carta di credito/debito. Configura le chiavi da <a href="https://dashboard.stripe.com/apikeys" target="_blank">Stripe Dashboard</a>.
+                </div>
+
+                <div class="rafflemania-form-row">
+                    <label>Secret Key</label>
+                    <input type="password" name="stripe_secret_key" value="<?php echo esc_attr(get_option('rafflemania_stripe_secret_key', '')); ?>" placeholder="sk_live_...">
+                    <small>Chiave segreta (inizia con sk_live_ o sk_test_)</small>
+                </div>
+
+                <div class="rafflemania-form-row">
+                    <label>Publishable Key</label>
+                    <input type="text" name="stripe_publishable_key" value="<?php echo esc_attr(get_option('rafflemania_stripe_publishable_key', '')); ?>" placeholder="pk_live_...">
+                    <small>Chiave pubblica (inizia con pk_live_ o pk_test_)</small>
+                </div>
+
+                <div class="rafflemania-form-row">
+                    <label>Webhook Signing Secret</label>
+                    <input type="password" name="stripe_webhook_secret" value="<?php echo esc_attr(get_option('rafflemania_stripe_webhook_secret', '')); ?>" placeholder="whsec_...">
+                    <small>Da <a href="https://dashboard.stripe.com/webhooks" target="_blank">Stripe Webhooks</a> &rarr; Endpoint &rarr; Signing secret</small>
+                </div>
+
+                <div class="rafflemania-info-box">
+                    <strong>Webhook URL:</strong><br>
+                    <code><?php echo home_url('/wp-json/rafflemania/v1/payments/stripe-webhook'); ?></code>
+                    <br><small>Eventi: payment_intent.succeeded, payment_intent.payment_failed, charge.refunded</small>
+                </div>
+            </div>
+
+            <!-- Payments: Apple IAP -->
+            <div class="rafflemania-settings-card">
+                <h2><span class="dashicons dashicons-smartphone"></span> Apple Pay (In-App Purchase)</h2>
+
+                <div class="rafflemania-info-box" style="background: #f0f0f0; border-color: #999;">
+                    <strong>Apple App Store</strong> - Per la verifica dei receipt IAP. Configura da <a href="https://appstoreconnect.apple.com" target="_blank">App Store Connect</a>.
+                </div>
+
+                <div class="rafflemania-form-row">
+                    <label>App-Specific Shared Secret</label>
+                    <input type="password" name="apple_shared_secret" value="<?php echo esc_attr(get_option('rafflemania_apple_shared_secret', '')); ?>" placeholder="Shared secret da App Store Connect">
+                    <small>App Store Connect &rarr; App &rarr; In-App Purchases &rarr; App-Specific Shared Secret</small>
+                </div>
+            </div>
+
+            <!-- Payments: Google IAP -->
+            <div class="rafflemania-settings-card">
+                <h2><span class="dashicons dashicons-google"></span> Google Pay (In-App Purchase)</h2>
+
+                <div class="rafflemania-info-box" style="background: #e8f5e9; border-color: #4caf50;">
+                    <strong>Google Play Console</strong> - Per la verifica dei receipt IAP. Configura da <a href="https://play.google.com/console" target="_blank">Google Play Console</a>.
+                </div>
+
+                <div class="rafflemania-form-row">
+                    <label>Service Account JSON (Base64)</label>
+                    <input type="password" name="google_service_account" value="<?php echo esc_attr(get_option('rafflemania_google_service_account', '')); ?>" placeholder="Contenuto JSON del service account codificato in Base64">
+                    <small>Google Cloud Console &rarr; IAM &rarr; Service Accounts &rarr; Crea chiave JSON &rarr; codifica in Base64</small>
+                </div>
+            </div>
+
             <!-- Contact & Admin -->
             <div class="rafflemania-settings-card">
                 <h2><span class="dashicons dashicons-email"></span> Contatto & Sicurezza</h2>
@@ -302,6 +386,7 @@ $admin_api_key = get_option('rafflemania_admin_api_key', '');
                     'rafflemania_referrals' => 'Referral',
                     'rafflemania_levels' => 'Livelli',
                     'rafflemania_shop_packages' => 'Pacchetti Shop',
+                    'rafflemania_payments' => 'Pagamenti',
                     'rafflemania_notification_log' => 'Log Notifiche',
                     'rafflemania_admin_actions_log' => 'Log Azioni Admin',
                 ];

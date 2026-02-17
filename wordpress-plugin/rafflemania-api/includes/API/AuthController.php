@@ -354,6 +354,9 @@ class AuthController extends WP_REST_Controller {
             $user_id
         ));
 
+        // Track daily new user registration
+        $this->track_daily_stat('new_users');
+
         return new WP_REST_Response([
             'success' => true,
             'message' => 'Registrazione completata! Ti abbiamo inviato un\'email di verifica. Controlla la tua casella di posta (anche lo spam) e clicca sul link per attivare il tuo account.',
@@ -965,6 +968,9 @@ class AuthController extends WP_REST_Controller {
 
         $tokens = $this->generate_tokens($user->id);
         $this->track_daily_stat('logins');
+        if ($is_new_user) {
+            $this->track_daily_stat('new_users');
+        }
 
         return new WP_REST_Response([
             'success' => true,
@@ -1070,6 +1076,9 @@ class AuthController extends WP_REST_Controller {
 
         $tokens = $this->generate_tokens($user->id);
         $this->track_daily_stat('logins');
+        if ($is_new_user) {
+            $this->track_daily_stat('new_users');
+        }
 
         return new WP_REST_Response([
             'success' => true,

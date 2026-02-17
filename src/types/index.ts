@@ -19,6 +19,8 @@ export interface User {
   createdAt: string;
   // Email verification
   emailVerified?: boolean;
+  // Ad-free (banner ads removed)
+  adFree?: boolean;
 }
 
 // Leveling Types

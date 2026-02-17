@@ -111,6 +111,15 @@ class UsersController extends WP_REST_Controller {
             ]
         ]);
 
+        // Record ad watched (gives 1 credit + increments stats)
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/me/reward-credit', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'record_ad_watched'],
+                'permission_callback' => [$this, 'check_auth']
+            ]
+        ]);
+
         // Get referral info
         register_rest_route($this->namespace, '/' . $this->rest_base . '/me/referral', [
             [
@@ -544,6 +553,82 @@ class UsersController extends WP_REST_Controller {
                         'createdAt' => $t->created_at
                     ];
                 }, $transactions)
+            ]
+        ]);
+    }
+
+    public function record_ad_watched(WP_REST_Request $request) {
+        global $wpdb;
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+        $table_transactions = $wpdb->prefix . 'rafflemania_transactions';
+        $table_daily_stats = $wpdb->prefix . 'rafflemania_daily_stats';
+
+        $user_id = $request->get_param('_auth_user_id');
+
+        // Get current user data
+        $user = $wpdb->get_row($wpdb->prepare(
+            "SELECT credits, xp, level, watched_ads FROM {$table_users} WHERE id = %d",
+            $user_id
+        ));
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'Utente non trovato', ['status' => 404]);
+        }
+
+        // Award XP for watching ad
+        $xp_reward = (int) get_option('rafflemania_xp_watch_ad', 10);
+        $new_xp = (int) $user->xp + $xp_reward;
+        $new_level = $this->calculate_level($new_xp);
+
+        // Update user: +1 credit, +1 watched_ads, +XP
+        $wpdb->query($wpdb->prepare(
+            "UPDATE {$table_users} SET credits = credits + 1, watched_ads = watched_ads + 1, xp = %d, level = %d WHERE id = %d",
+            $new_xp,
+            $new_level,
+            $user_id
+        ));
+
+        // Record transaction
+        $wpdb->insert($table_transactions, [
+            'user_id' => $user_id,
+            'type' => 'bonus',
+            'amount' => 1,
+            'description' => 'Credito da pubblicità',
+            'reference_id' => 'ad_' . time()
+        ]);
+
+        // Track daily stat
+        $italy_tz = new \DateTimeZone('Europe/Rome');
+        $today = (new \DateTime('now', $italy_tz))->format('Y-m-d');
+
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$table_daily_stats} WHERE stat_date = %s",
+            $today
+        ));
+
+        if ($existing) {
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$table_daily_stats} SET ads_watched = ads_watched + 1 WHERE stat_date = %s",
+                $today
+            ));
+        } else {
+            $wpdb->insert($table_daily_stats, [
+                'stat_date' => $today,
+                'ads_watched' => 1
+            ]);
+        }
+
+        // Get updated credits
+        $updated_credits = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT credits FROM {$table_users} WHERE id = %d",
+            $user_id
+        ));
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => [
+                'creditsAdded' => 1,
+                'totalCredits' => $updated_credits
             ]
         ]);
     }
@@ -1162,6 +1247,7 @@ class UsersController extends WP_REST_Controller {
             'lastStreakDate' => $user->last_streak_date,
             'referralCode' => $user->referral_code,
             'watchedAds' => (int) ($user->watched_ads ?? 0),
+            'adFree' => (bool) ($user->ad_free ?? 0),
             'createdAt' => $user->created_at
         ];
     }

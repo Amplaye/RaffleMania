@@ -1,4 +1,8 @@
 {
   "name": "RaffleManiaApp",
-  "displayName": "RaffleMania"
+  "displayName": "RaffleMania",
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-8523164888212226~3795010700",
+    "ios_app_id": "ca-app-pub-8523164888212226~2197589088"
+  }
 }

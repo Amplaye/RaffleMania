@@ -1,18 +1,27 @@
-import React, {useEffect} from 'react';
+import React, {useEffect, useState} from 'react';
 import {StatusBar, View, AppState, Platform, Alert, Linking, LogBox} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {OneSignal, NotificationClickEvent} from 'react-native-onesignal';
 import crashlytics from '@react-native-firebase/crashlytics';
 import {AppNavigator} from './src/navigation';
-import {LevelUpOverlay} from './src/components/common';
+import {LevelUpOverlay, VideoSplashScreen} from './src/components/common';
 import {COLORS} from './src/utils/constants';
 import {navigate} from './src/services/NavigationService';
 import {rewardEvents} from './src/services/rewardEvents';
 import {extractionEvents} from './src/services/extractionEvents';
 import {initIAP, endIAPConnection} from './src/services/paymentService';
+import {initializeAds, preloadRewardedAd} from './src/services/adService';
 
-// Suppress all development-only yellow box warnings
+// Suppress all development-only warnings and known deprecation errors
 LogBox.ignoreAllLogs(true);
+LogBox.ignoreLogs([
+  'This method is deprecated',
+  'react-native-nitro-modules',
+  'NitroModules',
+  'Failed to get NitroModules',
+  'Nitro runtime not installed',
+  '[RN-IAP]',
+]);
 
 // Disable console.log in production to avoid exposing sensitive data
 if (!__DEV__) {
@@ -26,6 +35,8 @@ if (!__DEV__) {
 const ONESIGNAL_APP_ID = '7d7f743b-3dac-472e-b05d-e4445842dc0a';
 
 const App: React.FC = () => {
+  const [showSplash, setShowSplash] = useState(true);
+
   useEffect(() => {
     // Initialize Firebase Crashlytics
     crashlytics().setCrashlyticsCollectionEnabled(true);
@@ -35,12 +46,19 @@ const App: React.FC = () => {
       console.log('[App] IAP init:', success ? 'connected' : 'failed');
     }).catch(() => {});
 
+    // Initialize AdMob and preload first rewarded ad
+    initializeAds().then(success => {
+      if (success) {
+        preloadRewardedAd();
+      }
+    });
+
     // Initialize OneSignal
     OneSignal.initialize(ONESIGNAL_APP_ID);
 
     // Sync notification toggle state with actual OneSignal subscription
-    const syncPushState = () => {
-      const hasPermission = OneSignal.Notifications.hasPermission();
+    const syncPushState = async () => {
+      const hasPermission = await OneSignal.Notifications.getPermissionAsync();
       if (hasPermission) {
         OneSignal.User.pushSubscription.optIn();
       }
@@ -172,6 +190,10 @@ const App: React.FC = () => {
       endIAPConnection();
     };
   }, []);
+
+  if (showSplash) {
+    return <VideoSplashScreen onFinish={() => setShowSplash(false)} />;
+  }
 
   return (
     <SafeAreaProvider>

@@ -258,6 +258,9 @@ class TicketsController extends WP_REST_Controller {
 
         $ticket_id = $wpdb->insert_id;
 
+        // Track daily tickets created
+        $this->track_daily_stat('tickets_created');
+
         // Get created ticket with prize info
         $ticket = $wpdb->get_row($wpdb->prepare(
             "SELECT t.*, p.name as prize_name, p.image_url as prize_image
@@ -566,6 +569,9 @@ class TicketsController extends WP_REST_Controller {
 
             // Commit transaction
             $wpdb->query('COMMIT');
+
+            // Track daily tickets created
+            $this->track_daily_stat('tickets_created', $quantity);
 
             // Get all user numbers for this prize
             $user_numbers = $wpdb->get_col($wpdb->prepare(

@@ -73,6 +73,7 @@ const mapApiUserToUser = (apiUser: any): User => ({
   createdAt: apiUser.created_at || apiUser.createdAt,
   shippingAddress: apiUser.shipping_address || apiUser.shippingAddress || undefined,
   emailVerified: apiUser.email_verified ?? apiUser.emailVerified ?? false,
+  adFree: apiUser.ad_free ?? apiUser.adFree ?? false,
 });
 
 export const useAuthStore = create<AuthState>()(

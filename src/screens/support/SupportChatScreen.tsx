@@ -17,6 +17,7 @@ import {RootStackParamList} from '../../navigation/AppNavigator';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {useAuthStore} from '../../store';
 import {useChatStore, ChatMessage} from '../../store/useChatStore';
+import {isAdminEmail} from '../../utils/adminConfig';
 import {
   COLORS,
   SPACING,
@@ -136,6 +137,20 @@ export const SupportChatScreen: React.FC<Props> = ({navigation}) => {
     return <MessageBubble message={item} isOwn={isOwn} isDark={isDark} />;
   };
 
+  const isAdmin = isAdminEmail(user?.email);
+
+  const renderSupportHours = () => {
+    if (isAdmin) return null;
+    return (
+      <View style={[styles.supportHoursBubble, {backgroundColor: isDark ? '#2A2A2A' : '#F0F0F0'}]}>
+        <Ionicons name="time-outline" size={16} color={colors.textSecondary} style={{marginRight: 6}} />
+        <Text style={[styles.supportHoursText, {color: isDark ? '#CCCCCC' : '#555555'}]}>
+          Il supporto sarà operativo dalle ore 09:00 alle ore 00:00, cercheremo di rispondere sempre il prima possibile, grazie.
+        </Text>
+      </View>
+    );
+  };
+
   const renderEmptyChat = () => (
     <View style={styles.emptyContainer}>
       <Ionicons name="chatbubbles-outline" size={64} color={colors.textSecondary} />
@@ -200,6 +215,7 @@ export const SupportChatScreen: React.FC<Props> = ({navigation}) => {
             styles.messagesList,
             messages.length === 0 && styles.emptyList,
           ]}
+          ListHeaderComponent={renderSupportHours}
           ListEmptyComponent={renderEmptyChat}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => {
@@ -400,6 +416,21 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.regular,
     minHeight: 40,
     maxHeight: 100,
+  },
+  supportHoursBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.md,
+    alignSelf: 'center',
+    maxWidth: '90%',
+  },
+  supportHoursText: {
+    flex: 1,
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.regular,
+    lineHeight: 18,
   },
   sendButton: {
     width: 44,

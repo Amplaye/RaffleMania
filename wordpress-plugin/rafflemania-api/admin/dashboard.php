@@ -56,6 +56,7 @@ $table_tickets = $wpdb->prefix . 'rafflemania_tickets';
 $table_draws = $wpdb->prefix . 'rafflemania_draws';
 $table_winners = $wpdb->prefix . 'rafflemania_winners';
 $table_daily_stats = $wpdb->prefix . 'rafflemania_daily_stats';
+$table_payments = $wpdb->prefix . 'rafflemania_payments';
 
 // Ensure daily_stats table exists with all columns
 $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_daily_stats}'");
@@ -114,11 +115,35 @@ function get_daily_stats($wpdb, $table_daily_stats, $date) {
     return $stats;
 }
 
+// Function to get revenue for a date range (from verified Stripe payments)
+function get_period_revenue($wpdb, $table_payments, $start_date, $end_date = null) {
+    if ($end_date === null) $end_date = $start_date;
+    return (float)$wpdb->get_var($wpdb->prepare(
+        "SELECT COALESCE(SUM(amount), 0) FROM {$table_payments}
+         WHERE status = 'verified' AND DATE(verified_at) BETWEEN %s AND %s",
+        $start_date, $end_date
+    ));
+}
+
+// Function to get delivered prizes count for a date range
+function get_period_delivered($wpdb, $table_winners, $start_date, $end_date = null) {
+    if ($end_date === null) $end_date = $start_date;
+    return (int)$wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM {$table_winners}
+         WHERE delivery_status = 'delivered' AND DATE(delivered_at) BETWEEN %s AND %s",
+        $start_date, $end_date
+    ));
+}
+
 // Get stats based on period
 if (in_array($period, ['week', 'month', 'year'])) {
     $period_stats = get_period_stats($wpdb, $table_daily_stats, $start_date, $end_date);
+    $period_revenue = get_period_revenue($wpdb, $table_payments, $start_date, $end_date);
+    $period_delivered = get_period_delivered($wpdb, $table_winners, $start_date, $end_date);
 } else {
     $period_stats = get_daily_stats($wpdb, $table_daily_stats, $selected_date);
+    $period_revenue = get_period_revenue($wpdb, $table_payments, $selected_date);
+    $period_delivered = get_period_delivered($wpdb, $table_winners, $selected_date);
 }
 
 // Ensure today's record exists
@@ -140,6 +165,8 @@ $total_winners = $wpdb->get_var("SELECT COUNT(*) FROM {$table_winners}") ?: 0;
 $total_credits_spent = $wpdb->get_var("SELECT COALESCE(SUM(credits_spent), 0) FROM {$table_daily_stats}") ?: 0;
 $total_ads_watched = $wpdb->get_var("SELECT COALESCE(SUM(ads_watched), 0) FROM {$table_daily_stats}") ?: 0;
 $total_logins = $wpdb->get_var("SELECT COALESCE(SUM(logins), 0) FROM {$table_daily_stats}") ?: 0;
+$total_revenue = (float)($wpdb->get_var("SELECT COALESCE(SUM(amount), 0) FROM {$table_payments} WHERE status = 'verified'") ?: 0);
+$total_delivered = (int)($wpdb->get_var("SELECT COUNT(*) FROM {$table_winners} WHERE delivery_status = 'delivered'") ?: 0);
 
 // Get all prizes for the prizes section
 $all_prizes = $wpdb->get_results(
@@ -256,7 +283,7 @@ $recent_winners = $wpdb->get_results(
         /* Stats grid inside boxes */
         .rm-stats-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 16px;
         }
         @media (max-width: 768px) {
@@ -450,6 +477,14 @@ $recent_winners = $wpdb->get_results(
                     <div class="rm-stat-value"><?php echo number_format($total_credits_spent); ?></div>
                     <div class="rm-stat-label">Crediti Usati</div>
                 </div>
+                <div class="rm-stat-item purple">
+                    <div class="rm-stat-value">&euro;<?php echo number_format($total_revenue, 2, ',', '.'); ?></div>
+                    <div class="rm-stat-label">Entrate Totali</div>
+                </div>
+                <div class="rm-stat-item purple">
+                    <div class="rm-stat-value"><?php echo number_format($total_delivered); ?></div>
+                    <div class="rm-stat-label">Premi Consegnati</div>
+                </div>
             </div>
         </div>
 
@@ -480,6 +515,14 @@ $recent_winners = $wpdb->get_results(
                 <div class="rm-stat-item">
                     <div class="rm-stat-value"><?php echo number_format((int)($period_stats->winners ?? 0)); ?></div>
                     <div class="rm-stat-label">Vittorie</div>
+                </div>
+                <div class="rm-stat-item">
+                    <div class="rm-stat-value">&euro;<?php echo number_format($period_revenue, 2, ',', '.'); ?></div>
+                    <div class="rm-stat-label">Entrate</div>
+                </div>
+                <div class="rm-stat-item">
+                    <div class="rm-stat-value"><?php echo number_format($period_delivered); ?></div>
+                    <div class="rm-stat-label">Premi Consegnati</div>
                 </div>
             </div>
         </div>

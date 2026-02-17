@@ -7,14 +7,14 @@ import {
   Animated,
   TouchableWithoutFeedback,
   Platform,
+  Image,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {SvgUri} from 'react-native-svg';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {SPACING, FONT_WEIGHT, FONT_FAMILY, RADIUS, COLORS} from '../../utils/constants';
 
-const CREDITS_ICON_URI = 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg';
+const CREDITS_ICON_URI = 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png';
 
 interface StreakRecoveryModalProps {
   visible: boolean;
@@ -256,7 +256,7 @@ export const StreakRecoveryModal: React.FC<StreakRecoveryModalProps> = ({
                               </Text>
                               {isDay7 && dayReward.credits > 0 && !isMissed && (
                                 <View style={styles.bonusTag}>
-                                  <SvgUri uri={CREDITS_ICON_URI} width={12} height={12} />
+                                  <Image source={{uri: CREDITS_ICON_URI}} style={{width: 12, height: 12}} />
                                   <Text style={styles.bonusText}>+{dayReward.credits}</Text>
                                 </View>
                               )}

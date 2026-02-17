@@ -1,18 +1,4 @@
-import {Platform} from 'react-native';
-import {
-  initConnection,
-  endConnection,
-  fetchProducts,
-  requestPurchase,
-  finishTransaction,
-  purchaseUpdatedListener,
-  purchaseErrorListener,
-  type Purchase,
-  type PurchaseError,
-  type Product,
-  getAvailablePurchases,
-  ErrorCode,
-} from 'react-native-iap';
+import {Platform, TurboModuleRegistry} from 'react-native';
 import apiClient from './apiClient';
 
 // IAP Product IDs (must match App Store Connect / Google Play Console)
@@ -28,11 +14,33 @@ const IAP_PRODUCT_IDS = [
   'credits_6000',
 ];
 
-type PurchaseCallback = (purchase: Purchase) => void;
-type ErrorCallback = (error: PurchaseError) => void;
+// Check if NitroModules native binary is available BEFORE loading react-native-iap.
+// TurboModuleRegistry.get() returns null without throwing (unlike getEnforcing).
+// This prevents Metro's guardedLoadModule from reporting a fatal error.
+const nitroAvailable = TurboModuleRegistry.get('NitroModules') != null;
 
-let purchaseUpdateSubscription: ReturnType<typeof purchaseUpdatedListener> | null = null;
-let purchaseErrorSubscription: ReturnType<typeof purchaseErrorListener> | null = null;
+let iapModule: typeof import('react-native-iap') | null = null;
+
+function getIAP(): typeof import('react-native-iap') | null {
+  if (iapModule) {
+    return iapModule;
+  }
+  if (!nitroAvailable) {
+    return null;
+  }
+  try {
+    iapModule = require('react-native-iap');
+    return iapModule;
+  } catch {
+    return null;
+  }
+}
+
+type PurchaseCallback = (purchase: any) => void;
+type ErrorCallback = (error: any) => void;
+
+let purchaseUpdateSubscription: any = null;
+let purchaseErrorSubscription: any = null;
 let isConnected = false;
 
 /**
@@ -40,7 +48,11 @@ let isConnected = false;
  */
 export async function initIAP(): Promise<boolean> {
   try {
-    await initConnection();
+    const iap = getIAP();
+    if (!iap) {
+      return false;
+    }
+    await iap.initConnection();
     isConnected = true;
     console.log('[PaymentService] IAP connection initialized');
     return true;
@@ -65,7 +77,10 @@ export async function endIAPConnection(): Promise<void> {
       purchaseErrorSubscription = null;
     }
     if (isConnected) {
-      await endConnection();
+      const iap = getIAP();
+      if (iap) {
+        await iap.endConnection();
+      }
       isConnected = false;
     }
   } catch (error) {
@@ -80,6 +95,10 @@ export function setupPurchaseListeners(
   onPurchase: PurchaseCallback,
   onError: ErrorCallback,
 ): void {
+  const iap = getIAP();
+  if (!iap) {
+    return;
+  }
   // Remove existing listeners
   if (purchaseUpdateSubscription) {
     purchaseUpdateSubscription.remove();
@@ -88,20 +107,24 @@ export function setupPurchaseListeners(
     purchaseErrorSubscription.remove();
   }
 
-  purchaseUpdateSubscription = purchaseUpdatedListener(onPurchase);
-  purchaseErrorSubscription = purchaseErrorListener(onError);
+  purchaseUpdateSubscription = iap.purchaseUpdatedListener(onPurchase);
+  purchaseErrorSubscription = iap.purchaseErrorListener(onError);
 }
 
 /**
  * Fetch IAP products from the store
  */
-export async function getIAPProducts(): Promise<Product[]> {
+export async function getIAPProducts(): Promise<any[]> {
   try {
+    const iap = getIAP();
+    if (!iap) {
+      return [];
+    }
     if (!isConnected) {
       await initIAP();
     }
-    const products = await fetchProducts({skus: IAP_PRODUCT_IDS});
-    const result = (products ?? []) as Product[];
+    const products = await iap.fetchProducts({skus: IAP_PRODUCT_IDS});
+    const result = (products ?? []) as any[];
     console.log('[PaymentService] Fetched', result.length, 'IAP products');
     return result;
   } catch (error) {
@@ -115,12 +138,16 @@ export async function getIAPProducts(): Promise<Product[]> {
  * Result will come via purchaseUpdatedListener
  */
 export async function purchaseWithIAP(productId: string): Promise<void> {
+  const iap = getIAP();
+  if (!iap) {
+    throw new Error('IAP not available');
+  }
   try {
     if (!isConnected) {
       await initIAP();
     }
     // v14 API: platform-specific request params
-    await requestPurchase({
+    await iap.requestPurchase({
       request: {
         apple: {sku: productId},
         google: {skus: [productId]},
@@ -128,7 +155,7 @@ export async function purchaseWithIAP(productId: string): Promise<void> {
       type: 'in-app',
     });
   } catch (error: any) {
-    if (error?.code === ErrorCode.UserCancelled) {
+    if (error?.code === iap.ErrorCode?.UserCancelled) {
       throw new Error('USER_CANCELLED');
     }
     console.log('[PaymentService] purchaseWithIAP error:', error);
@@ -139,11 +166,15 @@ export async function purchaseWithIAP(productId: string): Promise<void> {
 /**
  * Verify IAP receipt with backend and finish transaction
  */
-export async function verifyAndFinishIAP(purchase: Purchase): Promise<{
+export async function verifyAndFinishIAP(purchase: any): Promise<{
   success: boolean;
   creditsAwarded: number;
   paymentId: string;
 }> {
+  const iap = getIAP();
+  if (!iap) {
+    throw new Error('IAP not available');
+  }
   const platform = Platform.OS === 'ios' ? 'apple' : 'google';
 
   // v14: purchaseToken is the unified field (JWS on iOS, purchaseToken on Android)
@@ -160,7 +191,7 @@ export async function verifyAndFinishIAP(purchase: Purchase): Promise<{
 
     if (response.data.success) {
       // Only finish transaction AFTER server verification succeeds
-      await finishTransaction({purchase, isConsumable: true});
+      await iap.finishTransaction({purchase, isConsumable: true});
       console.log('[PaymentService] IAP verified and finished:', transactionId);
 
       return {
@@ -176,7 +207,7 @@ export async function verifyAndFinishIAP(purchase: Purchase): Promise<{
 
     // If already processed, still finish the transaction
     if (error?.response?.data?.data?.already_processed) {
-      await finishTransaction({purchase, isConsumable: true});
+      await iap.finishTransaction({purchase, isConsumable: true});
       return {
         success: true,
         creditsAwarded: 0,
@@ -223,9 +254,13 @@ export async function restorePurchases(): Promise<{
   restored: number;
   errors: Array<{transactionId: string; error: string}>;
 }> {
+  const iap = getIAP();
+  if (!iap) {
+    return {restored: 0, errors: []};
+  }
   try {
     const platform = Platform.OS === 'ios' ? 'apple' : 'google';
-    const purchases = await getAvailablePurchases();
+    const purchases = await iap.getAvailablePurchases();
 
     if (purchases.length === 0) {
       return {restored: 0, errors: []};
@@ -246,7 +281,7 @@ export async function restorePurchases(): Promise<{
       // Finish all restored transactions
       for (const purchase of purchases) {
         try {
-          await finishTransaction({purchase, isConsumable: true});
+          await iap.finishTransaction({purchase, isConsumable: true});
         } catch (e) {
           // Ignore finish errors for already-finished transactions
         }

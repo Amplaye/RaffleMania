@@ -16,13 +16,13 @@ import {
   Linking,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {SvgUri} from 'react-native-svg';
 import LinearGradient from 'react-native-linear-gradient';
-import {AnimatedBackground, StreakModal, StreakRecoveryModal, ExtractionResultModal, UrgencyBorderEffect, FlipCountdownTimer, TicketSuccessModal, TicketSuccessInfo} from '../../components/common';
+import {AnimatedBackground, StreakModal, StreakRecoveryModal, ExtractionResultModal, UrgencyBorderEffect, FlipCountdownTimer, TicketSuccessModal, TicketSuccessInfo, AdBanner} from '../../components/common';
 import {getTotalPoolTickets} from '../../services/mock';
 import apiClient from '../../services/apiClient';
+import {showRewardedAd, isRewardedAdReady, preloadRewardedAd, scheduleAdReadyNotification} from '../../services/adService';
 import {listenToPrizeUpdates, LivePrizeState} from '../../services/firebasePrizes';
-import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, useExtractionStore, useLevelUpStore, useGameConfigStore, DAILY_LIMITS, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS, setMidnightStreakCallback} from '../../store';
+import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, useExtractionStore, useLevelUpStore, useGameConfigStore, useReferralStore, DAILY_LIMITS, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS, setMidnightStreakCallback} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -51,6 +51,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const refreshUserData = useAuthStore(state => state.refreshUserData);
   const {fetchSettings} = useSettingsStore();
   const fetchGameConfig = useGameConfigStore(s => s.fetchConfig);
+  const fetchReferrals = useReferralStore(s => s.fetchReferrals);
   const {getTicketNumbersForPrize} = useTicketsStore();
   const {showResultModal, extractionResult, hideResult, startExtraction, showResult} = useExtractionStore();
 
@@ -84,6 +85,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     fetchPrizes();
     fetchSettings();
     fetchGameConfig();
+    fetchReferrals(true);
     // Fetch draws e poi pulisci i ticket per premi già estratti
     fetchDraws().then(() => {
       cleanupExtractedTickets();
@@ -377,33 +379,44 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       return;
     }
 
+    if (!isRewardedAdReady()) {
+      preloadRewardedAd();
+      Alert.alert('Caricamento', 'La pubblicità non è ancora pronta. Riprova tra qualche secondo.');
+      return;
+    }
+
     setIsWatchingAd(true);
-    await new Promise<void>(resolve => setTimeout(resolve, 2000));
 
-    incrementAdsForPrize(currentPrize.id);
-    incrementAdsWatched();
+    const earned = await showRewardedAd();
 
-    // XP per ads
-    const levelUpResult = addXPForAd();
-    if (levelUpResult) {
-      addCredits(levelUpResult.creditReward, 'level_up');
-    }
+    if (earned) {
+      incrementAdsForPrize(currentPrize.id);
+      incrementAdsWatched();
+      scheduleAdReadyNotification();
 
-    // Aggiungi 1 credito per aver guardato l'ad
-    addCredits(1, 'other');
-
-    // Sync credito al server per utenti autenticati
-    const authState = useAuthStore.getState();
-    const isGuestUser = authState.token?.startsWith('guest_token_');
-    if (!isGuestUser) {
-      try {
-        await apiClient.post('/users/me/credits/purchase', {credits: 1});
-      } catch (e) {
-        console.log('[Home] Server ad credit sync failed:', e);
+      // XP per ads
+      const levelUpResult = addXPForAd();
+      if (levelUpResult) {
+        addCredits(levelUpResult.creditReward, 'level_up');
       }
+
+      // Aggiungi 1 credito per aver guardato l'ad
+      addCredits(1, 'other');
+
+      // Sync ad watched + credit al server
+      const authState = useAuthStore.getState();
+      const isGuestUser = authState.token?.startsWith('guest_token_');
+      if (!isGuestUser) {
+        try {
+          await apiClient.post('/users/me/reward-credit', {});
+        } catch (e) {
+          console.log('[Home] Server reward-credit sync failed:', e);
+        }
+      }
+
+      setShowCreditModal(true);
     }
 
-    setShowCreditModal(true);
     setIsWatchingAd(false);
   };
 
@@ -426,24 +439,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       <AnimatedBackground />
 
       <View style={styles.content}>
-        {/* Banner Pubblicitario */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => Linking.openURL('mailto:app.rafflemania@gmail.com?subject=Richiesta%20Sponsorizzazione%20Banner%20RaffleMania')}
-          style={[styles.bannerContainer, {backgroundColor: colors.card}]}>
-          <View style={styles.bannerContent}>
-            <View style={styles.bannerIcon}>
-              <Ionicons name="megaphone" size={20} color={COLORS.primary} />
-            </View>
-            <View style={styles.bannerTextContainer}>
-              <Text style={[styles.bannerTitle, {color: colors.text}]}>Il tuo brand qui!</Text>
-              <Text style={[styles.bannerSubtitle, {color: colors.textMuted}]}>Sponsorizza la tua azienda</Text>
-            </View>
-            <View style={styles.bannerBadge}>
-              <Text style={styles.bannerBadgeText}>AD</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
+        {/* AdMob Banner */}
+          <AdBanner />
 
         {/* Top Bar: Progress + Buy Ticket Button */}
         <View style={[styles.topBar, {backgroundColor: colors.card}]}>
@@ -479,7 +476,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
             disabled={isBuyingTicket || !canBuyTicket || !currentPrize || isBettingLocked}
             activeOpacity={0.8}>
             <LinearGradient
-              colors={canBuyTicket && currentPrize && !isBettingLocked ? [COLORS.primary, '#FF8500'] : ['#666', '#555']}
+              colors={isBettingLocked || isBuyingTicket ? ['#666', '#555'] : [COLORS.primary, '#FF8500']}
               start={{x: 0, y: 0}}
               end={{x: 1, y: 1}}
               style={styles.buyTicketGradient}>
@@ -664,11 +661,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
           {/* Ticket Counter */}
           <View style={styles.ticketCounterRow}>
             <View style={styles.creditsDisplay}>
-              <SvgUri
-                uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg"
-                width={18}
-                height={18}
-              />
+              <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 24, height: 24}} />
               <Text style={[styles.creditsText, {color: colors.text}]}>
                 {user?.credits ?? 0} crediti
               </Text>
@@ -685,7 +678,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
             disabled={isWatchingAd || !currentPrize || isBettingLocked || cooldownSeconds > 0}
             activeOpacity={0.8}>
             <LinearGradient
-              colors={currentPrize && !isBettingLocked && cooldownSeconds === 0 ? [COLORS.primary, '#FF8500'] : ['#666', '#555']}
+              colors={isBettingLocked || isWatchingAd || cooldownSeconds > 0 ? ['#666', '#555'] : [COLORS.primary, '#FF8500']}
               start={{x: 0, y: 0}}
               end={{x: 1, y: 0}}
               style={styles.watchAdGradient}>
@@ -697,11 +690,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               ) : cooldownSeconds > 0 ? (
                 <Text style={styles.watchAdText}>{`ATTENDI ${formatAdCooldown(cooldownSeconds)}`}</Text>
               ) : (
-                <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
-                  <Text style={styles.watchAdText}>GUARDA ADS E RICEVI </Text>
-                  <SvgUri uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg" width={18} height={18} />
-                  <Text style={styles.watchAdText}> x1</Text>
-                </View>
+                <Text style={styles.watchAdText}>GUARDA ADS +1</Text>
+              )}
+              {!isBettingLocked && !isWatchingAd && cooldownSeconds <= 0 && (
+                <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 24, height: 24}} />
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -843,14 +835,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         onRequestClose={() => setShowCreditModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.creditModalContainer, {backgroundColor: colors.card}]}>
-            <View style={styles.creditModalIcon}>
-              <SvgUri
-                uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg"
-                width={64}
-                height={64}
-              />
+            <View style={styles.creditModalTitleRow}>
+              <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 40, height: 40}} />
+              <Text style={[styles.creditModalTitle, {color: colors.text}]}>+1 Credito!</Text>
             </View>
-            <Text style={[styles.creditModalTitle, {color: colors.text}]}>+1 Credito!</Text>
             <Text style={[styles.creditModalSubtitle, {color: colors.textMuted}]}>
               Hai ottenuto 1 credito guardando la pubblicità
             </Text>
@@ -996,12 +984,12 @@ const styles = StyleSheet.create({
   buyTicketButton: {
     borderRadius: RADIUS.lg,
     overflow: 'hidden',
+    alignSelf: 'stretch',
     shadowColor: COLORS.primary,
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
-    alignSelf: 'stretch',
   },
   buyTicketGradient: {
     flex: 1,
@@ -1311,14 +1299,16 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: `${COLORS.primary}40`,
   },
-  creditModalIcon: {
-    marginBottom: SPACING.md,
+  creditModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   creditModalTitle: {
     fontSize: FONT_SIZE.xxl,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    marginBottom: SPACING.xs,
   },
   creditModalSubtitle: {
     fontSize: FONT_SIZE.sm,

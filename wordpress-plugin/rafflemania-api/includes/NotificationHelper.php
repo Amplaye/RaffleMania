@@ -218,6 +218,34 @@ class NotificationHelper {
     }
 
     /**
+     * Send push notification to a user delayed by X minutes (uses OneSignal send_after)
+     */
+    public static function send_to_user_delayed($user_id, $title, $message, $delay_minutes, $data = []) {
+        $app_id = get_option('rafflemania_onesignal_app_id');
+        $api_key = get_option('rafflemania_onesignal_api_key');
+
+        if (empty($app_id) || empty($api_key)) {
+            error_log('[RaffleMania OneSignal] ERROR: app_id or api_key not configured');
+            return false;
+        }
+
+        // Calculate send_after time in UTC
+        $send_at = gmdate('Y-m-d H:i:s', time() + ($delay_minutes * 60)) . ' UTC';
+
+        $payload = [
+            'app_id' => $app_id,
+            'include_aliases' => ['external_id' => [(string)$user_id]],
+            'target_channel' => 'push',
+            'headings' => ['en' => $title, 'it' => $title],
+            'contents' => ['en' => $message, 'it' => $message],
+            'data' => $data,
+            'send_after' => $send_at,
+        ];
+
+        return self::send_request($payload, $api_key);
+    }
+
+    /**
      * Send HTTP request to OneSignal API
      */
     private static function send_request($payload, $api_key) {

@@ -12,14 +12,16 @@ import {
   Modal,
   Easing,
   Platform,
+  Alert,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {SvgUri} from 'react-native-svg';
 import {AnimatedBackground, FlipCountdownTimer} from '../../components/common';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
-import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS} from '../../store';
+import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, useAuthStore, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS} from '../../store';
+import {showRewardedAd, isRewardedAdReady, preloadRewardedAd, scheduleAdReadyNotification} from '../../services/adService';
+import apiClient from '../../services/apiClient';
 import {getTotalPoolTickets} from '../../services/mock';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
@@ -329,26 +331,44 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const handleWatchAd = async () => {
     if (!prize) return;
 
-    setIsWatchingAd(true);
-
-    // Simulate watching ad
-    await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
-
-    // Increment ads for this prize (questo può avviare il timer automaticamente)
-    incrementAdsForPrize(prize.id);
-    incrementAdsWatched();
-
-    // Nuovo sistema XP: 3 XP per pubblicità
-    const levelUpResult = addXPForAd();
-    if (levelUpResult) {
-      addCredits(levelUpResult.creditReward, 'level_up');
-      console.log(`Level up! Livello ${levelUpResult.newLevel} - Premio: ${levelUpResult.creditReward} crediti`);
+    if (!isRewardedAdReady()) {
+      preloadRewardedAd();
+      Alert.alert('Caricamento', 'La pubblicità non è ancora pronta. Riprova tra qualche secondo.');
+      return;
     }
 
-    // Aggiungi 1 credito per aver guardato l'ad (no biglietto)
-    addCredits(1, 'other');
+    setIsWatchingAd(true);
 
-    setShowCreditModal(true);
+    const earned = await showRewardedAd();
+
+    if (earned) {
+      // Increment ads for this prize (questo può avviare il timer automaticamente)
+      incrementAdsForPrize(prize.id);
+      incrementAdsWatched();
+      scheduleAdReadyNotification();
+
+      // Nuovo sistema XP: 3 XP per pubblicità
+      const levelUpResult = addXPForAd();
+      if (levelUpResult) {
+        addCredits(levelUpResult.creditReward, 'level_up');
+      }
+
+      // Aggiungi 1 credito per aver guardato l'ad (no biglietto)
+      addCredits(1, 'other');
+
+      // Sync ad watched + credit al server
+      const authState = useAuthStore.getState();
+      const isGuestUser = authState.token?.startsWith('guest_token_');
+      if (!isGuestUser) {
+        try {
+          await apiClient.post('/users/me/reward-credit', {});
+        } catch (e) {
+          console.log('[PrizeDetail] Server reward-credit sync failed:', e);
+        }
+      }
+
+      setShowCreditModal(true);
+    }
 
     setIsWatchingAd(false);
   };
@@ -650,10 +670,10 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
                 ) : adCooldownSeconds > 0 ? (
                   <Text style={styles.watchButtonText}>{`ATTENDI ${formatAdCooldown(adCooldownSeconds)}`}</Text>
                 ) : (
-                  <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
-                    <Text style={styles.watchButtonText}>GUARDA ADS E RICEVI </Text>
-                    <SvgUri uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg" width={18} height={18} />
-                    <Text style={styles.watchButtonText}> x1</Text>
+                  <View style={{flexDirection: 'row', alignItems: 'center', gap: 2}}>
+                    <Text style={styles.watchButtonText}>GUARDA ADS E RICEVI</Text>
+                    <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 24, height: 24}} />
+                    <Text style={styles.watchButtonText}>x1</Text>
                   </View>
                 )}
               </View>
@@ -688,14 +708,10 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
         onRequestClose={() => setShowCreditModal(false)}>
         <View style={styles.creditModalOverlay}>
           <View style={[styles.creditModalContainer, {backgroundColor: colors.card}]}>
-            <View style={styles.creditModalIcon}>
-              <SvgUri
-                uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg"
-                width={64}
-                height={64}
-              />
+            <View style={styles.creditModalTitleRow}>
+              <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 40, height: 40}} />
+              <Text style={[styles.creditModalTitle, {color: colors.text}]}>+1 Credito!</Text>
             </View>
-            <Text style={[styles.creditModalTitle, {color: colors.text}]}>+1 Credito!</Text>
             <Text style={[styles.creditModalSubtitle, {color: colors.textMuted}]}>
               Hai ottenuto 1 credito guardando la pubblicità
             </Text>
@@ -1402,14 +1418,16 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: `${COLORS.primary}40`,
   },
-  creditModalIcon: {
-    marginBottom: SPACING.md,
+  creditModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   creditModalTitle: {
     fontSize: 28,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    marginBottom: SPACING.xs,
   },
   creditModalSubtitle: {
     fontSize: FONT_SIZE.sm,

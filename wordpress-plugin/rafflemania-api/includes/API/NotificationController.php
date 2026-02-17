@@ -19,6 +19,11 @@ class NotificationController extends WP_REST_Controller {
         register_rest_route($this->namespace, '/' . $this->rest_base . '/broadcast', [
             ['methods' => 'POST', 'callback' => [$this, 'broadcast'], 'permission_callback' => [$this, 'check_admin']]
         ]);
+
+        // POST /notifications/schedule-ad-ready (user-authenticated)
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/schedule-ad-ready', [
+            ['methods' => 'POST', 'callback' => [$this, 'schedule_ad_ready'], 'permission_callback' => [$this, 'check_user_auth']]
+        ]);
     }
 
     public function check_admin(WP_REST_Request $request) {
@@ -29,6 +34,61 @@ class NotificationController extends WP_REST_Controller {
             return true;
         }
         return current_user_can('manage_options');
+    }
+
+    /**
+     * Check user auth via JWT Bearer token
+     */
+    public function check_user_auth(WP_REST_Request $request) {
+        $auth_header = $request->get_header('Authorization');
+        if (!$auth_header || !preg_match('/Bearer\s+(.*)$/i', $auth_header, $matches)) {
+            return false;
+        }
+        $token = $matches[1];
+        $secret = get_option('rafflemania_jwt_secret');
+        if (!$secret) return false;
+
+        $parts = explode('.', $token);
+        if (count($parts) !== 3) return false;
+
+        $payload_json = base64_decode(strtr($parts[1], '-_', '+/'));
+        $payload = json_decode($payload_json, true);
+        if (!$payload || empty($payload['user_id'])) return false;
+
+        // Verify signature
+        $header_payload = $parts[0] . '.' . $parts[1];
+        $expected_sig = rtrim(strtr(base64_encode(hash_hmac('sha256', $header_payload, $secret, true)), '+/', '-_'), '=');
+        if (!hash_equals($expected_sig, $parts[2])) return false;
+
+        $request->set_param('_auth_user_id', $payload['user_id']);
+        return true;
+    }
+
+    /**
+     * Schedule "ad ready" push notification after cooldown expires
+     */
+    public function schedule_ad_ready(WP_REST_Request $request) {
+        $user_id = $request->get_param('_auth_user_id');
+
+        // Get cooldown minutes from config
+        $limits_json = get_option('rafflemania_daily_limits', '');
+        $limits = $limits_json ? json_decode($limits_json, true) : null;
+        $cooldown_minutes = ($limits && isset($limits['cooldown_minutes'])) ? (int)$limits['cooldown_minutes'] : 20;
+
+        require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
+
+        $result = NotificationHelper::send_to_user_delayed(
+            $user_id,
+            'Pubblicita pronta!',
+            'Il cooldown e scaduto! Guarda una pubblicita per ottenere un nuovo biglietto.',
+            $cooldown_minutes,
+            ['type' => 'ad_ready']
+        );
+
+        return new WP_REST_Response([
+            'success' => (bool)$result,
+            'data' => ['delay_minutes' => $cooldown_minutes],
+        ]);
     }
 
     /**

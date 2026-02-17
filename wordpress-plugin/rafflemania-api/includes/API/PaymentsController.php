@@ -77,6 +77,24 @@ class PaymentsController extends WP_REST_Controller {
             ],
         ]);
 
+        // Create Stripe PaymentIntent for removing banner ads
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/remove-ads', [
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'create_remove_ads_intent'],
+                'permission_callback' => [$this, 'check_auth'],
+            ],
+        ]);
+
+        // Check ad-free status (for restore)
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/ad-free-status', [
+            [
+                'methods' => 'GET',
+                'callback' => [$this, 'get_ad_free_status'],
+                'permission_callback' => [$this, 'check_auth'],
+            ],
+        ]);
+
         // Restore IAP purchases
         register_rest_route($this->namespace, '/' . $this->rest_base . '/restore', [
             [
@@ -215,7 +233,7 @@ class PaymentsController extends WP_REST_Controller {
         // Get user email for Stripe
         $table_users = $wpdb->prefix . 'rafflemania_users';
         $user = $wpdb->get_row($wpdb->prepare(
-            "SELECT email, display_name FROM {$table_users} WHERE id = %d",
+            "SELECT email, username FROM {$table_users} WHERE id = %d",
             $user_id
         ));
 
@@ -230,6 +248,7 @@ class PaymentsController extends WP_REST_Controller {
             'body' => http_build_query([
                 'amount' => $amount_cents,
                 'currency' => 'eur',
+                'automatic_payment_methods[enabled]' => 'true',
                 'metadata[user_id]' => $user_id,
                 'metadata[package_id]' => $package_id,
                 'metadata[credits]' => $package->credits,
@@ -301,11 +320,12 @@ class PaymentsController extends WP_REST_Controller {
                 $intent = $event['data']['object'];
                 $transaction_id = $intent['id'];
                 $user_id = $intent['metadata']['user_id'] ?? null;
+                $payment_type = $intent['metadata']['type'] ?? 'credits';
                 $package_id = $intent['metadata']['package_id'] ?? null;
                 $credits = (int)($intent['metadata']['credits'] ?? 0);
 
-                if (!$user_id || !$credits) {
-                    error_log('[RaffleMania Payments] Webhook missing metadata: ' . $transaction_id);
+                if (!$user_id) {
+                    error_log('[RaffleMania Payments] Webhook missing user_id: ' . $transaction_id);
                     break;
                 }
 
@@ -320,6 +340,41 @@ class PaymentsController extends WP_REST_Controller {
                 }
 
                 $payment_id = $payment ? $payment->id : null;
+
+                // Handle remove_ads purchase
+                if ($payment_type === 'remove_ads') {
+                    if (!$payment) {
+                        $wpdb->insert($table_payments, [
+                            'user_id' => $user_id,
+                            'package_id' => 0,
+                            'payment_method' => 'stripe',
+                            'transaction_id' => $transaction_id,
+                            'amount' => $intent['amount'] / 100,
+                            'credits_awarded' => 0,
+                            'status' => 'pending',
+                        ]);
+                        $payment_id = $wpdb->insert_id;
+                    }
+
+                    // Set ad_free flag on user
+                    $table_users = $wpdb->prefix . 'rafflemania_users';
+                    $wpdb->update($table_users, ['ad_free' => 1], ['id' => $user_id]);
+
+                    $wpdb->update($table_payments, [
+                        'status' => 'verified',
+                        'verified_at' => current_time('mysql'),
+                        'verification_response' => json_encode(['stripe_event_id' => $event['id'], 'type' => 'remove_ads']),
+                    ], ['id' => $payment_id]);
+
+                    error_log('[RaffleMania Payments] Remove-ads payment verified: ' . $transaction_id . ' for user ' . $user_id);
+                    break;
+                }
+
+                // Standard credits purchase
+                if (!$credits) {
+                    error_log('[RaffleMania Payments] Webhook missing credits: ' . $transaction_id);
+                    break;
+                }
 
                 if (!$payment) {
                     // Create payment record if webhook arrives before frontend
@@ -493,6 +548,111 @@ class PaymentsController extends WP_REST_Controller {
                 'restored' => $restored,
                 'errors' => $errors,
             ],
+        ]);
+    }
+
+    /**
+     * Create Stripe PaymentIntent for removing banner ads (0.99€)
+     */
+    public function create_remove_ads_intent(WP_REST_Request $request) {
+        global $wpdb;
+
+        $user_id = $request->get_param('_auth_user_id');
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        // Check if user already has ad_free
+        $already_free = $wpdb->get_var($wpdb->prepare(
+            "SELECT ad_free FROM {$table_users} WHERE id = %d",
+            $user_id
+        ));
+
+        if ($already_free) {
+            return new WP_REST_Response([
+                'success' => true,
+                'data' => ['already_ad_free' => true],
+            ]);
+        }
+
+        $stripe_secret = get_option('rafflemania_stripe_secret_key');
+        if (empty($stripe_secret)) {
+            return new WP_Error('stripe_not_configured', 'Stripe non configurato', ['status' => 500]);
+        }
+
+        // Get user email
+        $user = $wpdb->get_row($wpdb->prepare(
+            "SELECT email, username FROM {$table_users} WHERE id = %d",
+            $user_id
+        ));
+
+        $amount_cents = 99; // 0.99€
+
+        // Create PaymentIntent via Stripe API
+        $response = wp_remote_post('https://api.stripe.com/v1/payment_intents', [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $stripe_secret,
+                'Content-Type' => 'application/x-www-form-urlencoded',
+            ],
+            'body' => http_build_query([
+                'amount' => $amount_cents,
+                'currency' => 'eur',
+                'automatic_payment_methods[enabled]' => 'true',
+                'metadata[user_id]' => $user_id,
+                'metadata[type]' => 'remove_ads',
+                'receipt_email' => $user->email ?? '',
+                'description' => 'RaffleMania - Rimozione Banner Pubblicitari',
+            ]),
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log('[RaffleMania Payments] Stripe API error: ' . $response->get_error_message());
+            return new WP_Error('stripe_error', 'Errore creazione pagamento', ['status' => 500]);
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if (isset($body['error'])) {
+            error_log('[RaffleMania Payments] Stripe error: ' . json_encode($body['error']));
+            return new WP_Error('stripe_error', $body['error']['message'] ?? 'Errore Stripe', ['status' => 400]);
+        }
+
+        // Create pending payment record
+        $table_payments = $wpdb->prefix . 'rafflemania_payments';
+        $wpdb->insert($table_payments, [
+            'user_id' => $user_id,
+            'package_id' => 0,
+            'payment_method' => 'stripe',
+            'transaction_id' => $body['id'],
+            'amount' => 0.99,
+            'credits_awarded' => 0,
+            'status' => 'pending',
+        ]);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => [
+                'client_secret' => $body['client_secret'],
+                'payment_intent_id' => $body['id'],
+                'publishable_key' => get_option('rafflemania_stripe_publishable_key'),
+            ],
+        ]);
+    }
+
+    /**
+     * Get ad-free status for current user
+     */
+    public function get_ad_free_status(WP_REST_Request $request) {
+        global $wpdb;
+        $user_id = $request->get_param('_auth_user_id');
+        $table_users = $wpdb->prefix . 'rafflemania_users';
+
+        $ad_free = $wpdb->get_var($wpdb->prepare(
+            "SELECT ad_free FROM {$table_users} WHERE id = %d",
+            $user_id
+        ));
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => ['adFree' => (bool) $ad_free],
         ]);
     }
 

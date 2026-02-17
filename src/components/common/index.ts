@@ -17,3 +17,5 @@ export {LevelUpOverlay} from './LevelUpOverlay';
 export {MissedExtractionModal} from './MissedExtractionModal';
 export {RewardPopupModal} from './RewardPopupModal';
 export type {RewardNotification} from './RewardPopupModal';
+export {AdBanner} from './AdBanner';
+export {VideoSplashScreen} from './VideoSplashScreen';

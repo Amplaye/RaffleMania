@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Image,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {SvgUri} from 'react-native-svg';
 import LinearGradient from 'react-native-linear-gradient';
 
-const CREDITS_ICON_URI = 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg';
+const CREDITS_ICON_URI = 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png';
 import {ScreenContainer, Card} from '../../components/common';
 import {useStreakStore, STREAK_REWARDS} from '../../store/useStreakStore';
 import {useAuthStore} from '../../store/useAuthStore';
@@ -329,7 +329,7 @@ export const StreakScreen: React.FC<StreakScreenProps> = ({navigation}) => {
                           </Text>
                           {isDay7 && dayReward.credits > 0 && !isMissed && (
                             <View style={styles.bonusTag}>
-                              <SvgUri uri={CREDITS_ICON_URI} width={12} height={12} />
+                              <Image source={{uri: CREDITS_ICON_URI}} style={{width: 12, height: 12}} />
                               <Text style={styles.bonusText}>+{dayReward.credits}</Text>
                             </View>
                           )}

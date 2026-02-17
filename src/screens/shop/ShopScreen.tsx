@@ -11,11 +11,12 @@ import {
   Modal,
   Linking,
   ActivityIndicator,
+  Image,
+  TurboModuleRegistry,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
-import {SvgUri} from 'react-native-svg';
-import {AnimatedBackground} from '../../components/common';
+import {AnimatedBackground, AdBanner} from '../../components/common';
 import {PaymentMethodSheet} from '../../components/shop/PaymentMethodSheet';
 import apiClient from '../../services/apiClient';
 import {
@@ -26,6 +27,7 @@ import {
   restorePurchases,
   setupPurchaseListeners,
 } from '../../services/paymentService';
+import {showRewardedAd, isRewardedAdReady, preloadRewardedAd, scheduleAdReadyNotification} from '../../services/adService';
 import {API_CONFIG} from '../../utils/constants';
 import {useAuthStore, useCreditsStore, useTicketsStore} from '../../store';
 import {useGameConfigStore, ShopPackage, DEFAULT_SHOP_PACKAGES} from '../../store/useGameConfigStore';
@@ -38,7 +40,11 @@ import {
   FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
-import {type Purchase, type PurchaseError, ErrorCode} from 'react-native-iap';
+// Types used inline - react-native-iap is lazy-loaded via paymentService to avoid
+// fatal errors when NitroModules native binary is missing
+type Purchase = {productId: string; purchaseToken?: string; transactionId?: string};
+type PurchaseError = {code: string; message: string};
+const ErrorCode = {UserCancelled: 'user-cancelled'} as const;
 
 interface ShopScreenProps {
   navigation: any;
@@ -184,9 +190,68 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
         {text: 'Annulla', style: 'cancel'},
         {
           text: 'Acquista (0.99€)',
-          onPress: () => {
-            // TODO: Implement actual purchase for ad removal
-            Alert.alert('Successo!', 'I banner pubblicitari sono stati rimossi!');
+          onPress: async () => {
+            setIsPurchasing(true);
+            try {
+              // Create PaymentIntent on server for remove-ads
+              const response = await apiClient.post('/payments/remove-ads');
+              const {client_secret, publishable_key, already_ad_free} = response.data.data;
+
+              if (already_ad_free) {
+                useAuthStore.getState().updateUser({adFree: true});
+                Alert.alert('Info', 'I banner pubblicitari sono già stati rimossi!');
+                return;
+              }
+
+              // Check Stripe native module
+              const stripeSdkAvailable = TurboModuleRegistry.get('StripeSdk') != null;
+              if (!stripeSdkAvailable) {
+                Alert.alert('Non disponibile', 'Il pagamento con carta non è disponibile su questo dispositivo.');
+                return;
+              }
+
+              const stripe = require('@stripe/stripe-react-native');
+
+              await stripe.initStripe({
+                publishableKey: publishable_key,
+                merchantIdentifier: 'merchant.com.rafflemania',
+              });
+
+              const {error: initError} = await stripe.initPaymentSheet({
+                paymentIntentClientSecret: client_secret,
+                merchantDisplayName: 'RaffleMania',
+                style: 'automatic',
+                returnURL: 'rafflemania://stripe-redirect',
+                applePay: {merchantCountryCode: 'IT'},
+                googlePay: {merchantCountryCode: 'IT', testEnv: false},
+              });
+
+              if (initError) {
+                Alert.alert('Errore', initError.message || 'Impossibile inizializzare il pagamento.');
+                return;
+              }
+
+              const {error} = await stripe.presentPaymentSheet();
+
+              if (error) {
+                if (error.code !== 'Canceled') {
+                  Alert.alert('Errore', error.message || 'Pagamento non riuscito.');
+                }
+              } else {
+                // Payment confirmed - ad_free will be set via webhook
+                // Optimistic update + refresh after delay
+                useAuthStore.getState().updateUser({adFree: true});
+                setTimeout(() => {
+                  useAuthStore.getState().refreshUserData();
+                }, 2000);
+                Alert.alert('Successo!', 'I banner pubblicitari sono stati rimossi!');
+              }
+            } catch (error: any) {
+              console.log('[Shop] Remove-ads purchase error:', error);
+              Alert.alert('Errore', 'Pagamento non riuscito. Riprova.');
+            } finally {
+              setIsPurchasing(false);
+            }
           },
         },
       ],
@@ -224,13 +289,45 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
 
     try {
       // Create PaymentIntent on server
-      const {clientSecret} = await createStripeIntent(selectedPackage.id);
+      const {clientSecret, publishableKey} = await createStripeIntent(selectedPackage.id);
 
-      // Dynamically load Stripe SDK to avoid crash if native module not available
+      // Check if Stripe native module is available before loading
+      const stripeSdkAvailable = TurboModuleRegistry.get('StripeSdk') != null;
+      if (!stripeSdkAvailable) {
+        Alert.alert('Non disponibile', 'Il pagamento con carta non è disponibile su questo dispositivo. Ricompila l\'app nativa.');
+        return;
+      }
+
       const stripe = require('@stripe/stripe-react-native');
-      const {error} = await stripe.confirmPayment(clientSecret, {
-        paymentMethodType: 'Card',
+
+      // Initialize Stripe with publishable key from server
+      await stripe.initStripe({
+        publishableKey,
+        merchantIdentifier: 'merchant.com.rafflemania',
       });
+
+      // Use Payment Sheet for standard card input UI
+      const {error: initError} = await stripe.initPaymentSheet({
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: 'RaffleMania',
+        style: 'automatic',
+        returnURL: 'rafflemania://stripe-redirect',
+        applePay: {
+          merchantCountryCode: 'IT',
+        },
+        googlePay: {
+          merchantCountryCode: 'IT',
+          testEnv: false,
+        },
+      });
+
+      if (initError) {
+        console.log('[Shop] Stripe initPaymentSheet error:', initError);
+        Alert.alert('Errore', initError.message || 'Impossibile inizializzare il pagamento.');
+        return;
+      }
+
+      const {error} = await stripe.presentPaymentSheet();
 
       if (error) {
         console.log('[Shop] Stripe error:', error.code, error.message);
@@ -248,7 +345,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
     } catch (error: any) {
       console.log('[Shop] Stripe purchase error:', error);
       if (error?.message?.includes('StripeSdk') || error?.message?.includes('StripeProvider')) {
-        Alert.alert('Non disponibile', 'Il pagamento con carta non è ancora disponibile. Usa Apple Pay o Google Pay.');
+        Alert.alert('Non disponibile', 'Il pagamento con carta non è ancora disponibile su questo dispositivo.');
       } else {
         Alert.alert('Errore', 'Pagamento non riuscito. Riprova.');
       }
@@ -276,24 +373,35 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
   };
 
   const handleWatchAd = async () => {
-    setIsWatchingAd(true);
-    // Simulate watching ad
-    await new Promise<void>(resolve => setTimeout(resolve, 2000));
-    addCredits(1, 'other');
-    incrementAdsWatched();
+    if (!isRewardedAdReady()) {
+      preloadRewardedAd();
+      Alert.alert('Caricamento', 'La pubblicità non è ancora pronta. Riprova tra qualche secondo.');
+      return;
+    }
 
-    // Sync to server for authenticated users
-    const isGuestUser = token?.startsWith('guest_token_');
-    if (!API_CONFIG.USE_MOCK_DATA && !isGuestUser) {
-      try {
-        await apiClient.post('/users/me/credits/purchase', {credits: 1});
-      } catch (e) {
-        console.log('[Shop] Server ad credit sync failed:', e);
+    setIsWatchingAd(true);
+
+    const earned = await showRewardedAd();
+
+    if (earned) {
+      addCredits(1, 'other');
+      incrementAdsWatched();
+      scheduleAdReadyNotification();
+
+      // Sync ad watched + credit al server
+      const isGuestUser = token?.startsWith('guest_token_');
+      if (!isGuestUser) {
+        try {
+          await apiClient.post('/users/me/reward-credit', {});
+        } catch (e) {
+          console.log('[Shop] Server reward-credit sync failed:', e);
+        }
       }
+
+      setShowCreditModal(true);
     }
 
     setIsWatchingAd(false);
-    setShowCreditModal(true);
   };
 
   return (
@@ -308,24 +416,8 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
-          {/* Banner Pubblicitario */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => Linking.openURL('mailto:app.rafflemania@gmail.com?subject=Richiesta%20Sponsorizzazione%20Banner%20RaffleMania')}
-            style={[styles.bannerContainer, {backgroundColor: colors.card}]}>
-            <View style={styles.bannerContent}>
-              <View style={styles.bannerIcon}>
-                <Ionicons name="megaphone" size={20} color={COLORS.primary} />
-              </View>
-              <View style={styles.bannerTextContainer}>
-                <Text style={[styles.bannerTitle, {color: colors.text}]}>Il tuo brand qui!</Text>
-                <Text style={[styles.bannerSubtitle, {color: colors.textMuted}]}>Sponsorizza la tua azienda</Text>
-              </View>
-              <View style={styles.bannerBadge}>
-                <Text style={styles.bannerBadgeText}>AD</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
+          {/* AdMob Banner */}
+          <AdBanner />
 
           {/* Info Row: Crediti Residui + Pagamenti Accettati */}
           <View style={styles.infoRow}>
@@ -355,32 +447,34 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
               />
             ))}
           </View>
+
+          {/* Restore Purchases (required by Apple) */}
+          <TouchableOpacity
+            style={styles.restoreButton}
+            onPress={handleRestorePurchases}
+            disabled={isRestoring}
+            activeOpacity={0.7}>
+            <Text style={[styles.restoreText, {color: colors.textMuted}]}>
+              {isRestoring ? 'Ripristino in corso...' : 'Ripristina acquisti'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
       {/* Bottom Buttons */}
       <View style={styles.bottomSection}>
-        {/* Restore Purchases Button (required by Apple) */}
-        <TouchableOpacity
-          style={[styles.restoreButton]}
-          onPress={handleRestorePurchases}
-          disabled={isRestoring}
-          activeOpacity={0.7}>
-          <Text style={[styles.restoreText, {color: colors.textMuted}]}>
-            {isRestoring ? 'Ripristino in corso...' : 'Ripristina acquisti'}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Remove Banner Button */}
-        <TouchableOpacity
-          style={[styles.removeBannerButton, {backgroundColor: colors.card}]}
-          onPress={handleRemoveBanner}
-          activeOpacity={0.8}>
-          <Ionicons name="close-circle-outline" size={20} color={COLORS.primary} />
-          <Text style={[styles.removeBannerText, {color: colors.text}]}>
-            RIMUOVI BANNER PUBBLICITÀ
-          </Text>
-        </TouchableOpacity>
+        {/* Remove Banner Button (hidden if already ad-free) */}
+        {!user?.adFree && (
+          <TouchableOpacity
+            style={[styles.removeBannerButton, {backgroundColor: colors.card}]}
+            onPress={handleRemoveBanner}
+            activeOpacity={0.8}>
+            <Ionicons name="close-circle-outline" size={20} color={COLORS.primary} />
+            <Text style={[styles.removeBannerText, {color: colors.text}]}>
+              RIMUOVI BANNER PUBBLICITÀ
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Watch Ad Button */}
         <TouchableOpacity
@@ -399,10 +493,10 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
             ) : cooldownSeconds > 0 ? (
               <Text style={styles.watchAdText}>{`ATTENDI ${formatAdCooldown(cooldownSeconds)}`}</Text>
             ) : (
-              <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
-                <Text style={styles.watchAdText}>GUARDA ADS E RICEVI </Text>
-                <SvgUri uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg" width={18} height={18} />
-                <Text style={styles.watchAdText}> x1</Text>
+              <View style={{flexDirection: 'row', alignItems: 'center', gap: 2}}>
+                <Text style={styles.watchAdText}>GUARDA ADS E RICEVI</Text>
+                <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 24, height: 24}} />
+                <Text style={styles.watchAdText}>x1</Text>
               </View>
             )}
           </LinearGradient>
@@ -437,14 +531,10 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
         onRequestClose={() => setShowCreditModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.creditModalContainer, {backgroundColor: colors.card}]}>
-            <View style={styles.creditModalIcon}>
-              <SvgUri
-                uri="https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-svg.svg"
-                width={64}
-                height={64}
-              />
+            <View style={styles.creditModalTitleRow}>
+              <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 40, height: 40}} />
+              <Text style={[styles.creditModalTitle, {color: colors.text}]}>+1 Credito!</Text>
             </View>
-            <Text style={[styles.creditModalTitle, {color: colors.text}]}>+1 Credito!</Text>
             <Text style={[styles.creditModalSubtitle, {color: colors.textMuted}]}>
               Hai ottenuto 1 credito guardando la pubblicità
             </Text>
@@ -688,14 +778,16 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: `${COLORS.primary}40`,
   },
-  creditModalIcon: {
-    marginBottom: SPACING.md,
+  creditModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   creditModalTitle: {
     fontSize: FONT_SIZE.xxl,
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
-    marginBottom: SPACING.xs,
   },
   creditModalSubtitle: {
     fontSize: FONT_SIZE.sm,
@@ -730,7 +822,8 @@ const styles = StyleSheet.create({
   // Restore button
   restoreButton: {
     alignItems: 'center',
-    paddingVertical: SPACING.xs,
+    paddingVertical: SPACING.sm,
+    marginTop: SPACING.md,
   },
   restoreText: {
     fontSize: FONT_SIZE.xs,
