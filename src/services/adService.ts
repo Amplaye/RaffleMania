@@ -53,6 +53,9 @@ export async function initializeAds(): Promise<boolean> {
 let rewardedAd: RewardedAd | null = null;
 let isRewardedLoading = false;
 let isRewardedReady = false;
+let rewardedRetryTimeout: ReturnType<typeof setTimeout> | null = null;
+let rewardedRetryCount = 0;
+const REWARDED_RETRY_DELAYS = [5000, 10000, 20000, 30000]; // escalating retry
 
 /**
  * Preload a rewarded ad so it's ready when the user taps "Watch Ad"
@@ -67,6 +70,7 @@ export function preloadRewardedAd(): void {
   rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
     isRewardedLoading = false;
     isRewardedReady = true;
+    rewardedRetryCount = 0; // reset on success
     console.log('[AdService] Rewarded ad loaded');
   });
 
@@ -74,6 +78,16 @@ export function preloadRewardedAd(): void {
     isRewardedLoading = false;
     isRewardedReady = false;
     console.log('[AdService] Rewarded ad failed to load:', error.message);
+
+    // Auto-retry with escalating delay
+    const delay = REWARDED_RETRY_DELAYS[Math.min(rewardedRetryCount, REWARDED_RETRY_DELAYS.length - 1)];
+    rewardedRetryCount++;
+    if (rewardedRetryTimeout) clearTimeout(rewardedRetryTimeout);
+    rewardedRetryTimeout = setTimeout(() => {
+      rewardedRetryTimeout = null;
+      preloadRewardedAd();
+    }, delay);
+    console.log(`[AdService] Will retry in ${delay / 1000}s (attempt ${rewardedRetryCount})`);
   });
 
   rewardedAd.load();

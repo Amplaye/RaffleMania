@@ -246,6 +246,38 @@ class NotificationHelper {
     }
 
     /**
+     * Cancel a scheduled OneSignal notification by its ID
+     */
+    public static function cancel_notification($notification_id) {
+        $app_id = get_option('rafflemania_onesignal_app_id');
+        $api_key = get_option('rafflemania_onesignal_api_key');
+
+        if (empty($app_id) || empty($api_key) || empty($notification_id)) {
+            return false;
+        }
+
+        $url = "https://api.onesignal.com/notifications/{$notification_id}?app_id={$app_id}";
+        $auth_header = self::get_auth_header($api_key);
+
+        $response = wp_remote_request($url, [
+            'method' => 'DELETE',
+            'headers' => [
+                'Authorization' => $auth_header,
+            ],
+            'timeout' => 10,
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log('[RaffleMania OneSignal] Cancel error: ' . $response->get_error_message());
+            return false;
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        error_log('[RaffleMania OneSignal] Cancelled notification ' . $notification_id . ' (HTTP ' . $status_code . ')');
+        return $status_code >= 200 && $status_code < 300;
+    }
+
+    /**
      * Send HTTP request to OneSignal API
      */
     private static function send_request($payload, $api_key) {

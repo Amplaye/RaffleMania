@@ -440,7 +440,7 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
       {/* Fixed Header with Banner and Tabs */}
       <View style={styles.fixedHeader}>
         {/* AdMob Banner */}
-          <AdBanner />
+          <AdBanner style={{marginHorizontal: -24}} />
 
         <AnimatedTab
           activeTab={activeTab}
@@ -525,11 +525,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: 4,
     position: 'relative',
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.15,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 8,
   },
   tabIndicator: {
     position: 'absolute',
@@ -570,12 +570,11 @@ const styles = StyleSheet.create({
   prizeGroupCard: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.xl,
-    overflow: 'hidden',
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.15,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 8,
   },
   prizeGroupHeader: {
     flexDirection: 'row',
@@ -652,11 +651,11 @@ const styles = StyleSheet.create({
   },
   winCardGradient: {
     borderRadius: RADIUS.xl,
-    shadowColor: '#FFD700',
-    shadowOffset: {width: 0, height: 4},
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 8,
   },
   winCardContent: {
     flexDirection: 'row',
@@ -717,11 +716,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.lg,
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.15,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 8,
   },
   emptyTitle: {
     fontSize: FONT_SIZE.lg,

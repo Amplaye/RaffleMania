@@ -16,12 +16,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_xp_nonce'
         $xp_referral = max(0, intval($_POST['xp_referral']));
         $xp_win_prize = max(0, intval($_POST['xp_win_prize']));
 
+        $xp_day7_streak = max(0, intval($_POST['xp_day7_streak']));
+
         update_option('rafflemania_xp_watch_ad', $xp_watch_ad);
         update_option('rafflemania_xp_credit_ticket', $xp_credit_ticket);
         update_option('rafflemania_xp_daily_streak', $xp_daily_streak);
+        update_option('rafflemania_xp_day7_streak', $xp_day7_streak);
         update_option('rafflemania_xp_purchase_credits', $xp_purchase_credits);
         update_option('rafflemania_xp_referral', $xp_referral);
         update_option('rafflemania_xp_win_prize', $xp_win_prize);
+
+        // --- Sync XP values to streak_config JSON ---
+        $existing_streak = json_decode(get_option('rafflemania_streak_config', '{}'), true) ?: [];
+        $existing_streak['daily_xp'] = $xp_daily_streak;
+        $existing_streak['day_7_xp'] = $xp_day7_streak;
+        update_option('rafflemania_streak_config', wp_json_encode($existing_streak));
 
         // --- Sync to JSON option (used by /settings/game-config endpoint) ---
         $existing_xp_json = json_decode(get_option('rafflemania_xp_rewards', '{}'), true) ?: [];
@@ -79,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_xp_nonce'
 $xp_watch_ad = (int) get_option('rafflemania_xp_watch_ad', 10);
 $xp_credit_ticket = (int) get_option('rafflemania_xp_credit_ticket', 5);
 $xp_daily_streak = (int) get_option('rafflemania_xp_daily_streak', 10);
+$xp_day7_streak = (int) get_option('rafflemania_xp_day7_streak', 10);
 $xp_purchase_credits = (int) get_option('rafflemania_xp_purchase_credits', 25);
 $xp_referral = (int) get_option('rafflemania_xp_referral', 50);
 $xp_win_prize = (int) get_option('rafflemania_xp_win_prize', 250);
@@ -278,6 +288,10 @@ $ad_cooldown_minutes = (int) ($limits_raw['cooldown_minutes'] ?? $limits_raw['ad
                 <div class="label">XP Streak Base</div>
             </div>
             <div class="xp-summary-item">
+                <div class="value"><?php echo $xp_day7_streak; ?></div>
+                <div class="label">XP Bonus Giorno 7</div>
+            </div>
+            <div class="xp-summary-item">
                 <div class="value"><?php echo $xp_purchase_credits; ?></div>
                 <div class="label">XP Acquisto Crediti</div>
             </div>
@@ -339,7 +353,12 @@ $ad_cooldown_minutes = (int) ($limits_raw['cooldown_minutes'] ?? $limits_raw['ad
                 <div class="xp-field">
                     <label><span class="dashicons dashicons-calendar-alt"></span> Streak Giornaliero</label>
                     <input type="number" name="xp_daily_streak" value="<?php echo $xp_daily_streak; ?>" min="0" max="9999">
-                    <span class="hint">XP base per streak (base + giorno*2)</span>
+                    <span class="hint">XP ottenuti per ogni check-in giornaliero</span>
+                </div>
+                <div class="xp-field">
+                    <label><span class="dashicons dashicons-awards"></span> Bonus XP Giorno 7</label>
+                    <input type="number" name="xp_day7_streak" value="<?php echo $xp_day7_streak; ?>" min="0" max="9999">
+                    <span class="hint">Bonus XP al settimo giorno consecutivo</span>
                 </div>
                 <div class="xp-field">
                     <label><span class="dashicons dashicons-cart"></span> Acquisto Crediti</label>

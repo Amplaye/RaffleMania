@@ -19,6 +19,7 @@ import {
   FONT_FAMILY,
   RADIUS,
 } from '../../utils/constants';
+import {useGameConfigStore} from '../../store/useGameConfigStore';
 
 export interface TicketSuccessInfo {
   ticketNumbers: number[];
@@ -85,6 +86,8 @@ export const TicketSuccessModal: React.FC<TicketSuccessModalProps> = ({
       });
     }
   }, [visible, scaleAnim, opacityAnim, ticketScaleAnim, confettiAnim]);
+
+  const xpRewards = useGameConfigStore(s => s.xpRewards);
 
   if (!ticketInfo) return null;
 
@@ -178,6 +181,14 @@ export const TicketSuccessModal: React.FC<TicketSuccessModalProps> = ({
               </Text>
             </View>
           )}
+
+          {/* XP Info */}
+          <View style={styles.xpInfoContainer}>
+            <Ionicons name="star" size={16} color="#FFD700" />
+            <Text style={styles.xpInfoText}>
+              Ogni biglietto riscattato ti fa guadagnare {xpRewards.PURCHASE_TICKET} punti esperienza
+            </Text>
+          </View>
 
           {/* Good Luck Message */}
           <View style={styles.luckContainer}>
@@ -338,6 +349,22 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.medium,
     color: COLORS.primary,
+  },
+  xpInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: '#FFD70015',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.lg,
+    marginBottom: SPACING.md,
+  },
+  xpInfoText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.medium,
+    color: COLORS.textMuted,
+    flex: 1,
   },
   luckContainer: {
     flexDirection: 'row',

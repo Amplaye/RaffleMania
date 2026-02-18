@@ -143,9 +143,9 @@ export const SupportChatScreen: React.FC<Props> = ({navigation}) => {
     if (isAdmin) return null;
     return (
       <View style={[styles.supportHoursBubble, {backgroundColor: isDark ? '#2A2A2A' : '#F0F0F0'}]}>
-        <Ionicons name="time-outline" size={16} color={colors.textSecondary} style={{marginRight: 6}} />
+        <Ionicons name="time-outline" size={14} color={colors.textSecondary} style={{marginRight: 6}} />
         <Text style={[styles.supportHoursText, {color: isDark ? '#CCCCCC' : '#555555'}]}>
-          Il supporto sarà operativo dalle ore 09:00 alle ore 00:00, cercheremo di rispondere sempre il prima possibile, grazie.
+          Supporto operativo dalle 09:00 alle 00:00
         </Text>
       </View>
     );
@@ -200,6 +200,9 @@ export const SupportChatScreen: React.FC<Props> = ({navigation}) => {
         <View style={{width: 40}} />
       </View>
 
+      {/* Support hours - fixed at top */}
+      {renderSupportHours()}
+
       {/* Messages */}
       {isLoading && messages.length === 0 ? (
         <View style={styles.loadingContainer}>
@@ -215,7 +218,6 @@ export const SupportChatScreen: React.FC<Props> = ({navigation}) => {
             styles.messagesList,
             messages.length === 0 && styles.emptyList,
           ]}
-          ListHeaderComponent={renderSupportHours}
           ListEmptyComponent={renderEmptyChat}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => {
@@ -257,6 +259,8 @@ export const SupportChatScreen: React.FC<Props> = ({navigation}) => {
             multiline
             maxLength={1000}
             editable={!isSending}
+            submitBehavior="submit"
+            onSubmitEditing={handleSend}
           />
         </View>
         <TouchableOpacity
@@ -420,17 +424,18 @@ const styles = StyleSheet.create({
   supportHoursBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.sm,
+    justifyContent: 'center',
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
     borderRadius: RADIUS.md,
-    marginBottom: SPACING.md,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
     alignSelf: 'center',
-    maxWidth: '90%',
   },
   supportHoursText: {
-    flex: 1,
     fontSize: FONT_SIZE.xs,
     fontFamily: FONT_FAMILY.regular,
-    lineHeight: 18,
+    textAlign: 'center',
   },
   sendButton: {
     width: 44,

@@ -19,7 +19,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import {AnimatedBackground, FlipCountdownTimer} from '../../components/common';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
-import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, useAuthStore, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS} from '../../store';
+import {usePrizesStore, useTicketsStore, useLevelStore, useCreditsStore, useAuthStore, useGameConfigStore, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS} from '../../store';
 import {showRewardedAd, isRewardedAdReady, preloadRewardedAd, scheduleAdReadyNotification} from '../../services/adService';
 import apiClient from '../../services/apiClient';
 import {getTotalPoolTickets} from '../../services/mock';
@@ -50,6 +50,7 @@ const TicketSuccessModal: React.FC<{
   ticketInfo: TicketModalInfo | null;
   onClose: () => void;
 }> = ({visible, ticketInfo, onClose}) => {
+  const xpRewards = useGameConfigStore(s => s.xpRewards);
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const ticketScaleAnim = useRef(new Animated.Value(0.8)).current;
@@ -141,6 +142,14 @@ const TicketSuccessModal: React.FC<{
               </View>
             </LinearGradient>
           </Animated.View>
+
+          {/* XP Info */}
+          <View style={styles.modalXPContainer}>
+            <Ionicons name="star" size={16} color="#FFD700" />
+            <Text style={styles.modalXPText}>
+              Ogni biglietto riscattato ti fa guadagnare {xpRewards.PURCHASE_TICKET} punti esperienza
+            </Text>
+          </View>
 
           {/* Good Luck Message */}
           <View style={styles.modalLuckContainer}>
@@ -430,7 +439,7 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
             styles.imageCard,
             neon.glowSubtle,
             {
-              backgroundColor: colors.card,
+              backgroundColor: '#FFF5E6',
               opacity: fadeAnim,
               transform: [{scale: imageScaleAnim}],
             },
@@ -672,8 +681,8 @@ export const PrizeDetailScreen: React.FC<Props> = ({route, navigation}) => {
                 ) : (
                   <View style={{flexDirection: 'row', alignItems: 'center', gap: 2}}>
                     <Text style={styles.watchButtonText}>GUARDA ADS E RICEVI</Text>
-                    <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 24, height: 24}} />
-                    <Text style={styles.watchButtonText}>x1</Text>
+                    <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 36, height: 36, marginRight: -10}} />
+                    <Text style={styles.watchButtonText}>+1</Text>
                   </View>
                 )}
               </View>
@@ -776,15 +785,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: SPACING.md,
     position: 'relative',
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   imageContainer: {
     height: 250,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFF5E6',
     alignItems: 'center',
     justifyContent: 'center',
     padding: SPACING.lg,
@@ -798,11 +807,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.2,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 8,
   },
   prizeName: {
     fontSize: FONT_SIZE.xxl,
@@ -868,6 +877,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   myTicketHeader: {
     flexDirection: 'row',
@@ -990,6 +1004,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   progressHeader: {
     flexDirection: 'row',
@@ -1063,11 +1082,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.2,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 8,
   },
   sectionTitle: {
     fontSize: FONT_SIZE.lg,
@@ -1341,6 +1360,22 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontFamily: FONT_FAMILY.medium,
     color: 'rgba(255, 255, 255, 0.85)',
+  },
+  modalXPContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: '#FFD70015',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.lg,
+    marginBottom: SPACING.md,
+  },
+  modalXPText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.medium,
+    color: COLORS.textMuted,
+    flex: 1,
   },
   modalLuckContainer: {
     flexDirection: 'row',

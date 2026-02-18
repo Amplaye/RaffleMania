@@ -61,7 +61,7 @@ class SettingsController extends WP_REST_Controller {
         global $wpdb;
         $table = $wpdb->prefix . 'rafflemania_levels';
         $levels = $wpdb->get_results(
-            "SELECT level, name, min_xp, max_xp, icon, color, credit_reward
+            "SELECT level, name, min_xp, max_xp, icon, color, credit_reward, benefits
              FROM {$table}
              WHERE is_active = 1
              ORDER BY sort_order ASC"
@@ -69,6 +69,7 @@ class SettingsController extends WP_REST_Controller {
 
         // Cast numeric fields
         $levels = array_map(function($l) {
+            $benefits = !empty($l->benefits) ? json_decode($l->benefits, true) : [];
             return [
                 'level' => (int)$l->level,
                 'name' => $l->name,
@@ -77,6 +78,7 @@ class SettingsController extends WP_REST_Controller {
                 'icon' => $l->icon,
                 'color' => $l->color,
                 'creditReward' => (int)$l->credit_reward,
+                'benefits' => is_array($benefits) ? $benefits : [],
             ];
         }, $levels);
 

@@ -975,7 +975,16 @@ class UsersController extends WP_REST_Controller {
         $type = $request->get_param('type') ?: 'xp';
         $limit = $request->get_param('limit') ?: 50;
 
-        $order_by = $type === 'wins' ? 'wins_count' : 'xp';
+        // Cache key based on type and limit - expires at next midnight
+        $cache_key = 'rafflemania_leaderboard_' . $type . '_' . $limit;
+        $cached = get_transient($cache_key);
+
+        if ($cached !== false) {
+            return new WP_REST_Response([
+                'success' => true,
+                'data' => $cached
+            ]);
+        }
 
         if ($type === 'wins') {
             $table_winners = $wpdb->prefix . 'rafflemania_winners';
@@ -1016,12 +1025,21 @@ class UsersController extends WP_REST_Controller {
             ];
         }
 
+        $data = [
+            'type' => $type,
+            'leaderboard' => $leaderboard
+        ];
+
+        // Cache until next midnight Italian time (Europe/Rome)
+        $italy_tz = new \DateTimeZone('Europe/Rome');
+        $now_italy = new \DateTime('now', $italy_tz);
+        $next_midnight_italy = new \DateTime('tomorrow midnight', $italy_tz);
+        $ttl = $next_midnight_italy->getTimestamp() - $now_italy->getTimestamp();
+        set_transient($cache_key, $data, max($ttl, 60));
+
         return new WP_REST_Response([
             'success' => true,
-            'data' => [
-                'type' => $type,
-                'leaderboard' => $leaderboard
-            ]
+            'data' => $data
         ]);
     }
 

@@ -5,17 +5,17 @@ import apiClient from '../services/apiClient';
 
 // Hardcoded fallback defaults (same as DB seed values)
 export const DEFAULT_LEVELS = [
-  {level: 0, name: 'Principiante', minXP: 0, maxXP: 1000, icon: 'leaf', color: '#FF6B00', creditReward: 0},
-  {level: 1, name: 'Novizio', minXP: 1000, maxXP: 2200, icon: 'flash', color: '#FF6B00', creditReward: 5},
-  {level: 2, name: 'Apprendista', minXP: 2200, maxXP: 3800, icon: 'compass', color: '#FF6B00', creditReward: 10},
-  {level: 3, name: 'Esploratore', minXP: 3800, maxXP: 5800, icon: 'map', color: '#FF6B00', creditReward: 20},
-  {level: 4, name: 'Avventuriero', minXP: 5800, maxXP: 8300, icon: 'shield', color: '#FF6B00', creditReward: 35},
-  {level: 5, name: 'Veterano', minXP: 8300, maxXP: 11500, icon: 'medal', color: '#FF6B00', creditReward: 50},
-  {level: 6, name: 'Campione', minXP: 11500, maxXP: 15500, icon: 'ribbon', color: '#FF6B00', creditReward: 65},
-  {level: 7, name: 'Maestro', minXP: 15500, maxXP: 20500, icon: 'star', color: '#FF6B00', creditReward: 80},
-  {level: 8, name: 'Leggenda', minXP: 20500, maxXP: 26500, icon: 'diamond', color: '#FF6B00', creditReward: 90},
-  {level: 9, name: 'Mito', minXP: 26500, maxXP: 33500, icon: 'flame', color: '#FF6B00', creditReward: 95},
-  {level: 10, name: 'Divinita', minXP: 33500, maxXP: 999999, icon: 'trophy', color: '#FFD700', creditReward: 100},
+  {level: 0, name: 'Principiante', minXP: 0, maxXP: 1000, icon: 'leaf', color: '#FF6B00', creditReward: 0, benefits: []},
+  {level: 1, name: 'Novizio', minXP: 1000, maxXP: 2200, icon: 'flash', color: '#FF6B00', creditReward: 5, benefits: ['Accesso alle estrazioni base', 'Guadagna XP guardando ads']},
+  {level: 2, name: 'Apprendista', minXP: 2200, maxXP: 3800, icon: 'compass', color: '#FF6B00', creditReward: 10, benefits: ['Sblocca badge Apprendista', 'Accesso notifiche prioritarie']},
+  {level: 3, name: 'Esploratore', minXP: 3800, maxXP: 5800, icon: 'map', color: '#FF6B00', creditReward: 20, benefits: ['Accesso anticipato nuovi premi', 'Sblocca badge Esploratore']},
+  {level: 4, name: 'Avventuriero', minXP: 5800, maxXP: 8300, icon: 'shield', color: '#FF6B00', creditReward: 35, benefits: ['Biglietto bonus mensile', 'Sblocca badge Avventuriero']},
+  {level: 5, name: 'Veterano', minXP: 8300, maxXP: 11500, icon: 'medal', color: '#FF6B00', creditReward: 50, benefits: ['Sconto 5% acquisto crediti', '2 Biglietti bonus mensili', 'Sblocca badge Veterano']},
+  {level: 6, name: 'Campione', minXP: 11500, maxXP: 15500, icon: 'ribbon', color: '#FF6B00', creditReward: 65, benefits: ['3 Biglietti bonus mensili', 'Sblocca badge Campione']},
+  {level: 7, name: 'Maestro', minXP: 15500, maxXP: 20500, icon: 'star', color: '#FF6B00', creditReward: 80, benefits: ['Sconto 10% acquisto crediti', '4 Biglietti bonus mensili', 'Accesso VIP estrazioni speciali', 'Sblocca badge Maestro']},
+  {level: 8, name: 'Leggenda', minXP: 20500, maxXP: 26500, icon: 'diamond', color: '#FF6B00', creditReward: 90, benefits: ['5 Biglietti bonus mensili', 'Premi esclusivi Leggenda', 'Sblocca badge Leggenda']},
+  {level: 9, name: 'Mito', minXP: 26500, maxXP: 33500, icon: 'flame', color: '#FF6B00', creditReward: 95, benefits: ['6 Biglietti bonus mensili', 'Accesso estrazioni Mito', 'Sblocca badge Mito']},
+  {level: 10, name: 'Divinita', minXP: 33500, maxXP: 999999, icon: 'trophy', color: '#FFD700', creditReward: 100, benefits: ['Sconto 15% acquisto crediti', 'Biglietti illimitati bonus', 'Accesso a TUTTI i premi esclusivi', 'Status Divinita permanente', 'Sblocca badge Divinita']},
 ];
 
 export const DEFAULT_XP_REWARDS = {
@@ -71,6 +71,7 @@ export interface LevelConfig {
   icon: string;
   color: string;
   creditReward: number;
+  benefits: string[];
 }
 
 export interface ShopPackage {
@@ -194,6 +195,7 @@ export const useGameConfigStore = create<GameConfigState>()(
                 icon: l.icon,
                 color: l.color,
                 creditReward: l.credit_reward ?? l.creditReward,
+                benefits: Array.isArray(l.benefits) ? l.benefits : [],
               }));
             }
           }
@@ -238,7 +240,8 @@ export const useGameConfigStore = create<GameConfigState>()(
         dailyLimits: state.dailyLimits,
         referralRewards: state.referralRewards,
         shopPackages: state.shopPackages,
-        lastFetched: state.lastFetched,
+        // NOTE: lastFetched is NOT persisted so the app always fetches
+        // fresh config from the API on every startup
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {

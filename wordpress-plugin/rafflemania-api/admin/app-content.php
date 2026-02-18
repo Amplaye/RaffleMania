@@ -30,32 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_app_conte
         }
     }
 
-    // ── Section 3 – Testi e Link ────────────────────────────────────────────
-    $privacy_url = esc_url_raw(wp_unslash($_POST['privacy_url'] ?? ''));
-    $terms_url   = esc_url_raw(wp_unslash($_POST['terms_url'] ?? ''));
-    $rules       = wp_kses_post(wp_unslash($_POST['rules'] ?? ''));
-
-    $faq = array();
-    if (!empty($_POST['faq_question']) && is_array($_POST['faq_question'])) {
-        $questions = array_map('sanitize_text_field', $_POST['faq_question']);
-        $answers   = array_map('sanitize_textarea_field', $_POST['faq_answer']);
-        foreach ($questions as $i => $q) {
-            if ($q === '' && $answers[$i] === '') {
-                continue;
-            }
-            $faq[] = array(
-                'question' => $q,
-                'answer'   => $answers[$i],
-            );
-        }
-    }
-
     $app_content = array(
         'referral_steps' => $referral_steps,
-        'privacy_url'    => $privacy_url,
-        'terms_url'      => $terms_url,
-        'rules'          => $rules,
-        'faq'            => $faq,
     );
     update_option('rafflemania_app_content', wp_json_encode($app_content));
 
@@ -86,13 +62,6 @@ $referral_steps  = isset($app_content['referral_steps']) && is_array($app_conten
         array('icon' => 'time-outline',         'title' => 'Attendi la verifica', 'description' => "L'amico deve restare attivo per il periodo richiesto."),
         array('icon' => 'gift-outline',         'title' => 'Ottieni i crediti',   'description' => 'Entrambi ricevete crediti bonus!'),
     );
-
-$privacy_url = isset($app_content['privacy_url']) ? $app_content['privacy_url'] : '';
-$terms_url   = isset($app_content['terms_url'])   ? $app_content['terms_url']   : '';
-$rules       = isset($app_content['rules'])        ? $app_content['rules']        : '';
-$faq         = isset($app_content['faq']) && is_array($app_content['faq'])
-    ? $app_content['faq']
-    : array();
 
 $raw_config      = get_option('rafflemania_referral_config', '{}');
 $referral_config = json_decode($raw_config, true);
@@ -280,49 +249,6 @@ $referred_credits = isset($referral_config['referred_credits']) ? absint($referr
     grid-column: 1 / -1;
 }
 
-/* ─── FAQ items ──────────────────────────────────────────────────────────── */
-.rm-faq-list {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-.rm-faq-item {
-    background: #f9f9fb;
-    border: 1.5px solid #eee;
-    border-radius: 10px;
-    padding: 20px;
-    position: relative;
-    transition: border-color 0.2s ease;
-    animation: rmSlideIn 0.3s ease;
-}
-.rm-faq-item:hover {
-    border-color: #FF6B00;
-}
-.rm-faq-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-}
-.rm-faq-number {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: #eee;
-    color: #666;
-    font-weight: 700;
-    font-size: 12px;
-    flex-shrink: 0;
-}
-.rm-faq-fields {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
 /* ─── Buttons ────────────────────────────────────────────────────────────── */
 .rm-btn {
     display: inline-flex;
@@ -456,17 +382,6 @@ $referred_credits = isset($referral_config['referred_credits']) ? absint($referr
     margin: 24px 0;
 }
 
-/* ─── wp_editor override ─────────────────────────────────────────────────── */
-#rm-wrap .wp-editor-wrap {
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1.5px solid #ddd;
-}
-#rm-wrap .wp-editor-wrap:focus-within {
-    border-color: #FF6B00;
-    box-shadow: 0 0 0 3px rgba(255,107,0,0.12);
-}
-
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 600px) {
     #rm-wrap { margin: 16px 10px 40px; }
@@ -483,7 +398,7 @@ $referred_credits = isset($referral_config['referred_credits']) ? absint($referr
         <div class="rm-logo">R</div>
         <div>
             <h1>Contenuti App</h1>
-            <p>Gestisci i contenuti, la configurazione referral e i testi dell'applicazione.</p>
+            <p>Gestisci i contenuti e la configurazione referral dell'applicazione.</p>
         </div>
     </div>
 
@@ -547,83 +462,6 @@ $referred_credits = isset($referral_config['referred_credits']) ? absint($referr
                 <div class="rm-field-group">
                     <label class="rm-label" for="rm-referred-credits">Crediti invitato</label>
                     <input type="number" id="rm-referred-credits" name="referred_credits" class="rm-input" min="0" value="<?php echo esc_attr($referred_credits); ?>" placeholder="5">
-                </div>
-            </div>
-        </div>
-
-
-        <!-- ─────────────────────────────────────────────────────────────────
-             CARD 3 — Testi e Link
-        ────────────────────────────────────────────────────────────────── -->
-        <div class="rm-card">
-            <h2 class="rm-card-title"><span class="rm-dot"></span> Testi e Link</h2>
-            <p class="rm-card-subtitle">URL legali, regolamento e domande frequenti.</p>
-
-            <!-- URLs -->
-            <div class="rm-fields-row" style="margin-bottom: 20px;">
-                <div class="rm-field-group">
-                    <label class="rm-label" for="rm-privacy-url">URL Privacy Policy</label>
-                    <input type="url" id="rm-privacy-url" name="privacy_url" class="rm-input" value="<?php echo esc_url($privacy_url); ?>" placeholder="https://esempio.it/privacy">
-                </div>
-                <div class="rm-field-group">
-                    <label class="rm-label" for="rm-terms-url">URL Termini e Condizioni</label>
-                    <input type="url" id="rm-terms-url" name="terms_url" class="rm-input" value="<?php echo esc_url($terms_url); ?>" placeholder="https://esempio.it/termini">
-                </div>
-            </div>
-
-            <hr class="rm-divider">
-
-            <!-- Rules (wp_editor) -->
-            <div class="rm-field-group" style="margin-bottom: 24px;">
-                <label class="rm-label">Regolamento</label>
-                <?php
-                wp_editor(
-                    $rules,
-                    'rafflemania_rules_editor',
-                    array(
-                        'textarea_name' => 'rules',
-                        'textarea_rows' => 10,
-                        'media_buttons' => false,
-                        'teeny'         => false,
-                        'quicktags'     => true,
-                        'tinymce'       => array(
-                            'toolbar1' => 'bold,italic,underline,bullist,numlist,link,unlink,undo,redo,formatselect',
-                            'toolbar2' => '',
-                        ),
-                    )
-                );
-                ?>
-            </div>
-
-            <hr class="rm-divider">
-
-            <!-- FAQ -->
-            <div>
-                <label class="rm-label" style="font-size: 15px; margin-bottom: 14px;">Domande Frequenti (FAQ)</label>
-
-                <div class="rm-faq-list" id="rm-faq-list">
-                    <?php foreach ($faq as $fi => $faq_item) : ?>
-                        <div class="rm-faq-item" data-findex="<?php echo (int)$fi; ?>">
-                            <div class="rm-faq-header">
-                                <span class="rm-faq-number"><?php echo (int)$fi + 1; ?></span>
-                                <button type="button" class="rm-btn rm-btn-danger rm-remove-faq" title="Rimuovi FAQ">&times; Rimuovi</button>
-                            </div>
-                            <div class="rm-faq-fields">
-                                <div>
-                                    <label class="rm-label">Domanda</label>
-                                    <input type="text" name="faq_question[]" class="rm-input" value="<?php echo esc_attr($faq_item['question']); ?>" placeholder="Scrivi la domanda...">
-                                </div>
-                                <div>
-                                    <label class="rm-label">Risposta</label>
-                                    <textarea name="faq_answer[]" class="rm-textarea" rows="3" placeholder="Scrivi la risposta..."><?php echo esc_textarea($faq_item['answer']); ?></textarea>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-
-                <div style="margin-top: 16px;">
-                    <button type="button" class="rm-btn rm-btn-add" id="rm-add-faq">+ Aggiungi Domanda</button>
                 </div>
             </div>
         </div>
@@ -701,15 +539,6 @@ $referred_credits = isset($referral_config['referred_credits']) ? absint($referr
         });
     }
 
-    function renumberFaq() {
-        var items = document.querySelectorAll('#rm-faq-list .rm-faq-item');
-        items.forEach(function (item, i) {
-            item.setAttribute('data-findex', i);
-            item.querySelector('.rm-faq-number').textContent = i + 1;
-        });
-    }
-
-
     /* ── Add / Remove Steps ──────────────────────────────────────────── */
     document.getElementById('rm-add-step').addEventListener('click', function () {
         var list  = document.getElementById('rm-steps-list');
@@ -754,46 +583,6 @@ $referred_credits = isset($referral_config['referred_credits']) ? absint($referr
         }, 250);
     });
 
-
-    /* ── Add / Remove FAQ ────────────────────────────────────────────── */
-    document.getElementById('rm-add-faq').addEventListener('click', function () {
-        var list  = document.getElementById('rm-faq-list');
-        var count = list.querySelectorAll('.rm-faq-item').length;
-
-        var html = ''
-            + '<div class="rm-faq-item" data-findex="' + count + '">'
-            + '  <div class="rm-faq-header">'
-            + '    <span class="rm-faq-number">' + (count + 1) + '</span>'
-            + '    <button type="button" class="rm-btn rm-btn-danger rm-remove-faq" title="Rimuovi FAQ">&times; Rimuovi</button>'
-            + '  </div>'
-            + '  <div class="rm-faq-fields">'
-            + '    <div>'
-            + '      <label class="rm-label">Domanda</label>'
-            + '      <input type="text" name="faq_question[]" class="rm-input" placeholder="Scrivi la domanda...">'
-            + '    </div>'
-            + '    <div>'
-            + '      <label class="rm-label">Risposta</label>'
-            + '      <textarea name="faq_answer[]" class="rm-textarea" rows="3" placeholder="Scrivi la risposta..."></textarea>'
-            + '    </div>'
-            + '  </div>'
-            + '</div>';
-
-        list.insertAdjacentHTML('beforeend', html);
-    });
-
-    document.getElementById('rm-faq-list').addEventListener('click', function (e) {
-        var btn = e.target.closest('.rm-remove-faq');
-        if (!btn) return;
-
-        var item = btn.closest('.rm-faq-item');
-        item.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
-        item.style.opacity = '0';
-        item.style.transform = 'translateY(-8px)';
-        setTimeout(function () {
-            item.remove();
-            renumberFaq();
-        }, 250);
-    });
 
 })();
 </script>

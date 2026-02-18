@@ -15,26 +15,20 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import {useThemeColors} from '../../hooks/useThemeColors';
 
 const {width, height} = Dimensions.get('window');
 
-const COLORS = {
-  background: '#FFFFFF',
+const BRAND = {
   orange: '#FF6B00',
   orangeLight: '#FF8533',
   orangeDark: '#E55A00',
-  text: '#1A1A1A',
-  textSecondary: '#666666',
-  textMuted: '#999999',
-  border: '#E5E5E5',
-  inputBg: '#FAFAFA',
   error: '#E53935',
-  success: '#00B894',
 };
 
 const NEON_GLOW = Platform.select({
   ios: {
-    shadowColor: '#FF6B00',
+    shadowColor: BRAND.orange,
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.4,
     shadowRadius: 12,
@@ -122,6 +116,8 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
 
+  const {colors, gradientColors, isDark} = useThemeColors();
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
   const logoScale = useRef(new Animated.Value(0.8)).current;
@@ -201,13 +197,13 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
 
   return (
     <LinearGradient
-      colors={['#FFFFFF', '#FFFCF5', '#FFF8EE', '#FFF0E0', '#FFE8D0']}
+      colors={gradientColors as unknown as string[]}
       locations={[0, 0.25, 0.5, 0.75, 1]}
       start={{x: 0.5, y: 0}}
       end={{x: 0.5, y: 1}}
       style={styles.container}>
       <StatusBar
-        barStyle="dark-content"
+        barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor="transparent"
         translucent
       />
@@ -238,7 +234,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
               style={styles.backButton}
               onPress={() => navigation.goBack()}
               activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
 
             {/* Icon Section */}
@@ -252,7 +248,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
               ]}>
               <View style={styles.logoIconContainer}>
                 <LinearGradient
-                  colors={[COLORS.orange, COLORS.orangeLight]}
+                  colors={[BRAND.orange, BRAND.orangeLight]}
                   style={styles.logoIconGradient}>
                   <Ionicons
                     name={emailSent ? 'mail' : 'lock-open'}
@@ -261,10 +257,10 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
                   />
                 </LinearGradient>
               </View>
-              <Text style={styles.title}>
+              <Text style={[styles.title, {color: colors.text}]}>
                 {emailSent ? 'Email Inviata!' : 'Password Dimenticata?'}
               </Text>
-              <Text style={styles.subtitle}>
+              <Text style={[styles.subtitle, {color: colors.textSecondary}]}>
                 {emailSent
                   ? `Abbiamo inviato le istruzioni per reimpostare la password a ${email}`
                   : 'Inserisci la tua email e ti invieremo le istruzioni per reimpostare la password'}
@@ -287,18 +283,19 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
                     <View
                       style={[
                         styles.inputContainer,
+                        {backgroundColor: isDark ? colors.card : '#FAFAFA', borderColor: BRAND.orange + '40'},
                         error && styles.inputContainerError,
                       ]}>
                       <Ionicons
                         name="mail-outline"
                         size={20}
-                        color={COLORS.textMuted}
+                        color={colors.textSecondary}
                         style={styles.inputIcon}
                       />
                       <TextInput
-                        style={styles.input}
+                        style={[styles.input, {color: colors.text}]}
                         placeholder="La tua email"
-                        placeholderTextColor={COLORS.textMuted}
+                        placeholderTextColor={colors.textSecondary}
                         value={email}
                         onChangeText={setEmail}
                         keyboardType="email-address"
@@ -318,7 +315,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
                     disabled={isLoading}
                     activeOpacity={0.85}>
                     <LinearGradient
-                      colors={[COLORS.orange, COLORS.orangeDark]}
+                      colors={[BRAND.orange, BRAND.orangeDark]}
                       start={{x: 0, y: 0}}
                       end={{x: 1, y: 0}}
                       style={styles.resetButtonGradient}>
@@ -336,7 +333,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
                     onPress={() => navigation.navigate('Login')}
                     activeOpacity={0.85}>
                     <LinearGradient
-                      colors={[COLORS.orange, COLORS.orangeDark]}
+                      colors={[BRAND.orange, BRAND.orangeDark]}
                       start={{x: 0, y: 0}}
                       end={{x: 1, y: 0}}
                       style={styles.resetButtonGradient}>
@@ -365,7 +362,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
             {/* Back to Login Link */}
             {!emailSent && (
               <Animated.View style={[styles.loginSection, {opacity: fadeAnim}]}>
-                <Text style={styles.loginText}>Ricordi la password? </Text>
+                <Text style={[styles.loginText, {color: colors.textSecondary}]}>Ricordi la password? </Text>
                 <TouchableOpacity onPress={() => navigation.goBack()}>
                   <Text style={styles.loginLink}>Accedi</Text>
                 </TouchableOpacity>
@@ -391,8 +388,8 @@ const styles = StyleSheet.create({
   },
   particle: {
     position: 'absolute',
-    backgroundColor: '#FF6B00',
-    shadowColor: '#FF6B00',
+    backgroundColor: BRAND.orange,
+    shadowColor: BRAND.orange,
     shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.8,
     shadowRadius: 6,
@@ -415,17 +412,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 60,
     left: 28,
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: BRAND.orange,
+    borderRadius: 12,
     zIndex: 10,
   },
   logoSection: {
@@ -441,7 +434,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.orange,
+    shadowColor: BRAND.orange,
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -450,13 +443,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: COLORS.text,
     marginBottom: 12,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 15,
-    color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     paddingHorizontal: 10,
@@ -470,14 +461,17 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.inputBg,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: COLORS.orange + '40',
     paddingHorizontal: 16,
+    shadowColor: BRAND.orange,
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   inputContainerError: {
-    borderColor: COLORS.error,
+    borderColor: BRAND.error,
   },
   inputIcon: {
     marginRight: 12,
@@ -486,10 +480,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 16,
     fontSize: 16,
-    color: COLORS.text,
+    color: '#1A1A1A',
   },
   errorText: {
-    color: COLORS.error,
+    color: BRAND.error,
     fontSize: 12,
     marginTop: 6,
     marginLeft: 4,
@@ -516,7 +510,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   resendButtonText: {
-    color: COLORS.orange,
+    color: BRAND.orange,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -527,11 +521,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   loginText: {
-    color: COLORS.textSecondary,
     fontSize: 15,
   },
   loginLink: {
-    color: COLORS.orange,
+    color: BRAND.orange,
     fontSize: 15,
     fontWeight: '600',
   },

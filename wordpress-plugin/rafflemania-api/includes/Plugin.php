@@ -27,6 +27,9 @@ class Plugin {
         // This ensures extractions fire even if WP-Cron is unreliable
         add_action('init', [$this, 'maybe_check_extractions'], 99);
 
+        // Heartbeat: on every request, ensure the cron chain stays alive
+        add_action('shutdown', [$this, 'maybe_heartbeat']);
+
         // Self-ping: when a timer starts, we schedule this to fire a loopback HTTP request
         // at extraction time, triggering WP-Cron even without external visits.
         add_action('rafflemania_self_ping', [$this, 'do_self_ping']);
@@ -443,6 +446,32 @@ class Plugin {
             'sslverify' => false,
         ]);
         error_log('[RaffleMania] Self-ping triggered: ' . $url);
+    }
+
+    /**
+     * Heartbeat: fires on every request shutdown.
+     * Ensures the cron-heartbeat chain is always running by checking
+     * a transient. If the heartbeat hasn't run in 90 seconds, kick it off.
+     */
+    public function maybe_heartbeat() {
+        if (get_transient('rafflemania_heartbeat_alive')) {
+            return; // Heartbeat chain is running, nothing to do
+        }
+
+        // Rate-limit restart attempts: only one per 60 seconds
+        // Prevents stampede when many requests hit at once while heartbeat is down
+        if (get_transient('rafflemania_heartbeat_kick')) {
+            return;
+        }
+        set_transient('rafflemania_heartbeat_kick', 1, 60);
+
+        // Heartbeat is dead - restart it
+        $url = site_url('/wp-content/plugins/rafflemania-api/cron-heartbeat.php?kick=1');
+        wp_remote_get($url, [
+            'timeout' => 1,
+            'blocking' => false,
+            'sslverify' => false,
+        ]);
     }
 
     public function maybe_check_extractions() {

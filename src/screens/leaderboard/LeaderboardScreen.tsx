@@ -282,9 +282,12 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({navigation}
     stopMidnightCheck,
   } = useLeaderboardStore();
 
-  // Fetch data on mount and start midnight check
+  // Fetch data on mount only if needed (daily refresh at 00:00)
+  const shouldRefresh = useLeaderboardStore(state => state.shouldRefresh);
   useEffect(() => {
-    fetchLeaderboards(user?.id);
+    if (shouldRefresh()) {
+      fetchLeaderboards(user?.id);
+    }
     startMidnightCheck(user?.id);
 
     return () => {
@@ -472,11 +475,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: 4,
     position: 'relative',
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.15,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 8,
   },
   tabIndicator: {
     position: 'absolute',
@@ -598,11 +601,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: SPACING.sm,
     borderRadius: RADIUS.lg,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   currentUserRow: {
     borderWidth: 2,

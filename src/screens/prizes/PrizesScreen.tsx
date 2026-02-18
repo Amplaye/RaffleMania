@@ -10,6 +10,7 @@ import {
   Animated,
   Dimensions,
   Linking,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -119,7 +120,7 @@ const PrizeListCard: React.FC<{
   prize: Prize;
   onPress: () => void;
 }> = ({prize, onPress}) => {
-  const {colors} = useThemeColors();
+  const {colors, isDark} = useThemeColors();
   const progress = Math.min(prize.currentAds / prize.goalAds, 1);
   const percentage = Math.round(progress * 100);
 
@@ -194,7 +195,7 @@ const FuturePrizeCard: React.FC<{
   showSection: boolean;
   onPress: () => void;
 }> = ({prize, section, showSection, onPress}) => {
-  const {colors} = useThemeColors();
+  const {colors, isDark} = useThemeColors();
 
   return (
     <View style={styles.futurePrizeWrapper}>
@@ -443,11 +444,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: 4,
     position: 'relative',
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.15,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 8,
   },
   tabIndicator: {
     position: 'absolute',
@@ -516,7 +517,11 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: `${COLORS.primary}30`,
-    overflow: 'hidden',
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   prizeCardContent: {
     flexDirection: 'row',
@@ -526,7 +531,7 @@ const styles = StyleSheet.create({
   prizeImageContainer: {
     width: 80,
     height: 80,
-    backgroundColor: '#FFF8F0',
+    backgroundColor: '#FFF5E6',
     borderRadius: RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',

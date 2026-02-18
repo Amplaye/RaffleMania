@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import {COLORS, RADIUS, SPACING, FONT_SIZE} from '../../utils/constants';
+import {useThemeColors} from '../../hooks/useThemeColors';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -30,6 +31,7 @@ export const Input: React.FC<InputProps> = ({
   ...props
 }) => {
   const [isFocused, setIsFocused] = useState(false);
+  const {colors} = useThemeColors();
 
   const getBorderColor = () => {
     if (error) return COLORS.error;
@@ -39,17 +41,18 @@ export const Input: React.FC<InputProps> = ({
 
   return (
     <View style={[styles.container, containerStyle]}>
-      {label && <Text style={styles.label}>{label}</Text>}
-      <View style={[styles.inputContainer, {borderColor: getBorderColor()}]}>
+      {label && <Text style={[styles.label, {color: colors.text}]}>{label}</Text>}
+      <View style={[styles.inputContainer, {borderColor: getBorderColor(), backgroundColor: colors.card}]}>
         {leftIcon && <View style={styles.iconContainer}>{leftIcon}</View>}
         <TextInput
           style={[
             styles.input,
+            {color: colors.text},
             leftIcon ? styles.inputWithLeftIcon : undefined,
             rightIcon ? styles.inputWithRightIcon : undefined,
             style,
           ]}
-          placeholderTextColor={COLORS.textLight}
+          placeholderTextColor={colors.textMuted}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           {...props}
@@ -86,6 +89,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.surface,
     height: 48,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   input: {
     flex: 1,

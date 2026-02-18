@@ -19,34 +19,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_user_nonc
     } else {
         $action = sanitize_text_field($_POST['user_action'] ?? '');
         $target_id = intval($_POST['target_user_id'] ?? 0);
+        $result_msg = '';
 
         switch ($action) {
             case 'add_credits':
-                $amount = intval($_POST['amount']);
+                $amount = intval($_POST['amount'] ?? 0);
                 $reason = sanitize_text_field($_POST['reason'] ?? 'Admin');
                 if ($amount > 0 && $target_id > 0) {
                     $wpdb->query($wpdb->prepare("UPDATE {$table_users} SET credits = credits + %d WHERE id = %d", $amount, $target_id));
                     $wpdb->insert($table_transactions, ['user_id' => $target_id, 'type' => 'bonus', 'amount' => $amount, 'description' => "Admin: {$reason}"]);
                     $wpdb->insert($table_admin_log, ['admin_user_id' => get_current_user_id(), 'action_type' => 'add_credits', 'target_user_id' => $target_id, 'details' => json_encode(['amount' => $amount, 'reason' => $reason])]);
-                    $message = "{$amount} crediti aggiunti con successo!";
+                    $result_msg = "{$amount} crediti aggiunti con successo!";
+                } else {
+                    $error = 'Quantità non valida.';
                 }
                 break;
             case 'add_xp':
-                $amount = intval($_POST['amount']);
+                $amount = intval($_POST['amount'] ?? 0);
                 $reason = sanitize_text_field($_POST['reason'] ?? 'Admin');
                 if ($amount > 0 && $target_id > 0) {
                     $wpdb->query($wpdb->prepare("UPDATE {$table_users} SET xp = xp + %d WHERE id = %d", $amount, $target_id));
                     $user_xp = $wpdb->get_var($wpdb->prepare("SELECT xp FROM {$table_users} WHERE id = %d", $target_id));
                     $tl = $wpdb->prefix . 'rafflemania_levels';
                     $new_level = $wpdb->get_var($wpdb->prepare("SELECT level FROM {$tl} WHERE min_xp <= %d AND is_active = 1 ORDER BY min_xp DESC LIMIT 1", $user_xp));
-                    if ($new_level !== null) $wpdb->update($table_users, ['level' => $new_level], ['id' => $target_id]);
+                    if ($new_level !== null) {
+                        $wpdb->update($table_users, ['level' => intval($new_level)], ['id' => $target_id]);
+                    }
                     $wpdb->insert($table_admin_log, ['admin_user_id' => get_current_user_id(), 'action_type' => 'add_xp', 'target_user_id' => $target_id, 'details' => json_encode(['amount' => $amount, 'reason' => $reason])]);
-                    $message = "{$amount} XP aggiunti! Nuovo livello: {$new_level}";
+                    $result_msg = "{$amount} XP aggiunti! Nuovo livello: " . ($new_level ?? '?');
+                } else {
+                    $error = 'Quantità non valida.';
                 }
                 break;
             case 'add_tickets':
-                $amount = intval($_POST['amount']);
-                $prize_id = intval($_POST['prize_id']);
+                $amount = intval($_POST['amount'] ?? 0);
+                $prize_id = intval($_POST['prize_id'] ?? 0);
                 if ($amount > 0 && $target_id > 0 && $prize_id > 0) {
                     $max_t = $wpdb->get_var($wpdb->prepare("SELECT MAX(ticket_number) FROM {$table_tickets} WHERE prize_id = %d", $prize_id));
                     $start = ($max_t ?: 0) + 1;
@@ -54,23 +61,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_user_nonc
                         $wpdb->insert($table_tickets, ['user_id' => $target_id, 'prize_id' => $prize_id, 'ticket_number' => $start + $i, 'source' => 'bonus', 'status' => 'active']);
                     }
                     $wpdb->insert($table_admin_log, ['admin_user_id' => get_current_user_id(), 'action_type' => 'add_tickets', 'target_user_id' => $target_id, 'details' => json_encode(['amount' => $amount, 'prize_id' => $prize_id])]);
-                    $message = "{$amount} biglietti regalati!";
+                    $result_msg = "{$amount} biglietti regalati!";
+                } else {
+                    $error = 'Seleziona un premio e una quantità valida.';
                 }
                 break;
             case 'reset_streak':
-                $value = max(0, intval($_POST['streak_value']));
+                $value = max(0, intval($_POST['streak_value'] ?? 0));
                 $wpdb->update($table_users, ['current_streak' => $value, 'last_streak_date' => $value > 0 ? current_time('Y-m-d') : null], ['id' => $target_id]);
                 $wpdb->insert($table_admin_log, ['admin_user_id' => get_current_user_id(), 'action_type' => 'reset_streak', 'target_user_id' => $target_id, 'details' => json_encode(['value' => $value])]);
-                $message = "Streak impostata a {$value}";
+                $result_msg = "Streak impostata a {$value}";
                 break;
             case 'reset_password':
-                $user = $wpdb->get_row($wpdb->prepare("SELECT email, username FROM {$table_users} WHERE id = %d", $target_id));
-                if ($user) {
+                $user_data = $wpdb->get_row($wpdb->prepare("SELECT email, username FROM {$table_users} WHERE id = %d", $target_id));
+                if ($user_data) {
                     $new_pw = wp_generate_password(12, false);
                     $wpdb->update($table_users, ['password_hash' => password_hash($new_pw, PASSWORD_DEFAULT)], ['id' => $target_id]);
                     require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/EmailHelper.php';
                     $pw_body = "<tr><td style='padding:16px 40px;'>
-<h2 style='color:#1a1a1a;margin:0 0 10px;font-size:26px;font-weight:700;'>Ciao {$user->username}!</h2>
+<h2 style='color:#1a1a1a;margin:0 0 10px;font-size:26px;font-weight:700;'>Ciao {$user_data->username}!</h2>
 <p style='color:#555;font-size:18px;line-height:1.6;margin:0 0 16px;'>La tua password è stata reimpostata.</p>
 <div style='background:#FFF8F0;border:2px solid #FF6B00;border-radius:12px;padding:20px;text-align:center;'>
 <div style='font-size:14px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Nuova Password</div>
@@ -78,39 +87,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_user_nonc
 </div>
 <p style='color:#888;font-size:15px;line-height:1.6;margin:16px 0 0;'>Ti consigliamo di cambiarla al primo accesso.</p>
 </td></tr>";
-                    \RaffleMania\EmailHelper::send($user->email, 'RaffleMania - Nuova Password', $pw_body);
+                    \RaffleMania\EmailHelper::send($user_data->email, 'RaffleMania - Nuova Password', $pw_body);
                     $wpdb->insert($table_admin_log, ['admin_user_id' => get_current_user_id(), 'action_type' => 'reset_password', 'target_user_id' => $target_id, 'details' => '{}']);
-                    $message = "Password resettata e email inviata a {$user->email}";
+                    $result_msg = "Password resettata e email inviata a {$user_data->email}";
+                } else {
+                    $error = 'Utente non trovato.';
                 }
                 break;
             case 'verify_email':
                 $wpdb->update($table_users, ['email_verified' => 1, 'verification_token' => null, 'verification_token_expires' => null], ['id' => $target_id]);
                 $wpdb->insert($table_admin_log, ['admin_user_id' => get_current_user_id(), 'action_type' => 'verify_email', 'target_user_id' => $target_id, 'details' => '{}']);
-                $message = "Email verificata!";
+                $result_msg = "Email verificata!";
                 break;
             case 'ban':
                 $ban_reason = sanitize_text_field($_POST['ban_reason'] ?? '');
                 $wpdb->update($table_users, ['is_banned' => 1, 'ban_reason' => $ban_reason, 'is_active' => 0], ['id' => $target_id]);
                 $wpdb->insert($table_admin_log, ['admin_user_id' => get_current_user_id(), 'action_type' => 'ban_user', 'target_user_id' => $target_id, 'details' => json_encode(['reason' => $ban_reason])]);
-                $message = "Utente bannato.";
+                $result_msg = "Utente bannato.";
                 break;
             case 'unban':
                 $wpdb->update($table_users, ['is_banned' => 0, 'ban_reason' => null, 'is_active' => 1], ['id' => $target_id]);
                 $wpdb->insert($table_admin_log, ['admin_user_id' => get_current_user_id(), 'action_type' => 'unban_user', 'target_user_id' => $target_id, 'details' => '{}']);
-                $message = "Utente sbannato.";
+                $result_msg = "Utente sbannato.";
                 break;
             case 'save_notes':
                 $wpdb->update($table_users, ['admin_notes' => sanitize_textarea_field($_POST['admin_notes'] ?? '')], ['id' => $target_id]);
-                $message = "Note salvate.";
+                $result_msg = "Note salvate.";
                 break;
             case 'delete_user':
-                $wpdb->update($table_users, ['username' => 'deleted_' . $target_id, 'email' => 'deleted_' . $target_id . '@deleted.local', 'password_hash' => '', 'avatar_url' => null, 'push_token' => null, 'is_active' => 0, 'is_banned' => 1, 'ban_reason' => 'Account eliminato', 'referral_code' => null, 'social_id' => null], ['id' => $target_id]);
+                // Delete all related data first, then the user
+                $wpdb->delete($table_tickets, ['user_id' => $target_id]);
+                $wpdb->delete($table_transactions, ['user_id' => $target_id]);
+                $wpdb->delete($table_streaks, ['user_id' => $target_id]);
+                $wpdb->delete($table_referrals, ['referrer_id' => $target_id]);
+                $wpdb->delete($table_referrals, ['referred_id' => $target_id]);
+                $wpdb->delete($table_winners, ['user_id' => $target_id]);
+                $wpdb->delete($table_users, ['id' => $target_id]);
                 $wpdb->insert($table_admin_log, ['admin_user_id' => get_current_user_id(), 'action_type' => 'delete_user', 'target_user_id' => $target_id, 'details' => '{}']);
-                $message = "Account anonimizzato ed eliminato.";
+                $result_msg = "Utente eliminato definitivamente.";
                 break;
+        }
+
+        if ($result_msg) {
+            $message = $result_msg;
+            // Show JS alert immediately as feedback
+            echo "<script>alert(" . json_encode($result_msg) . ");</script>";
+        }
+        // After delete, force redirect to list via JS (since headers already sent)
+        if ($action === 'delete_user' && $result_msg) {
+            $list_url = admin_url("admin.php?page=rafflemania-users");
+            echo "<script>window.location.href=" . json_encode($list_url) . ";</script>";
+            return;
         }
     }
 }
+
+// Read flash messages from URL (for JS redirects)
+if (isset($_GET['rm_msg'])) { $message = sanitize_text_field(urldecode($_GET['rm_msg'])); }
 
 $view_user_id = isset($_GET['view']) ? intval($_GET['view']) : null;
 $active_tab = sanitize_text_field($_GET['tab'] ?? 'tickets');
@@ -137,8 +170,16 @@ if ($view_user_id):
 ?>
 <div class="wrap">
     <h1><a href="<?php echo admin_url('admin.php?page=rafflemania-users'); ?>" class="button" style="margin-right:10px;">← Lista</a> Dettaglio Utente</h1>
-    <?php if ($message): ?><div class="notice notice-success is-dismissible"><p><?php echo esc_html($message); ?></p></div><?php endif; ?>
-    <?php if ($error): ?><div class="notice notice-error is-dismissible"><p><?php echo esc_html($error); ?></p></div><?php endif; ?>
+    <?php if ($message): ?>
+    <div style="background:#f0fdf4;border:1px solid #22c55e;border-left:4px solid #22c55e;border-radius:8px;padding:14px 20px;margin-bottom:16px;font-size:14px;font-weight:600;color:#15803d;display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px">&#10004;</span> <?php echo esc_html($message); ?>
+    </div>
+    <?php endif; ?>
+    <?php if ($error): ?>
+    <div style="background:#fef2f2;border:1px solid #ef4444;border-left:4px solid #ef4444;border-radius:8px;padding:14px 20px;margin-bottom:16px;font-size:14px;font-weight:600;color:#b91c1c;display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px">&#10008;</span> <?php echo esc_html($error); ?>
+    </div>
+    <?php endif; ?>
 
     <style>
         .rm-grid{display:grid;grid-template-columns:350px 1fr;gap:24px;margin-top:20px}
@@ -153,9 +194,12 @@ if ($view_user_id):
         .rm-act-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
         .rm-btn{display:flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;transition:.2s}
         .rm-btn:hover{border-color:#FF6B00;background:#fff8f0}.rm-btn.dng{border-color:#dc3545;color:#dc3545}.rm-btn.dng:hover{background:#fff5f5}
-        .rm-tabs{display:flex;gap:0;border-bottom:2px solid #eee;margin-bottom:16px}
-        .rm-tab{padding:10px 20px;text-decoration:none;color:#666;font-weight:600;border-bottom:3px solid transparent;margin-bottom:-2px;transition:.2s}.rm-tab:hover{color:#FF6B00}.rm-tab.on{color:#FF6B00;border-bottom-color:#FF6B00}
-        .rm-tbl{width:100%;border-collapse:collapse}.rm-tbl th,.rm-tbl td{padding:10px 12px;text-align:left;border-bottom:1px solid #eee;font-size:13px}.rm-tbl th{background:#f9f9f9;font-weight:600}
+        .rm-tabs{display:flex;gap:0;border-bottom:2px solid #eee;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;flex-wrap:nowrap}
+        .rm-tabs::-webkit-scrollbar{height:4px}.rm-tabs::-webkit-scrollbar-thumb{background:#ddd;border-radius:2px}
+        .rm-tab{padding:10px 20px;text-decoration:none;color:#666;font-weight:600;border-bottom:3px solid transparent;margin-bottom:-2px;transition:.2s;white-space:nowrap;flex-shrink:0}.rm-tab:hover{color:#FF6B00}.rm-tab.on{color:#FF6B00;border-bottom-color:#FF6B00}
+        .rm-tbl-wrap{max-height:500px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+        .rm-tbl-wrap::-webkit-scrollbar{width:6px}.rm-tbl-wrap::-webkit-scrollbar-track{background:#f8f9fa}.rm-tbl-wrap::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px}
+        .rm-tbl{width:100%;border-collapse:collapse}.rm-tbl th,.rm-tbl td{padding:10px 12px;text-align:left;border-bottom:1px solid #eee;font-size:13px}.rm-tbl th{background:#f9f9f9;font-weight:600;position:sticky;top:0;z-index:1}
         .rm-modal-bg{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:100000;align-items:center;justify-content:center}.rm-modal-bg.on{display:flex}
         .rm-modal{background:#fff;border-radius:16px;padding:30px;max-width:450px;width:90%;box-shadow:0 10px 30px rgba(0,0,0,.2)}
         .rm-modal h3{margin-top:0}.rm-modal input,.rm-modal select,.rm-modal textarea{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:12px;box-sizing:border-box}
@@ -201,7 +245,7 @@ if ($view_user_id):
                     <?php if (!$user->email_verified): ?><button class="rm-btn" onclick="doAct('verify_email')">✉️ Verifica</button><?php endif; ?>
                     <?php if (empty($user->is_banned)): ?><button class="rm-btn dng" onclick="openM('ban')">🚫 Banna</button>
                     <?php else: ?><button class="rm-btn" onclick="doAct('unban')">✅ Sbanna</button><?php endif; ?>
-                    <button class="rm-btn dng" onclick="if(confirm('ATTENZIONE: Irreversibile!')){if(confirm('Confermi?')){doAct('delete_user')}}">🗑️ Elimina</button>
+                    <button class="rm-btn dng" onclick="doDelete()">🗑️ Elimina</button>
                 </div>
             </div>
             <div class="rm-card">
@@ -223,35 +267,51 @@ if ($view_user_id):
                     <?php endforeach; ?>
                 </div>
                 <?php if ($active_tab==='tickets'): ?>
-                <table class="rm-tbl"><thead><tr><th>#</th><th>Premio</th><th>Fonte</th><th>Stato</th><th>Data</th></tr></thead><tbody>
+                <div class="rm-tbl-wrap"><table class="rm-tbl"><thead><tr><th>#</th><th>Premio</th><th>Fonte</th><th>Stato</th><th>Data</th></tr></thead><tbody>
                 <?php foreach ($tab_data as $t): ?><tr><td>#<?php echo $t->ticket_number; ?></td><td><?php echo esc_html($t->prize_name); ?></td><td><span class="rm-badge rm-badge-p"><?php echo ucfirst($t->source); ?></span></td><td><span class="rm-badge rm-badge-<?php echo $t->status==='winner'?'s':($t->status==='active'?'p':'w'); ?>"><?php echo ucfirst($t->status); ?></span></td><td><?php echo date('d/m H:i', strtotime($t->created_at)); ?></td></tr><?php endforeach; ?>
                 <?php if (empty($tab_data)): ?><tr><td colspan="5" style="text-align:center;padding:30px;color:#999">Nessun biglietto</td></tr><?php endif; ?>
-                </tbody></table>
+                </tbody></table></div>
                 <?php elseif ($active_tab==='wins'): ?>
-                <table class="rm-tbl"><thead><tr><th>Premio</th><th>Riscosso</th><th>Data</th></tr></thead><tbody>
+                <div class="rm-tbl-wrap"><table class="rm-tbl"><thead><tr><th>Premio</th><th>Riscosso</th><th>Data</th></tr></thead><tbody>
                 <?php foreach ($tab_data as $w): ?><tr><td><?php echo esc_html($w->prize_name); ?></td><td><?php echo $w->claimed?'<span class="rm-badge rm-badge-s">Sì</span>':'<span class="rm-badge rm-badge-w">No</span>'; ?></td><td><?php echo date('d/m/Y H:i', strtotime($w->won_at)); ?></td></tr><?php endforeach; ?>
                 <?php if (empty($tab_data)): ?><tr><td colspan="3" style="text-align:center;padding:30px;color:#999">Nessuna vittoria</td></tr><?php endif; ?>
-                </tbody></table>
+                </tbody></table></div>
                 <?php elseif ($active_tab==='transactions'): ?>
-                <table class="rm-tbl"><thead><tr><th>Tipo</th><th>Importo</th><th>Descrizione</th><th>Data</th></tr></thead><tbody>
-                <?php foreach ($tab_data as $tx): ?><tr><td><span class="rm-badge rm-badge-<?php echo $tx->type==='spend'?'d':'s'; ?>"><?php echo ucfirst($tx->type); ?></span></td><td style="font-weight:700;color:<?php echo $tx->amount>=0?'#155724':'#721c24'; ?>"><?php echo ($tx->amount>=0?'+':'').$tx->amount; ?></td><td><?php echo esc_html($tx->description); ?></td><td><?php echo date('d/m H:i', strtotime($tx->created_at)); ?></td></tr><?php endforeach; ?>
+                <?php
+                    $tx_filter = sanitize_text_field($_GET['tx_type'] ?? '');
+                    $tx_types = [];
+                    foreach ($tab_data as $tx_item) { $tx_types[$tx_item->type] = true; }
+                    $tx_types = array_keys($tx_types);
+                    sort($tx_types);
+                ?>
+                <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+                    <span style="font-size:13px;font-weight:600;color:#666">Filtra:</span>
+                    <a href="<?php echo admin_url("admin.php?page=rafflemania-users&view={$view_user_id}&tab=transactions"); ?>" class="rm-badge <?php echo !$tx_filter?'rm-badge-p':''; ?>" style="text-decoration:none;cursor:pointer">Tutti</a>
+                    <?php foreach ($tx_types as $tt): ?>
+                    <a href="<?php echo admin_url("admin.php?page=rafflemania-users&view={$view_user_id}&tab=transactions&tx_type={$tt}"); ?>" class="rm-badge <?php echo $tx_filter===$tt?'rm-badge-p':''; ?>" style="text-decoration:none;cursor:pointer"><?php echo ucfirst($tt); ?></a>
+                    <?php endforeach; ?>
+                </div>
+                <div class="rm-tbl-wrap"><table class="rm-tbl"><thead><tr><th>Tipo</th><th>Importo</th><th>Descrizione</th><th>Data</th></tr></thead><tbody>
+                <?php foreach ($tab_data as $tx):
+                    if ($tx_filter && $tx->type !== $tx_filter) continue;
+                ?><tr><td><span class="rm-badge rm-badge-<?php echo $tx->type==='spend'?'d':'s'; ?>"><?php echo ucfirst($tx->type); ?></span></td><td style="font-weight:700;color:<?php echo $tx->amount>=0?'#155724':'#721c24'; ?>"><?php echo ($tx->amount>=0?'+':'').$tx->amount; ?></td><td><?php echo esc_html($tx->description); ?></td><td><?php echo date('d/m H:i', strtotime($tx->created_at)); ?></td></tr><?php endforeach; ?>
                 <?php if (empty($tab_data)): ?><tr><td colspan="4" style="text-align:center;padding:30px;color:#999">Nessuna transazione</td></tr><?php endif; ?>
-                </tbody></table>
+                </tbody></table></div>
                 <?php elseif ($active_tab==='streaks'): ?>
-                <table class="rm-tbl"><thead><tr><th>Giorno</th><th>XP</th><th>Crediti</th><th>Data</th></tr></thead><tbody>
+                <div class="rm-tbl-wrap"><table class="rm-tbl"><thead><tr><th>Giorno</th><th>XP</th><th>Crediti</th><th>Data</th></tr></thead><tbody>
                 <?php foreach ($tab_data as $s): ?><tr><td>G. <?php echo $s->streak_day; ?></td><td>+<?php echo $s->xp_earned; ?></td><td><?php echo $s->credits_earned>0?"+{$s->credits_earned}":'-'; ?></td><td><?php echo date('d/m H:i', strtotime($s->claimed_at)); ?></td></tr><?php endforeach; ?>
                 <?php if (empty($tab_data)): ?><tr><td colspan="4" style="text-align:center;padding:30px;color:#999">Nessun dato</td></tr><?php endif; ?>
-                </tbody></table>
+                </tbody></table></div>
                 <?php elseif ($active_tab==='referrals'): ?>
-                <table class="rm-tbl"><thead><tr><th>Utente</th><th>Giorni</th><th>Completato</th><th>Reward</th><th>Data</th></tr></thead><tbody>
+                <div class="rm-tbl-wrap"><table class="rm-tbl"><thead><tr><th>Utente</th><th>Giorni</th><th>Completato</th><th>Reward</th><th>Data</th></tr></thead><tbody>
                 <?php foreach ($tab_data as $r): ?><tr><td><?php echo esc_html($r->username); ?></td><td><?php echo $r->days_active; ?>/7</td><td><?php echo $r->days_active>=7?'<span class="rm-badge rm-badge-s">Sì</span>':'<span class="rm-badge rm-badge-w">In corso</span>'; ?></td><td><?php echo $r->reward_claimed?'<span class="rm-badge rm-badge-s">Sì</span>':'-'; ?></td><td><?php echo date('d/m/Y', strtotime($r->created_at)); ?></td></tr><?php endforeach; ?>
                 <?php if (empty($tab_data)): ?><tr><td colspan="5" style="text-align:center;padding:30px;color:#999">Nessun referral</td></tr><?php endif; ?>
-                </tbody></table>
+                </tbody></table></div>
                 <?php elseif ($active_tab==='admin_log'): ?>
-                <table class="rm-tbl"><thead><tr><th>Azione</th><th>Dettagli</th><th>Admin</th><th>Data</th></tr></thead><tbody>
+                <div class="rm-tbl-wrap"><table class="rm-tbl"><thead><tr><th>Azione</th><th>Dettagli</th><th>Admin</th><th>Data</th></tr></thead><tbody>
                 <?php foreach ($tab_data as $log): ?><tr><td><span class="rm-badge rm-badge-p"><?php echo esc_html($log->action_type); ?></span></td><td><code style="font-size:11px"><?php echo esc_html(substr($log->details,0,80)); ?></code></td><td><?php $wu=get_user_by('id',$log->admin_user_id); echo $wu?esc_html($wu->display_name):'#'.$log->admin_user_id; ?></td><td><?php echo date('d/m H:i', strtotime($log->created_at)); ?></td></tr><?php endforeach; ?>
                 <?php if (empty($tab_data)): ?><tr><td colspan="4" style="text-align:center;padding:30px;color:#999">Nessun log</td></tr><?php endif; ?>
-                </tbody></table>
+                </tbody></table></div>
                 <?php endif; ?>
             </div>
         </div>
@@ -269,6 +329,7 @@ if ($view_user_id):
     function openM(t){document.getElementById('m-'+t).classList.add('on')}
     function closeM(t){document.getElementById('m-'+t).classList.remove('on')}
     function doAct(a){if(!confirm('Confermi?'))return;document.getElementById('act-type').value=a;document.getElementById('act-form').submit()}
+    function doDelete(){if(!confirm('ATTENZIONE: Questa azione è irreversibile. Vuoi eliminare definitivamente questo utente?'))return;document.getElementById('act-type').value='delete_user';document.getElementById('act-form').submit()}
     document.querySelectorAll('.rm-modal-bg').forEach(function(e){e.addEventListener('click',function(ev){if(ev.target===e)e.classList.remove('on')})});
     </script>
 </div>
@@ -287,7 +348,11 @@ $users = $wpdb->get_results($wpdb->prepare("SELECT u.*, (SELECT COUNT(*) FROM {$
 ?>
 <div class="wrap">
     <h1><span class="dashicons dashicons-groups" style="font-size:30px;margin-right:10px"></span> Utenti App</h1>
-    <?php if ($message): ?><div class="notice notice-success is-dismissible"><p><?php echo esc_html($message); ?></p></div><?php endif; ?>
+    <?php if ($message): ?>
+    <div style="background:#f0fdf4;border:1px solid #22c55e;border-left:4px solid #22c55e;border-radius:8px;padding:14px 20px;margin:16px 0;font-size:14px;font-weight:600;color:#15803d;display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px">&#10004;</span> <?php echo esc_html($message); ?>
+    </div>
+    <?php endif; ?>
     <style>
         .rm-search{background:#fff;padding:16px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin:20px 0}
         .rm-tc{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);max-height:650px;overflow-y:auto}

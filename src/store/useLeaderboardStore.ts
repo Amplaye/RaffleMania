@@ -7,20 +7,26 @@ import {
   getWinsLeaderboard,
 } from '../services/mock';
 
-// Calcola il timestamp della prossima mezzanotte
+// Calcola il timestamp della prossima mezzanotte italiana (Europe/Rome)
 const getNextMidnight = (): number => {
   const now = new Date();
-  const nextMidnight = new Date(now);
-  nextMidnight.setHours(24, 0, 0, 0);
-  return nextMidnight.getTime();
+  // Ottieni l'ora corrente in Italia
+  const italyTime = new Date(now.toLocaleString('en-US', {timeZone: 'Europe/Rome'}));
+  // Calcola i millisecondi fino alla prossima mezzanotte italiana
+  const nextMidnightItaly = new Date(italyTime);
+  nextMidnightItaly.setHours(24, 0, 0, 0);
+  const diffMs = nextMidnightItaly.getTime() - italyTime.getTime();
+  return now.getTime() + diffMs;
 };
 
-// Calcola il timestamp dell'ultima mezzanotte
+// Calcola il timestamp dell'ultima mezzanotte italiana (Europe/Rome)
 const getLastMidnight = (): number => {
   const now = new Date();
-  const lastMidnight = new Date(now);
-  lastMidnight.setHours(0, 0, 0, 0);
-  return lastMidnight.getTime();
+  const italyTime = new Date(now.toLocaleString('en-US', {timeZone: 'Europe/Rome'}));
+  const lastMidnightItaly = new Date(italyTime);
+  lastMidnightItaly.setHours(0, 0, 0, 0);
+  const diffMs = italyTime.getTime() - lastMidnightItaly.getTime();
+  return now.getTime() - diffMs;
 };
 
 // Formatta la data dell'ultimo aggiornamento

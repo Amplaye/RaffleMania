@@ -1,9 +1,13 @@
-import React, {useState} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, Alert} from 'react-native';
+import React, {useState, useRef} from 'react';
+import {View, Text, StyleSheet, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ScrollView} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {ScreenContainer, Input, Button} from '../../components/common';
+import {Input, Button} from '../../components/common';
 import {useAuthStore} from '../../store';
-import {COLORS, SPACING, FONT_SIZE, FONT_WEIGHT} from '../../utils/constants';
+import {COLORS, SPACING, FONT_SIZE, FONT_WEIGHT, RADIUS} from '../../utils/constants';
+import {useThemeColors} from '../../hooks/useThemeColors';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
+import {AnimatedBackground} from '../../components/common';
 
 interface RegisterScreenProps {
   navigation: any;
@@ -96,130 +100,159 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({navigation}) => {
     }
   };
 
+  const {gradientColors, isDark, colors} = useThemeColors();
+  const scrollViewRef = useRef<ScrollView>(null);
+
   return (
-    <ScreenContainer>
-      <View style={styles.container}>
-        {/* Back Button */}
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </TouchableOpacity>
+    <LinearGradient
+      colors={gradientColors as unknown as string[]}
+      locations={[0, 0.25, 0.5, 0.75, 1]}
+      start={{x: 0.5, y: 0}}
+      end={{x: 0.5, y: 1}}
+      style={styles.gradient}>
+      <AnimatedBackground />
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}>
+          <ScrollView
+            ref={scrollViewRef}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            <View style={styles.container}>
+              {/* Back Button */}
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.7}>
+                <Ionicons name="arrow-back" size={24} color={colors.text} />
+              </TouchableOpacity>
 
-        <View style={styles.header}>
-          <Text style={styles.title}>Crea Account</Text>
-          <Text style={styles.subtitle}>
-            Inizia a vincere premi incredibili!
-          </Text>
-        </View>
+              <View style={styles.header}>
+                <Text style={[styles.title, {color: colors.text}]}>Crea Account</Text>
+                <Text style={[styles.subtitle, {color: colors.textSecondary}]}>
+                  Inizia a vincere premi incredibili!
+                </Text>
+              </View>
 
-        <View style={styles.form}>
-          <Input
-            label="Nome"
-            placeholder="Come ti chiami?"
-            value={displayName}
-            onChangeText={setDisplayName}
-            autoCapitalize="words"
-            error={errors.displayName}
-          />
+              <View style={styles.form}>
+                <Input
+                  label="Nome"
+                  placeholder="Come ti chiami?"
+                  value={displayName}
+                  onChangeText={setDisplayName}
+                  autoCapitalize="words"
+                  error={errors.displayName}
+                />
 
-          <Input
-            label="Email"
-            placeholder="La tua email"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            error={errors.email}
-          />
+                <Input
+                  label="Email"
+                  placeholder="La tua email"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  error={errors.email}
+                />
 
-          <Input
-            label="Password"
-            placeholder="Crea una password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!showPassword}
-            error={errors.password}
-            rightIcon={
-              <Text style={styles.showHide}>
-                {showPassword ? 'Nascondi' : 'Mostra'}
+                <Input
+                  label="Password"
+                  placeholder="Crea una password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  error={errors.password}
+                  rightIcon={
+                    <Text style={styles.showHide}>
+                      {showPassword ? 'Nascondi' : 'Mostra'}
+                    </Text>
+                  }
+                  onRightIconPress={() => setShowPassword(!showPassword)}
+                />
+
+                <Input
+                  label="Conferma Password"
+                  placeholder="Ripeti la password"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showPassword}
+                  error={errors.confirmPassword}
+                />
+
+                <Input
+                  label="Codice Referral (opzionale)"
+                  placeholder="Hai un codice amico?"
+                  value={referralCode}
+                  onChangeText={text => {
+                    setReferralCode(text.toUpperCase());
+                    if (errors.referralCode) {
+                      setErrors(prev => {
+                        const {referralCode: _unused, ...rest} = prev;
+                        void _unused;
+                        return rest;
+                      });
+                    }
+                  }}
+                  autoCapitalize="characters"
+                  error={errors.referralCode}
+                />
+
+                <Button
+                  title="Crea Account"
+                  onPress={handleRegister}
+                  loading={isLoading}
+                  fullWidth
+                  size="large"
+                />
+              </View>
+
+              <View style={styles.footer}>
+                <Text style={[styles.footerText, {color: colors.textSecondary}]}>Hai gia un account? </Text>
+                <TouchableOpacity onPress={() => navigation.goBack()}>
+                  <Text style={styles.footerLink}>Accedi</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.terms, {color: colors.textSecondary}]}>
+                Registrandoti accetti i nostri{' '}
+                <Text style={styles.link} onPress={() => navigation.navigate('Terms')}>Termini di Servizio</Text> e la{' '}
+                <Text style={styles.link} onPress={() => navigation.navigate('PrivacyPolicy')}>Privacy Policy</Text>
               </Text>
-            }
-            onRightIconPress={() => setShowPassword(!showPassword)}
-          />
-
-          <Input
-            label="Conferma Password"
-            placeholder="Ripeti la password"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry={!showPassword}
-            error={errors.confirmPassword}
-          />
-
-          <Input
-            label="Codice Referral (opzionale)"
-            placeholder="Hai un codice amico?"
-            value={referralCode}
-            onChangeText={text => {
-              setReferralCode(text.toUpperCase());
-              // Clear referral error when user types
-              if (errors.referralCode) {
-                setErrors(prev => {
-                  const {referralCode: _unused, ...rest} = prev;
-                  void _unused;
-                  return rest;
-                });
-              }
-            }}
-            autoCapitalize="characters"
-            error={errors.referralCode}
-          />
-
-          <Button
-            title="Crea Account"
-            onPress={handleRegister}
-            loading={isLoading}
-            fullWidth
-            size="large"
-          />
-        </View>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Hai gia un account? </Text>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.footerLink}>Accedi</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.terms}>
-          Registrandoti accetti i nostri{' '}
-          <Text style={styles.link}>Termini di Servizio</Text> e la{' '}
-          <Text style={styles.link}>Privacy Policy</Text>
-        </Text>
-      </View>
-    </ScreenContainer>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: SPACING.md,
+  },
   container: {
     flex: 1,
     paddingVertical: SPACING.lg,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.md,
     marginBottom: SPACING.md,
   },
   header: {
@@ -229,13 +262,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FONT_SIZE.xxl,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.text,
     marginBottom: SPACING.xs,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: FONT_SIZE.md,
-    color: COLORS.textSecondary,
     textAlign: 'center',
   },
   form: {

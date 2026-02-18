@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Platform,
   Image,
 } from 'react-native';
@@ -210,7 +209,6 @@ export const StreakScreen: React.FC<StreakScreenProps> = ({navigation}) => {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
         {/* Weekly Progress - Same design as StreakModal */}
         <Card style={[styles.weekCard, styles.weekCardShadow]}>
           <View style={styles.weekHeader}>
@@ -482,7 +480,6 @@ export const StreakScreen: React.FC<StreakScreenProps> = ({navigation}) => {
         </Card>
 
         <View style={{height: 100}} />
-      </ScrollView>
     </ScreenContainer>
   );
 };
@@ -519,10 +516,10 @@ const styles = StyleSheet.create({
   },
   weekCardShadow: {
     shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 8,
   },
   weekHeader: {
     flexDirection: 'row',
@@ -552,11 +549,11 @@ const styles = StyleSheet.create({
     height: 72,
     borderRadius: 12,
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   dayBoxGradient: {
     flex: 1,
@@ -618,6 +615,11 @@ const styles = StyleSheet.create({
   recoveryCard: {
     marginBottom: SPACING.md,
     borderWidth: 2,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   recoveryHeader: {
     flexDirection: 'row',
@@ -713,6 +715,11 @@ const styles = StyleSheet.create({
   activeCard: {
     marginBottom: SPACING.md,
     borderWidth: 2,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   activeRow: {
     flexDirection: 'row',
@@ -727,10 +734,10 @@ const styles = StyleSheet.create({
   rewardsCard: {
     marginBottom: SPACING.md,
     shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 8,
   },
   rewardsTitle: {
     fontSize: FONT_SIZE.lg,

@@ -206,25 +206,38 @@ class PrizesController extends WP_REST_Controller {
         $update_data = ['current_ads' => $new_count];
 
         // Check if goal reached and timer should start
+        $timer_just_started = false;
         if ($new_count >= $prize->goal_ads && $prize->timer_status === 'waiting') {
-            $update_data['timer_status'] = 'countdown';
-            $update_data['timer_started_at'] = current_time('mysql');
-            $update_data['scheduled_at'] = date('Y-m-d H:i:s', strtotime('+' . $prize->timer_duration . ' seconds'));
+            // Use MySQL NOW() directly to avoid timezone mismatches
+            $duration = (int) $prize->timer_duration;
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$table_prizes} SET current_ads = %d, timer_status = 'countdown', timer_started_at = NOW(), scheduled_at = DATE_ADD(NOW(), INTERVAL %d SECOND) WHERE id = %d",
+                $new_count, $duration, $prize_id
+            ));
+            $timer_just_started = true;
 
-            // Send "extraction imminent" notification
-            $scheduled_time = strtotime($update_data['scheduled_at']);
-            $remaining_min = max(1, intval(($scheduled_time - time()) / 60));
-            if ($remaining_min <= 10) {
-                // Timer is short (≤10 min) - notify immediately
-                $transient_key = 'rafflemania_reminder_' . $prize->id;
-                if (!get_transient($transient_key)) {
-                    \RaffleMania\NotificationHelper::notify_extraction_soon($prize->name, $remaining_min);
-                    set_transient($transient_key, 1, 600);
+            // Read back for notification
+            $sched = $wpdb->get_var($wpdb->prepare("SELECT scheduled_at FROM {$table_prizes} WHERE id = %d", $prize_id));
+            if ($sched) {
+                $remaining_min = max(1, intval((strtotime($sched) - time()) / 60));
+                if ($remaining_min <= 10) {
+                    $transient_key = 'rafflemania_reminder_' . $prize->id;
+                    if (!get_transient($transient_key)) {
+                        \RaffleMania\NotificationHelper::notify_extraction_soon($prize->name, $remaining_min);
+                        set_transient($transient_key, 1, 600);
+                    }
+                }
+                // Schedule extraction event
+                $extraction_time = strtotime($sched);
+                if ($extraction_time > time()) {
+                    wp_schedule_single_event($extraction_time + 5, 'rafflemania_check_extractions');
                 }
             }
         }
 
-        $wpdb->update($table_prizes, $update_data, ['id' => $prize_id]);
+        if (!$timer_just_started) {
+            $wpdb->update($table_prizes, $update_data, ['id' => $prize_id]);
+        }
 
         // Get updated prize
         $updated_prize = $wpdb->get_row($wpdb->prepare(
@@ -373,48 +386,45 @@ class PrizesController extends WP_REST_Controller {
             return new WP_Error('not_found', 'Premio non trovato', ['status' => 404]);
         }
 
-        // Build update data
-        $update_data = ['timer_status' => $timer_status];
+        // When starting a countdown, use MySQL NOW() directly to avoid
+        // timezone mismatches between PHP/frontend (UTC) and MySQL (local)
+        if ($timer_status === 'countdown' && $prize->timer_status !== 'countdown') {
+            $duration = (int) $prize->timer_duration;
+            $ads = ($current_ads !== null) ? (int) $current_ads : (int) $prize->current_ads;
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$table_prizes} SET timer_status = 'countdown', timer_started_at = NOW(), scheduled_at = DATE_ADD(NOW(), INTERVAL %d SECOND), current_ads = %d WHERE id = %d",
+                $duration, $ads, $prize_id
+            ));
 
-        if ($timer_started_at) {
-            // Convert ISO format to MySQL format if needed
-            $ts = strtotime($timer_started_at);
-            $update_data['timer_started_at'] = date('Y-m-d H:i:s', $ts);
+            // Read back the saved scheduled_at for notification scheduling
+            $updated = $wpdb->get_row($wpdb->prepare("SELECT scheduled_at FROM {$table_prizes} WHERE id = %d", $prize_id));
+            $update_data = ['_done' => true]; // flag to skip the generic update below
+        } else {
+            // For non-countdown updates, build data normally
+            $update_data = ['timer_status' => $timer_status];
+
+            if ($current_ads !== null) {
+                $update_data['current_ads'] = (int) $current_ads;
+            }
+            if ($timer_started_at) {
+                $update_data['timer_started_at'] = wp_date('Y-m-d H:i:s', strtotime($timer_started_at));
+            }
+            if ($scheduled_at) {
+                $update_data['scheduled_at'] = wp_date('Y-m-d H:i:s', strtotime($scheduled_at));
+            }
+
+            // If completing, set extracted_at
+            if ($timer_status === 'completed' && !$prize->extracted_at) {
+                $update_data['extracted_at'] = current_time('mysql');
+            }
+
+            $wpdb->update($table_prizes, $update_data, ['id' => $prize_id]);
         }
-
-        if ($scheduled_at) {
-            $ts = strtotime($scheduled_at);
-            $update_data['scheduled_at'] = date('Y-m-d H:i:s', $ts);
-        }
-
-        if ($current_ads !== null) {
-            $update_data['current_ads'] = (int) $current_ads;
-        }
-
-        // If starting countdown, ensure timer_started_at is set
-        if ($timer_status === 'countdown' && !isset($update_data['timer_started_at']) && !$prize->timer_started_at) {
-            $update_data['timer_started_at'] = current_time('mysql');
-        }
-
-        // If starting countdown without scheduled_at, calculate from timer_duration
-        if ($timer_status === 'countdown' && !isset($update_data['scheduled_at']) && !$prize->scheduled_at) {
-            $start_time = isset($update_data['timer_started_at'])
-                ? strtotime($update_data['timer_started_at'])
-                : time();
-            $update_data['scheduled_at'] = date('Y-m-d H:i:s', $start_time + $prize->timer_duration);
-        }
-
-        // If completing, set extracted_at
-        if ($timer_status === 'completed' && !$prize->extracted_at) {
-            $update_data['extracted_at'] = current_time('mysql');
-        }
-
-        $wpdb->update($table_prizes, $update_data, ['id' => $prize_id]);
 
         // Send "extraction imminent" notification if timer just started
         if ($timer_status === 'countdown' && $prize->timer_status !== 'countdown') {
-            // Get the actual scheduled_at (from update or from DB)
-            $actual_scheduled_at = isset($update_data['scheduled_at']) ? $update_data['scheduled_at'] : $prize->scheduled_at;
+            // Get the actual scheduled_at from DB (reliable after direct MySQL update)
+            $actual_scheduled_at = isset($updated->scheduled_at) ? $updated->scheduled_at : (isset($update_data['scheduled_at']) ? $update_data['scheduled_at'] : $prize->scheduled_at);
             if ($actual_scheduled_at) {
                 $remaining_min = max(1, intval((strtotime($actual_scheduled_at) - time()) / 60));
                 if ($remaining_min <= 10) {

@@ -7,6 +7,34 @@ $levels_table   = $wpdb->prefix . 'rafflemania_levels';
 $packages_table = $wpdb->prefix . 'rafflemania_shop_packages';
 
 // ---------------------------------------------------------------------------
+// Auto-migrate: add benefits column if missing
+// ---------------------------------------------------------------------------
+$col_exists = $wpdb->get_results("SHOW COLUMNS FROM {$levels_table} LIKE 'benefits'");
+if (empty($col_exists)) {
+    $wpdb->query("ALTER TABLE {$levels_table} ADD COLUMN benefits TEXT DEFAULT NULL AFTER credit_reward");
+    // Seed default benefits for existing levels
+    $defaults = [
+        0  => [],
+        1  => ['Accesso alle estrazioni base', 'Guadagna XP guardando ads'],
+        2  => ['Sblocca badge Apprendista', 'Accesso notifiche prioritarie'],
+        3  => ['Accesso anticipato nuovi premi', 'Sblocca badge Esploratore'],
+        4  => ['Biglietto bonus mensile', 'Sblocca badge Avventuriero'],
+        5  => ['Sconto 5% acquisto crediti', '2 Biglietti bonus mensili', 'Sblocca badge Veterano'],
+        6  => ['3 Biglietti bonus mensili', 'Sblocca badge Campione'],
+        7  => ['Sconto 10% acquisto crediti', '4 Biglietti bonus mensili', 'Accesso VIP estrazioni speciali', 'Sblocca badge Maestro'],
+        8  => ['5 Biglietti bonus mensili', 'Premi esclusivi Leggenda', 'Sblocca badge Leggenda'],
+        9  => ['6 Biglietti bonus mensili', 'Accesso estrazioni Mito', 'Sblocca badge Mito'],
+        10 => ['Sconto 15% acquisto crediti', 'Biglietti illimitati bonus', 'Accesso a TUTTI i premi esclusivi', 'Status Divinita permanente', 'Sblocca badge Divinita'],
+    ];
+    foreach ($defaults as $lvl_num => $benefits) {
+        if (!empty($benefits)) {
+            $wpdb->update($levels_table, ['benefits' => wp_json_encode($benefits)], ['level' => $lvl_num]);
+        }
+    }
+    wp_cache_delete('rafflemania_levels_cache');
+}
+
+// ---------------------------------------------------------------------------
 // POST handlers
 // ---------------------------------------------------------------------------
 
@@ -18,6 +46,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'add_level') {
     if (!wp_verify_nonce($_POST['_wpnonce_level'], 'rafflemania_level_nonce')) {
         wp_die('Nonce non valido');
     }
+    $benefits_raw = isset($_POST['benefits']) ? sanitize_textarea_field($_POST['benefits']) : '';
+    $benefits_arr = array_values(array_filter(array_map('trim', explode("\n", $benefits_raw))));
     $wpdb->insert($levels_table, [
         'level'         => intval($_POST['level']),
         'name'          => sanitize_text_field($_POST['name']),
@@ -26,6 +56,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'add_level') {
         'icon'          => sanitize_text_field($_POST['icon']),
         'color'         => sanitize_hex_color($_POST['color']),
         'credit_reward' => intval($_POST['credit_reward']),
+        'benefits'      => wp_json_encode($benefits_arr),
         'sort_order'    => intval($_POST['sort_order']),
         'is_active'     => isset($_POST['is_active']) ? 1 : 0,
     ]);
@@ -39,6 +70,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'edit_level') {
     if (!wp_verify_nonce($_POST['_wpnonce_level'], 'rafflemania_level_nonce')) {
         wp_die('Nonce non valido');
     }
+    $benefits_raw = isset($_POST['benefits']) ? sanitize_textarea_field($_POST['benefits']) : '';
+    $benefits_arr = array_values(array_filter(array_map('trim', explode("\n", $benefits_raw))));
     $wpdb->update($levels_table, [
         'level'         => intval($_POST['level']),
         'name'          => sanitize_text_field($_POST['name']),
@@ -47,6 +80,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'edit_level') {
         'icon'          => sanitize_text_field($_POST['icon']),
         'color'         => sanitize_hex_color($_POST['color']),
         'credit_reward' => intval($_POST['credit_reward']),
+        'benefits'      => wp_json_encode($benefits_arr),
         'sort_order'    => intval($_POST['sort_order']),
         'is_active'     => isset($_POST['is_active']) ? 1 : 0,
     ], ['id' => intval($_POST['level_id'])]);
@@ -120,9 +154,9 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_streak') {
     if (!wp_verify_nonce($_POST['_wpnonce_streak'], 'rafflemania_streak_nonce')) {
         wp_die('Nonce non valido');
     }
-    $streak_config = [
-        'daily_xp'            => intval($_POST['daily_xp']),
-        'day_7_xp'            => intval($_POST['day_7_xp']),
+    // Preserve XP fields managed by xp-rewards page
+    $existing_streak = json_decode(get_option('rafflemania_streak_config', '{}'), true) ?: [];
+    $streak_config = array_merge($existing_streak, [
         'day_7_credits'       => intval($_POST['day_7_credits']),
         'week_1_credits'      => intval($_POST['week_1_credits']),
         'week_2_credits'      => intval($_POST['week_2_credits']),
@@ -130,31 +164,9 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_streak') {
         'week_4_credits'      => intval($_POST['week_4_credits']),
         'max_streak'          => intval($_POST['max_streak']),
         'recovery_cost_per_day' => intval($_POST['recovery_cost_per_day']),
-    ];
+    ]);
     update_option('rafflemania_streak_config', wp_json_encode($streak_config));
     $toast_message = 'Configurazione streak salvata!';
-    $toast_type    = 'success';
-}
-
-// --- Limits & XP ---
-if (isset($_POST['action']) && $_POST['action'] === 'save_limits_xp') {
-    if (!wp_verify_nonce($_POST['_wpnonce_limits'], 'rafflemania_limits_nonce')) {
-        wp_die('Nonce non valido');
-    }
-    $daily_limits = [
-        'max_tickets'       => intval($_POST['max_tickets']),
-        'max_ads'           => intval($_POST['max_ads']),
-        'cooldown_minutes'  => intval($_POST['cooldown_minutes']),
-    ];
-    // Preserve existing XP fields not shown in form
-    $existing_xp = json_decode(get_option('rafflemania_xp_rewards', '{}'), true) ?: [];
-    $xp_rewards = array_merge($existing_xp, [
-        'watch_ad'         => intval($_POST['watch_ad']),
-        'purchase_ticket'  => intval($_POST['purchase_ticket']),
-    ]);
-    update_option('rafflemania_daily_limits', wp_json_encode($daily_limits));
-    update_option('rafflemania_xp_rewards', wp_json_encode($xp_rewards));
-    $toast_message = 'Limiti e XP salvati!';
     $toast_type    = 'success';
 }
 
@@ -168,14 +180,6 @@ $packages = $wpdb->get_results("SELECT * FROM {$packages_table} ORDER BY sort_or
 $streak_raw    = get_option('rafflemania_streak_config', '{}');
 $streak_config = json_decode($streak_raw, true);
 if (!is_array($streak_config)) $streak_config = [];
-
-$limits_raw   = get_option('rafflemania_daily_limits', '{}');
-$daily_limits = json_decode($limits_raw, true);
-if (!is_array($daily_limits)) $daily_limits = [];
-
-$xp_raw    = get_option('rafflemania_xp_rewards', '{}');
-$xp_rewards = json_decode($xp_raw, true);
-if (!is_array($xp_rewards)) $xp_rewards = [];
 
 // Helper to get value safely
 function rm_val($arr, $key, $default = '') {
@@ -762,6 +766,7 @@ select.rm-inline-input {
                             <th>Icona</th>
                             <th>Colore</th>
                             <th>Crediti Premio</th>
+                            <th>Ricompense</th>
                             <th>Ordine</th>
                             <th>Attivo</th>
                             <th>Azioni</th>
@@ -770,7 +775,7 @@ select.rm-inline-input {
                     <tbody>
                         <?php if (empty($levels)): ?>
                         <tr>
-                            <td colspan="10">
+                            <td colspan="11">
                                 <div class="rm-empty">
                                     <div class="rm-empty-icon">&#127942;</div>
                                     <div class="rm-empty-text">Nessun livello configurato. Aggiungi il primo!</div>
@@ -791,6 +796,18 @@ select.rm-inline-input {
                                     <?php echo esc_html($lvl['color']); ?>
                                 </td>
                                 <td><?php echo number_format(intval($lvl['credit_reward'])); ?></td>
+                                <td>
+                                    <?php
+                                    $benefits = !empty($lvl['benefits']) ? json_decode($lvl['benefits'], true) : [];
+                                    if (!empty($benefits)) {
+                                        foreach ($benefits as $b) {
+                                            echo '<span style="display:inline-block;background:var(--rm-brand-light);color:var(--rm-brand);font-size:11px;font-weight:500;padding:2px 8px;border-radius:6px;margin:1px 2px;">' . esc_html($b) . '</span>';
+                                        }
+                                    } else {
+                                        echo '<span style="color:var(--rm-gray-400);font-size:12px;">&mdash;</span>';
+                                    }
+                                    ?>
+                                </td>
                                 <td><?php echo intval($lvl['sort_order']); ?></td>
                                 <td>
                                     <?php if (intval($lvl['is_active'])): ?>
@@ -808,7 +825,7 @@ select.rm-inline-input {
                             </tr>
                             <!-- Edit row (hidden) -->
                             <tr id="rm-level-edit-<?php echo intval($lvl['id']); ?>" class="rm-edit-row" style="display:none;">
-                                <td colspan="10">
+                                <td colspan="11">
                                     <form method="post">
                                         <input type="hidden" name="action" value="edit_level" />
                                         <input type="hidden" name="level_id" value="<?php echo intval($lvl['id']); ?>" />
@@ -860,6 +877,13 @@ select.rm-inline-input {
                                                     </div>
                                                 </td>
                                             </tr>
+                                            <tr>
+                                                <td colspan="10" style="border:none;padding:4px 4px 8px;">
+                                                    <label style="font-size:11px;color:var(--rm-gray-500);font-weight:600;">RICOMPENSE / BENEFICI <span style="font-weight:400;color:var(--rm-gray-400);">(uno per riga)</span></label><br/>
+                                                    <?php $edit_benefits = !empty($lvl['benefits']) ? json_decode($lvl['benefits'], true) : []; ?>
+                                                    <textarea name="benefits" class="rm-inline-input" rows="3" style="min-width:100%;resize:vertical;margin-top:4px;" placeholder="Accesso alle estrazioni base&#10;Sblocca badge..."><?php echo esc_textarea(implode("\n", $edit_benefits)); ?></textarea>
+                                                </td>
+                                            </tr>
                                         </table>
                                     </form>
                                 </td>
@@ -869,7 +893,7 @@ select.rm-inline-input {
 
                         <!-- Add new level row (hidden by default) -->
                         <tr id="rmAddLevelRow" class="rm-add-row" style="display:none;">
-                            <td colspan="10">
+                            <td colspan="11">
                                 <form method="post">
                                     <input type="hidden" name="action" value="add_level" />
                                     <?php wp_nonce_field('rafflemania_level_nonce', '_wpnonce_level'); ?>
@@ -915,6 +939,12 @@ select.rm-inline-input {
                                             </td>
                                             <td style="border:none;padding:4px;vertical-align:bottom;">
                                                 <button type="submit" class="rm-btn rm-btn-primary rm-btn-sm">Salva</button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="10" style="border:none;padding:4px 4px 8px;">
+                                                <label style="font-size:11px;color:var(--rm-gray-500);font-weight:600;">RICOMPENSE / BENEFICI <span style="font-weight:400;color:var(--rm-gray-400);">(uno per riga)</span></label><br/>
+                                                <textarea name="benefits" class="rm-inline-input" rows="3" style="min-width:100%;resize:vertical;margin-top:4px;" placeholder="Accesso alle estrazioni base&#10;Sblocca badge..."></textarea>
                                             </td>
                                         </tr>
                                     </table>
@@ -1142,18 +1172,8 @@ select.rm-inline-input {
                 <input type="hidden" name="action" value="save_streak" />
                 <?php wp_nonce_field('rafflemania_streak_nonce', '_wpnonce_streak'); ?>
 
-                <div class="rm-section-title">Ricompense Giornaliere</div>
+                <div class="rm-section-title">Crediti Streak</div>
                 <div class="rm-form-grid">
-                    <div class="rm-form-group">
-                        <label for="rm_daily_xp">XP Giornalieri</label>
-                        <input type="number" id="rm_daily_xp" name="daily_xp" min="0" value="<?php echo esc_attr(rm_val($streak_config, 'daily_xp', 10)); ?>" />
-                        <span class="rm-hint">XP ottenuti per ogni check-in giornaliero</span>
-                    </div>
-                    <div class="rm-form-group">
-                        <label for="rm_day7_xp">XP Giorno 7</label>
-                        <input type="number" id="rm_day7_xp" name="day_7_xp" min="0" value="<?php echo esc_attr(rm_val($streak_config, 'day_7_xp', 10)); ?>" />
-                        <span class="rm-hint">Bonus XP al settimo giorno consecutivo</span>
-                    </div>
                     <div class="rm-form-group">
                         <label for="rm_day7_credits">Crediti Giorno 7</label>
                         <input type="number" id="rm_day7_credits" name="day_7_credits" min="0" value="<?php echo esc_attr(rm_val($streak_config, 'day_7_credits', 1)); ?>" />
@@ -1201,63 +1221,6 @@ select.rm-inline-input {
 
                 <div class="rm-card-footer" style="margin: 24px -24px -24px; border-radius: 0 0 12px 12px;">
                     <button type="submit" class="rm-btn rm-btn-primary">Salva Configurazione Streak</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- ===================================================================
-         4. LIMITI E XP
-         =================================================================== -->
-    <div class="rm-card">
-        <div class="rm-card-header">
-            <h2>
-                <span class="rm-icon">&#9889;</span>
-                Limiti e XP
-            </h2>
-        </div>
-        <div class="rm-card-body">
-            <form method="post">
-                <input type="hidden" name="action" value="save_limits_xp" />
-                <?php wp_nonce_field('rafflemania_limits_nonce', '_wpnonce_limits'); ?>
-
-                <div class="rm-section-title">Limiti Giornalieri</div>
-                <div class="rm-form-grid">
-                    <div class="rm-form-group">
-                        <label for="rm_max_tickets">Max Ticket / Giorno</label>
-                        <input type="number" id="rm_max_tickets" name="max_tickets" min="0" value="<?php echo esc_attr(rm_val($daily_limits, 'max_tickets', 60)); ?>" />
-                        <span class="rm-hint">Numero massimo di ticket riscattabili al giorno</span>
-                    </div>
-                    <div class="rm-form-group">
-                        <label for="rm_max_ads">Max Annunci / Giorno</label>
-                        <input type="number" id="rm_max_ads" name="max_ads" min="0" value="<?php echo esc_attr(rm_val($daily_limits, 'max_ads', 72)); ?>" />
-                        <span class="rm-hint">Numero massimo di annunci visualizzabili al giorno</span>
-                    </div>
-                    <div class="rm-form-group">
-                        <label for="rm_cooldown">Cooldown (minuti)</label>
-                        <input type="number" id="rm_cooldown" name="cooldown_minutes" min="0" value="<?php echo esc_attr(rm_val($daily_limits, 'cooldown_minutes', 20)); ?>" />
-                        <span class="rm-hint">Tempo di attesa tra un&rsquo;azione e l&rsquo;altra</span>
-                    </div>
-                </div>
-
-                <hr class="rm-section-divider" />
-
-                <div class="rm-section-title">Ricompense XP</div>
-                <div class="rm-form-grid">
-                    <div class="rm-form-group">
-                        <label for="rm_xp_ad">XP per Annuncio</label>
-                        <input type="number" id="rm_xp_ad" name="watch_ad" min="0" value="<?php echo esc_attr(rm_val($xp_rewards, 'watch_ad', 3)); ?>" />
-                        <span class="rm-hint">Punti esperienza ottenuti guardando un annuncio</span>
-                    </div>
-                    <div class="rm-form-group">
-                        <label for="rm_xp_ticket">XP per Ticket</label>
-                        <input type="number" id="rm_xp_ticket" name="purchase_ticket" min="0" value="<?php echo esc_attr(rm_val($xp_rewards, 'purchase_ticket', 2)); ?>" />
-                        <span class="rm-hint">Punti esperienza ottenuti riscattando un ticket</span>
-                    </div>
-                </div>
-
-                <div class="rm-card-footer" style="margin: 24px -24px -24px; border-radius: 0 0 12px 12px;">
-                    <button type="submit" class="rm-btn rm-btn-primary">Salva Limiti e XP</button>
                 </div>
             </form>
         </div>

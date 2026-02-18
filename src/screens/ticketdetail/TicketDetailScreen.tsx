@@ -8,6 +8,7 @@ import {
   Animated,
   TouchableOpacity,
   StatusBar,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -45,7 +46,6 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
-  const glowAnim = useRef(new Animated.Value(0.6)).current;
 
   const ticket = [...activeTickets, ...pastTickets].find(t => t.id === ticketId);
   const prize = ticket?.prizeId ? prizes.find(p => String(p.id) === String(ticket.prizeId)) : null;
@@ -121,25 +121,6 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
     fetchDeliveryStatus();
   }, [ticket?.isWinner, ticket?.id, ticket?.deliveryStatus, ticket?.deliveredAt, myWins]);
 
-  // Winner glow animation
-  useEffect(() => {
-    if (ticket?.isWinner) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, {
-            toValue: 1,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0.6,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-        ]),
-      ).start();
-    }
-  }, [ticket?.isWinner, glowAnim]);
 
   if (!ticket) {
     return (
@@ -252,7 +233,7 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
               style={[
                 styles.prizeShowcaseCard,
                 {
-                  backgroundColor: colors.card,
+                  backgroundColor: '#FFF5E6',
                   opacity: fadeAnim,
                   transform: [{scale: scaleAnim}],
                 },
@@ -266,11 +247,10 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
                     resizeMode="contain"
                   />
                 )}
-                <Animated.View style={[styles.imageGlow, {opacity: glowAnim}]} />
               </View>
 
               {/* Prize Name & Description */}
-              <View style={styles.showcaseInfo}>
+              <View style={[styles.showcaseInfo, {backgroundColor: colors.card}]}>
                 <Text style={[styles.showcasePrizeName, {color: colors.text}]}>{displayPrizeName}</Text>
                 {displayPrizeDescription ? (
                   <Text style={[styles.showcaseDescription, {color: colors.textMuted}]}>
@@ -361,21 +341,26 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
             </Animated.View>
 
             {/* Support Note */}
-            <Animated.View
-              style={[
-                styles.supportNote,
-                {
-                  backgroundColor: `${COLORS.primary}08`,
-                  borderColor: COLORS.primary,
-                  opacity: fadeAnim,
-                  transform: [{translateY: slideAnim}],
-                },
-              ]}>
-              <Ionicons name="headset" size={18} color={COLORS.primary} />
-              <Text style={[styles.supportNoteText, {color: colors.textSecondary}]}>
-                Hai domande sulla tua vincita? Contattaci tramite la chat di supporto.
-              </Text>
-            </Animated.View>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('SupportChat')}>
+              <Animated.View
+                style={[
+                  styles.supportNote,
+                  {
+                    backgroundColor: `${COLORS.primary}08`,
+                    borderColor: COLORS.primary,
+                    opacity: fadeAnim,
+                    transform: [{translateY: slideAnim}],
+                  },
+                ]}>
+                <Ionicons name="headset" size={18} color={COLORS.primary} />
+                <Text style={[styles.supportNoteText, {color: colors.textSecondary}]}>
+                  Hai domande sulla tua vincita? Contattaci tramite la chat di supporto.
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+              </Animated.View>
+            </TouchableOpacity>
           </>
         ) : (
           <>
@@ -386,7 +371,7 @@ export const TicketDetailScreen: React.FC<TicketDetailScreenProps> = ({route, na
               style={[
                 styles.imageCard,
                 {
-                  backgroundColor: colors.card,
+                  backgroundColor: '#FFF5E6',
                   opacity: fadeAnim,
                   transform: [{scale: scaleAnim}],
                   borderColor: `${COLORS.primary}50`,
@@ -614,15 +599,15 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     overflow: 'hidden',
     marginBottom: SPACING.lg,
-    shadowColor: '#FFD700',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   showcaseImageContainer: {
     height: 220,
-    backgroundColor: '#FFF8F0',
+    backgroundColor: '#FFF5E6',
     alignItems: 'center',
     justifyContent: 'center',
     padding: SPACING.lg,
@@ -632,13 +617,6 @@ const styles = StyleSheet.create({
     width: '85%',
     height: '100%',
     zIndex: 1,
-  },
-  imageGlow: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255, 215, 0, 0.15)',
   },
   showcaseInfo: {
     padding: SPACING.lg,
@@ -660,11 +638,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   deliveryHeader: {
     flexDirection: 'row',
@@ -777,15 +755,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: SPACING.lg,
     borderWidth: 2,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   imageContainer: {
     height: 220,
-    backgroundColor: '#FFF8F0',
+    backgroundColor: '#FFF5E6',
     alignItems: 'center',
     justifyContent: 'center',
     padding: SPACING.lg,
@@ -798,11 +776,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   prizeName: {
     fontSize: FONT_SIZE.xxl,

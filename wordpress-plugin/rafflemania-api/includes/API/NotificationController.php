@@ -77,6 +77,14 @@ class NotificationController extends WP_REST_Controller {
 
         require_once RAFFLEMANIA_PLUGIN_DIR . 'includes/NotificationHelper.php';
 
+        // Cancel any previously scheduled ad-ready notification for this user
+        $option_key = 'rafflemania_ad_notif_' . $user_id;
+        $prev_notif_id = get_option($option_key);
+        if ($prev_notif_id) {
+            NotificationHelper::cancel_notification($prev_notif_id);
+            delete_option($option_key);
+        }
+
         $result = NotificationHelper::send_to_user_delayed(
             $user_id,
             'Pubblicita pronta!',
@@ -84,6 +92,11 @@ class NotificationController extends WP_REST_Controller {
             $cooldown_minutes,
             ['type' => 'ad_ready']
         );
+
+        // Store the new notification ID so we can cancel it next time
+        if ($result && isset($result['id'])) {
+            update_option($option_key, $result['id'], false);
+        }
 
         return new WP_REST_Response([
             'success' => (bool)$result,

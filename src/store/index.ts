@@ -28,6 +28,12 @@ export const syncStoresAfterLogin = async () => {
     const {useStreakStore: streakStore} = await import('./useStreakStore');
     await streakStore.getState().syncFromServer();
   } catch (error) {
-    console.log('[syncStoresAfterLogin] Error:', error);
+    console.log('[syncStoresAfterLogin] Streak sync error:', error);
+  }
+  try {
+    const {useLevelStore: levelStore} = await import('./useLevelStore');
+    levelStore.getState().syncFromServer();
+  } catch (error) {
+    console.log('[syncStoresAfterLogin] Level sync error:', error);
   }
 };

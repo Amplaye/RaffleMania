@@ -32,6 +32,7 @@ export interface LevelInfo {
   icon: string;
   color: string;
   creditReward: number; // Crediti premio al raggiungimento del livello
+  benefits: string[]; // Ricompense/benefici sbloccati a questo livello
 }
 
 export interface ShippingAddress {

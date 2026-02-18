@@ -3,14 +3,14 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Animated,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer, Card} from '../../components/common';
-import {useLevelStore, LEVELS} from '../../store';
+import {useLevelStore} from '../../store';
+import {useGameConfigStore} from '../../store/useGameConfigStore';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -21,19 +21,7 @@ import {
   RADIUS,
 } from '../../utils/constants';
 
-// Level benefits for each level (discounts: 5% at lv5, 10% at lv7, 15% at lv10)
-const LEVEL_BENEFITS: {[key: number]: string[]} = {
-  1: ['Accesso alle estrazioni base', 'Guadagna XP guardando ads'],
-  2: ['Sblocca badge Apprendista', 'Accesso notifiche prioritarie'],
-  3: ['Accesso anticipato nuovi premi', 'Sblocca badge Esploratore'],
-  4: ['Biglietto bonus mensile', 'Sblocca badge Avventuriero'],
-  5: ['Sconto 5% acquisto crediti', '2 Biglietti bonus mensili', 'Sblocca badge Veterano'],
-  6: ['3 Biglietti bonus mensili', 'Sblocca badge Campione'],
-  7: ['Sconto 10% acquisto crediti', '4 Biglietti bonus mensili', 'Accesso VIP estrazioni speciali', 'Sblocca badge Maestro'],
-  8: ['5 Biglietti bonus mensili', 'Premi esclusivi Leggenda', 'Sblocca badge Leggenda'],
-  9: ['6 Biglietti bonus mensili', 'Accesso estrazioni Mito', 'Sblocca badge Mito'],
-  10: ['Sconto 15% acquisto crediti', 'Biglietti illimitati bonus', 'Accesso a TUTTI i premi esclusivi', 'Status Divinita permanente', 'Sblocca badge Divinita'],
-};
+// Benefits are now fetched from server via LEVELS (useGameConfigStore)
 
 interface LevelDetailScreenProps {
   navigation: any;
@@ -41,7 +29,7 @@ interface LevelDetailScreenProps {
 
 // Level Item Component
 const LevelItem: React.FC<{
-  levelInfo: typeof LEVELS[0];
+  levelInfo: {level: number; name: string; minXP: number; maxXP: number; icon: string; color: string; creditReward: number; benefits: string[]};
   currentLevel: number;
   totalXP: number;
   colors: any;
@@ -50,7 +38,7 @@ const LevelItem: React.FC<{
   const {neon} = useThemeColors();
   const isUnlocked = currentLevel >= levelInfo.level;
   const isCurrent = currentLevel === levelInfo.level;
-  const benefits = LEVEL_BENEFITS[levelInfo.level] || [];
+  const benefits = levelInfo.benefits || [];
 
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -195,6 +183,7 @@ const LevelItem: React.FC<{
 export const LevelDetailScreen: React.FC<LevelDetailScreenProps> = ({navigation}) => {
   const {colors, neon} = useThemeColors();
   const {level, totalXP, getLevelInfo} = useLevelStore();
+  const dynamicLevels = useGameConfigStore(s => s.getLevels());
   const currentLevelInfo = getLevelInfo();
 
   return (
@@ -211,7 +200,6 @@ export const LevelDetailScreen: React.FC<LevelDetailScreenProps> = ({navigation}
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
         {/* Current Level Summary */}
         <View style={styles.header}>
           <View style={[styles.balanceCard, neon.glowStrong]}>
@@ -242,7 +230,7 @@ export const LevelDetailScreen: React.FC<LevelDetailScreenProps> = ({navigation}
         {/* All Levels */}
         <Text style={[styles.sectionTitle, {color: colors.text}]}>Tutti i Livelli</Text>
 
-        {LEVELS.map((levelInfo, index) => (
+        {dynamicLevels.map((levelInfo, index) => (
           <LevelItem
             key={levelInfo.level}
             levelInfo={levelInfo}
@@ -254,7 +242,6 @@ export const LevelDetailScreen: React.FC<LevelDetailScreenProps> = ({navigation}
         ))}
 
         <View style={styles.bottomPadding} />
-      </ScrollView>
     </ScreenContainer>
   );
 };
@@ -292,7 +279,7 @@ const styles = StyleSheet.create({
   balanceCard: {
     borderRadius: RADIUS.xl,
     shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,

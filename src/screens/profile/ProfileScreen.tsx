@@ -3,7 +3,7 @@ import {View, Text, StyleSheet, TouchableOpacity, Alert, Switch, Modal, TextInpu
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {ScreenContainer, Card} from '../../components/common';
-import {useAuthStore, useTicketsStore, useThemeStore, useLevelStore, LEVELS, debugTicketsStorage} from '../../store';
+import {useAuthStore, useTicketsStore, useThemeStore, useLevelStore, LEVELS} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -289,8 +289,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
   // Refresh user data on mount to get latest wins count
   useEffect(() => {
     refreshUserData();
-    // Debug: check AsyncStorage contents
-    debugTicketsStorage();
   }, [refreshUserData]);
 
   // Use the higher value between backend wins count and local count
@@ -496,7 +494,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     position: 'relative',
     shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
@@ -572,7 +570,7 @@ const styles = StyleSheet.create({
   levelCard: {
     marginBottom: SPACING.md,
     shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
@@ -762,7 +760,7 @@ const styles = StyleSheet.create({
   menuCard: {
     marginBottom: SPACING.md,
     shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
@@ -770,7 +768,7 @@ const styles = StyleSheet.create({
   themeCard: {
     marginBottom: SPACING.md,
     shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,

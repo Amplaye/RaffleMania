@@ -20,22 +20,17 @@ import * as Keychain from 'react-native-keychain';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useAuthStore} from '../../store';
+import {useThemeColors} from '../../hooks/useThemeColors';
 import {GoogleSigninButton} from '@react-native-google-signin/google-signin';
 
 
 const {width, height} = Dimensions.get('window');
 
-// Theme Colors
-const COLORS = {
-  background: '#FFFFFF',
+// Brand Colors (theme-independent)
+const BRAND = {
   orange: '#FF6B00',
   orangeLight: '#FF8533',
   orangeDark: '#E55A00',
-  text: '#1A1A1A',
-  textSecondary: '#666666',
-  textMuted: '#999999',
-  border: '#E5E5E5',
-  inputBg: '#FAFAFA',
   error: '#E53935',
   success: '#00B894',
 };
@@ -43,7 +38,7 @@ const COLORS = {
 // Neon glow effect
 const NEON_GLOW = Platform.select({
   ios: {
-    shadowColor: '#FF6B00',
+    shadowColor: BRAND.orange,
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.4,
     shadowRadius: 12,
@@ -126,74 +121,95 @@ const FloatingParticle: React.FC<ParticleProps> = ({
   );
 };
 
-// Logo-themed tagline with golden shimmer effect
+// Logo-themed tagline with word-by-word glow pulse
 const TAGLINE_WORDS = [
   {text: 'Guarda', color: '#FF8C00'},  // Orange dorato (come "Raffle")
-  {text: ', ', color: '#E8720C'},
+  {text: ', ', color: '#E8720C', isSep: true},
   {text: 'gioca', color: '#3BB8E8'},   // Azzurro (come "Mania")
-  {text: ', ', color: '#E8720C'},
+  {text: ', ', color: '#E8720C', isSep: true},
   {text: 'vinci', color: '#FFB800'},   // Oro (come le monete)
-  {text: '.', color: '#E8720C'},
+  {text: '.', color: '#E8720C', isSep: true},
 ];
 
+const MAIN_WORDS = TAGLINE_WORDS.filter(w => !w.isSep);
+
 const RainbowTagline: React.FC = () => {
-  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const wordAnims = useRef(MAIN_WORDS.map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
-    const shimmer = () => {
-      shimmerAnim.setValue(0);
+    const animateWords = () => {
+      // Reset all
+      wordAnims.forEach(a => a.setValue(0));
+
+      const wordSequence = wordAnims.map((anim, i) =>
+        Animated.sequence([
+          Animated.delay(i * 200),
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 250,
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 0,
+            duration: 350,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+
       Animated.sequence([
+        Animated.delay(300),
+        Animated.parallel(wordSequence),
         Animated.delay(800),
-        Animated.timing(shimmerAnim, {
-          toValue: 1,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => shimmer());
+      ]).start(() => animateWords());
     };
-    shimmer();
-  }, [shimmerAnim]);
+    animateWords();
+  }, [wordAnims]);
 
-  const shimmerTranslateX = shimmerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-80, 280],
-  });
-
-  const shimmerOpacity = shimmerAnim.interpolate({
-    inputRange: [0, 0.1, 0.5, 0.9, 1],
-    outputRange: [0, 0.6, 0.9, 0.6, 0],
-  });
+  let mainWordIdx = 0;
 
   return (
     <View style={styles.rainbowContainer}>
       <View style={styles.rainbowTextRow}>
-        {TAGLINE_WORDS.map((word, index) => (
-          <Text
-            key={index}
-            style={[
-              styles.rainbowChar,
-              {
-                color: word.color,
-                textShadowColor: word.color,
-                textShadowOffset: {width: 0, height: 0},
-                textShadowRadius: 4,
-              },
-            ]}>
-            {word.text}
-          </Text>
-        ))}
+        {TAGLINE_WORDS.map((word, index) => {
+          if (word.isSep) {
+            return (
+              <Text
+                key={index}
+                style={[
+                  styles.rainbowChar,
+                  {color: word.color},
+                ]}>
+                {word.text}
+              </Text>
+            );
+          }
+          const animIdx = mainWordIdx++;
+          const scale = wordAnims[animIdx].interpolate({
+            inputRange: [0, 1],
+            outputRange: [1, 1.12],
+          });
+          return (
+            <Animated.Text
+              key={index}
+              style={[
+                styles.rainbowChar,
+                {
+                  color: word.color,
+                  textShadowColor: word.color,
+                  textShadowOffset: {width: 0, height: 0},
+                  textShadowRadius: wordAnims[animIdx].interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [4, 16],
+                  }) as unknown as number,
+                  transform: [{scale}],
+                },
+              ]}>
+              {word.text}
+            </Animated.Text>
+          );
+        })}
       </View>
-      {/* Shimmer light sweep */}
-      <Animated.View
-        style={[
-          styles.shimmerOverlay,
-          {
-            opacity: shimmerOpacity,
-            transform: [{translateX: shimmerTranslateX}, {rotate: '20deg'}, {scaleY: 1.5}],
-          },
-        ]}
-        pointerEvents="none"
-      />
     </View>
   );
 };
@@ -214,6 +230,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const [rememberMe, setRememberMe] = useState(false);
   const [errors, setErrors] = useState<{email?: string; password?: string}>({});
   const passwordInputRef = useRef<TextInput>(null);
+
+  const {colors, gradientColors, isDark} = useThemeColors();
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -453,12 +471,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
   return (
     <LinearGradient
-      colors={['#FFFFFF', '#FFFCF5', '#FFF8EE', '#FFF0E0', '#FFE8D0']}
+      colors={gradientColors as unknown as string[]}
       locations={[0, 0.25, 0.5, 0.75, 1]}
       start={{x: 0.5, y: 0}}
       end={{x: 0.5, y: 1}}
       style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
 
       {/* Animated Background - Neon Orange Particles */}
       <View style={styles.particlesContainer} pointerEvents="none">
@@ -514,18 +532,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                   <View
                     style={[
                       styles.inputContainer,
+                      {backgroundColor: isDark ? colors.card : '#FAFAFA', borderColor: BRAND.orange + '40'},
                       errors.email && styles.inputContainerError,
                     ]}>
                     <Ionicons
                       name="mail-outline"
                       size={20}
-                      color={COLORS.textMuted}
+                      color={colors.textSecondary}
                       style={styles.inputIcon}
                     />
                     <TextInput
-                      style={styles.input}
+                      style={[styles.input, {color: colors.text}]}
                       placeholder="Email"
-                      placeholderTextColor={COLORS.textMuted}
+                      placeholderTextColor={colors.textSecondary}
                       value={email}
                       onChangeText={setEmail}
                       keyboardType="email-address"
@@ -543,19 +562,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                   <View
                     style={[
                       styles.inputContainer,
+                      {backgroundColor: isDark ? colors.card : '#FAFAFA', borderColor: BRAND.orange + '40'},
                       errors.password && styles.inputContainerError,
                     ]}>
                     <Ionicons
                       name="lock-closed-outline"
                       size={20}
-                      color={COLORS.textMuted}
+                      color={colors.textSecondary}
                       style={styles.inputIcon}
                     />
                     <TextInput
                       ref={passwordInputRef}
-                      style={styles.input}
+                      style={[styles.input, {color: colors.text}]}
                       placeholder="Password"
-                      placeholderTextColor={COLORS.textMuted}
+                      placeholderTextColor={colors.textSecondary}
                       value={password}
                       onChangeText={setPassword}
                       secureTextEntry={!showPassword}
@@ -571,7 +591,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                       <Ionicons
                         name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                         size={20}
-                        color={COLORS.textMuted}
+                        color={colors.textSecondary}
                       />
                     </TouchableOpacity>
                   </View>
@@ -589,11 +609,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                     <Switch
                       value={rememberMe}
                       onValueChange={setRememberMe}
-                      trackColor={{false: COLORS.border, true: COLORS.orange + '60'}}
-                      thumbColor={rememberMe ? COLORS.orange : '#f4f3f4'}
+                      trackColor={{false: colors.border, true: BRAND.orange + '60'}}
+                      thumbColor={rememberMe ? BRAND.orange : '#f4f3f4'}
                       style={styles.switch}
                     />
-                    <Text style={styles.rememberMeText}>Ricordami</Text>
+                    <Text style={[styles.rememberMeText, {color: colors.textSecondary}]}>Ricordami</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => navigation.navigate('ForgotPassword')}>
@@ -608,7 +628,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                   disabled={isLoading}
                   activeOpacity={0.85}>
                   <LinearGradient
-                    colors={[COLORS.orange, COLORS.orangeDark]}
+                    colors={[BRAND.orange, BRAND.orangeDark]}
                     start={{x: 0, y: 0}}
                     end={{x: 1, y: 0}}
                     style={styles.loginButtonGradient}>
@@ -625,16 +645,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
                 {/* Divider */}
                 <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>oppure</Text>
-                  <View style={styles.dividerLine} />
+                  <View style={[styles.dividerLine, {backgroundColor: colors.textSecondary}]} />
+                  <Text style={[styles.dividerText, {color: colors.textSecondary}]}>oppure</Text>
+                  <View style={[styles.dividerLine, {backgroundColor: colors.textSecondary}]} />
                 </View>
 
                 {/* Social Buttons - Inline */}
                 <View style={styles.socialButtonsRow}>
                   {/* Google Button */}
                   <TouchableOpacity
-                    style={styles.socialButtonSquare}
+                    style={[styles.socialButtonSquare, {backgroundColor: isDark ? colors.card : '#FFFFFF', borderColor: colors.border}]}
                     onPress={handleGoogleLogin}
                     disabled={socialLoading !== null}
                     activeOpacity={0.8}>
@@ -657,18 +677,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
                   {/* Guest Button */}
                   <TouchableOpacity
-                    style={[styles.socialButtonSquare, styles.guestButtonSquare]}
+                    style={[styles.socialButtonSquare, styles.guestButtonSquare, {backgroundColor: isDark ? colors.card : '#FFFFFF'}]}
                     onPress={handleGuestLogin}
                     disabled={socialLoading !== null}
                     activeOpacity={0.8}>
-                    <Ionicons name="person" size={24} color={COLORS.orange} />
+                    <Ionicons name="person" size={24} color={BRAND.orange} />
                   </TouchableOpacity>
                 </View>
               </Animated.View>
 
               {/* Register Link */}
               <Animated.View style={[styles.registerSection, {opacity: fadeAnim}]}>
-                <Text style={styles.registerText}>Non hai un account? </Text>
+                <Text style={[styles.registerText, {color: colors.textSecondary}]}>Non hai un account? </Text>
                 <TouchableOpacity onPress={() => navigation.navigate('Register')}>
                   <Text style={styles.registerLink}>Registrati</Text>
                 </TouchableOpacity>
@@ -693,9 +713,8 @@ const styles = StyleSheet.create({
   },
   particle: {
     position: 'absolute',
-    backgroundColor: '#FF6B00',
-    // Neon glow effect with gaussian blur simulation
-    shadowColor: '#FF6B00',
+    backgroundColor: BRAND.orange,
+    shadowColor: BRAND.orange,
     shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.8,
     shadowRadius: 6,
@@ -727,7 +746,7 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 42,
     fontWeight: '700',
-    color: COLORS.orange,
+    color: BRAND.orange,
     marginBottom: 8,
   },
   tagline: {
@@ -753,15 +772,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.8,
   },
-  shimmerOverlay: {
-    position: 'absolute',
-    top: -15,
-    left: 0,
-    width: 25,
-    height: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    borderRadius: 12,
-  },
   formSection: {
     marginBottom: 24,
   },
@@ -771,23 +781,26 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.inputBg,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: COLORS.orange + '40',
     paddingHorizontal: 16,
+    shadowColor: BRAND.orange,
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   inputContainerFocused: {
-    borderColor: COLORS.orange,
+    borderColor: BRAND.orange,
     backgroundColor: '#FFFFFF',
-    shadowColor: COLORS.orange,
+    shadowColor: BRAND.orange,
     shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 3,
   },
   inputContainerError: {
-    borderColor: COLORS.error,
+    borderColor: BRAND.error,
   },
   inputIcon: {
     marginRight: 12,
@@ -796,14 +809,14 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 16,
     fontSize: 16,
-    color: COLORS.text,
+    color: '#1A1A1A',
   },
   eyeButton: {
     padding: 8,
     marginLeft: 4,
   },
   errorText: {
-    color: COLORS.error,
+    color: BRAND.error,
     fontSize: 12,
     marginTop: 6,
     marginLeft: 4,
@@ -823,11 +836,10 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   rememberMeText: {
-    color: COLORS.textSecondary,
     fontSize: 14,
   },
   forgotPasswordText: {
-    color: COLORS.orange,
+    color: BRAND.orange,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -855,10 +867,8 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#000000',
   },
   dividerText: {
-    color: '#000000',
     fontSize: 14,
     marginHorizontal: 16,
   },
@@ -871,12 +881,10 @@ const styles = StyleSheet.create({
     width: Platform.OS === 'ios' ? 60 : 56,
     height: Platform.OS === 'ios' ? 60 : 56,
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: COLORS.border,
-    shadowColor: '#FF6B00',
+    shadowColor: BRAND.orange,
     shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -887,7 +895,7 @@ const styles = StyleSheet.create({
     height: 24,
   },
   guestButtonSquare: {
-    borderColor: COLORS.orange,
+    borderColor: BRAND.orange,
     borderWidth: 1.5,
   },
   appleButton: {
@@ -901,11 +909,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   registerText: {
-    color: COLORS.textSecondary,
     fontSize: 15,
   },
   registerLink: {
-    color: COLORS.orange,
+    color: BRAND.orange,
     fontSize: 15,
     fontWeight: '600',
   },

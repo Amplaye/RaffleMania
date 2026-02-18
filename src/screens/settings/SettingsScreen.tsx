@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Switch,
   TouchableOpacity,
-  ScrollView,
   Alert,
   Linking,
   Platform,
@@ -107,30 +106,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
 
   const linkSettings: SettingLink[] = [
     {
-      id: 'privacy',
-      icon: 'shield-checkmark',
-      title: 'Privacy Policy',
-      onPress: () => Linking.openURL('https://www.rafflemania.it/privacy'),
-    },
-    {
-      id: 'terms',
-      icon: 'document-text',
-      title: 'Termini di Servizio',
-      onPress: () => Linking.openURL('https://www.rafflemania.it/terms'),
-    },
-    {
       id: 'faq',
       icon: 'help-circle',
       title: 'FAQ',
       subtitle: 'Domande frequenti',
       onPress: () => navigation.navigate('Faq'),
-    },
-    {
-      id: 'support',
-      icon: 'mail-open',
-      title: 'Assistenza',
-      subtitle: 'Invia un\'email al supporto',
-      onPress: () => Linking.openURL('mailto:app.rafflemania@gmail.com?subject=Assistenza%20RaffleMania'),
     },
     {
       id: 'rate',
@@ -146,6 +126,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
           Linking.openURL(storeUrl);
         }
       },
+    },
+    {
+      id: 'privacy',
+      icon: 'shield-checkmark',
+      title: 'Privacy Policy',
+      onPress: () => navigation.navigate('PrivacyPolicy'),
+    },
+    {
+      id: 'terms',
+      icon: 'document-text',
+      title: 'Termini di Servizio',
+      onPress: () => navigation.navigate('Terms'),
+    },
+    {
+      id: 'cookies',
+      icon: 'browsers-outline',
+      title: 'Cookie Policy',
+      onPress: () => navigation.navigate('CookiePolicy'),
     },
   ];
 
@@ -275,7 +273,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
         {/* Notifications Section */}
         <Text style={[styles.sectionTitle, styles.firstSectionTitle, {color: colors.textMuted}]}>Notifiche</Text>
         <Card style={styles.card} padding="none">
@@ -340,7 +337,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({navigation}) => {
 
         {/* App Version */}
         <Text style={[styles.version, {color: colors.textMuted}]}>RaffleMania v1.0.0 (build 1)</Text>
-      </ScrollView>
 
       {/* Password Confirmation Modal */}
       <Modal
@@ -456,6 +452,11 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: SPACING.sm,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   settingItem: {
     flexDirection: 'row',
@@ -489,13 +490,12 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     borderRadius: RADIUS.lg,
-    overflow: 'hidden',
     marginBottom: SPACING.sm,
-    shadowColor: '#FF6B00',
-    shadowOffset: {width: 0, height: 4},
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 8,
   },
   logoutButtonInner: {
     flexDirection: 'row',

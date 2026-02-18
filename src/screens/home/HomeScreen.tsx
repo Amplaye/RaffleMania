@@ -14,6 +14,7 @@ import {
   Modal,
   Platform,
   Linking,
+  Animated,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -22,7 +23,7 @@ import {getTotalPoolTickets} from '../../services/mock';
 import apiClient from '../../services/apiClient';
 import {showRewardedAd, isRewardedAdReady, preloadRewardedAd, scheduleAdReadyNotification} from '../../services/adService';
 import {listenToPrizeUpdates, LivePrizeState} from '../../services/firebasePrizes';
-import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, useExtractionStore, useLevelUpStore, useGameConfigStore, useReferralStore, DAILY_LIMITS, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS, setMidnightStreakCallback} from '../../store';
+import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, useExtractionStore, useGameConfigStore, useReferralStore, DAILY_LIMITS, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS, setMidnightStreakCallback} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -35,6 +36,99 @@ import {
 
 const {width, height} = Dimensions.get('window');
 const SLIDE_WIDTH = width;
+
+const CREDIT_GOLD = '#FFB800';
+
+const STARS = [
+  {top: -2, left: 6, size: 6, delay: 0},
+  {top: 24, left: 0, size: 5, delay: 800},
+  {top: 2, left: 30, size: 5, delay: 400},
+  {top: 28, left: 32, size: 4, delay: 1200},
+  {top: 14, left: -2, size: 4, delay: 600},
+];
+
+const ShimmerCreditsDisplay: React.FC<{credits: number}> = ({credits}) => {
+  const starAnims = useRef(STARS.map(() => new Animated.Value(0))).current;
+
+  useEffect(() => {
+    starAnims.forEach((anim, i) => {
+      const twinkle = () => {
+        anim.setValue(0);
+        Animated.sequence([
+          Animated.delay(STARS[i].delay),
+          Animated.timing(anim, {toValue: 1, duration: 400, useNativeDriver: true}),
+          Animated.timing(anim, {toValue: 0.2, duration: 400, useNativeDriver: true}),
+          Animated.timing(anim, {toValue: 0.8, duration: 300, useNativeDriver: true}),
+          Animated.timing(anim, {toValue: 0, duration: 500, useNativeDriver: true}),
+          Animated.delay(1500),
+        ]).start(() => twinkle());
+      };
+      twinkle();
+    });
+  }, [starAnims]);
+
+  return (
+    <View style={shimmerStyles.container}>
+      <View style={shimmerStyles.iconContainer}>
+        {STARS.map((star, i) => (
+          <Animated.Text
+            key={i}
+            style={[
+              shimmerStyles.star,
+              {top: star.top, left: star.left, fontSize: star.size, opacity: starAnims[i]},
+            ]}
+            pointerEvents="none">
+            {'✦'}
+          </Animated.Text>
+        ))}
+        <Image
+          source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}}
+          style={shimmerStyles.icon}
+        />
+      </View>
+      <Text style={shimmerStyles.text}>
+        {credits} Crediti
+      </Text>
+    </View>
+  );
+};
+
+const shimmerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  iconContainer: {
+    position: 'relative',
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  icon: {
+    width: 36,
+    height: 36,
+  },
+  star: {
+    position: 'absolute',
+    color: CREDIT_GOLD,
+    textShadowColor: CREDIT_GOLD,
+    textShadowOffset: {width: 0, height: 0},
+    textShadowRadius: 4,
+    zIndex: 1,
+  },
+  text: {
+    fontSize: 16,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: CREDIT_GOLD,
+    textShadowColor: CREDIT_GOLD,
+    textShadowOffset: {width: 0, height: 0},
+    textShadowRadius: 4,
+    lineHeight: 36,
+  },
+});
 
 interface HomeScreenProps {
   navigation: any;
@@ -51,6 +145,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const refreshUserData = useAuthStore(state => state.refreshUserData);
   const {fetchSettings} = useSettingsStore();
   const fetchGameConfig = useGameConfigStore(s => s.fetchConfig);
+  const xpRewards = useGameConfigStore(s => s.xpRewards);
   const fetchReferrals = useReferralStore(s => s.fetchReferrals);
   const {getTicketNumbersForPrize} = useTicketsStore();
   const {showResultModal, extractionResult, hideResult, startExtraction, showResult} = useExtractionStore();
@@ -530,50 +625,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               activeOpacity={0.7}>
               <Text style={[styles.debugButtonText, {color: colors.text}]}>TIMER 20s</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.debugButton, {backgroundColor: colors.card}]}
-              onPress={async () => {
-                resetStreak();
-                Alert.alert('Debug', 'Streak resettato! Riapri l\'app per vedere il popup.');
-              }}
-              activeOpacity={0.7}>
-              <Text style={[styles.debugButtonText, {color: colors.text}]}>RESET STREAK</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.debugButton, {backgroundColor: colors.card}]}
-              onPress={() => {
-                // Simula 3 giorni persi settando lastLoginDate a 4 giorni fa
-                const fourDaysAgo = new Date();
-                fourDaysAgo.setDate(fourDaysAgo.getDate() - 4);
-                const dateStr = `${fourDaysAgo.getFullYear()}-${String(fourDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(fourDaysAgo.getDate()).padStart(2, '0')}`;
-                useStreakStore.setState({
-                  currentStreak: 5,
-                  lastLoginDate: dateStr,
-                  lastClaimedDate: dateStr,
-                  hasClaimedToday: false,
-                  streakBroken: false,
-                  missedDays: 0,
-                });
-                Alert.alert('Debug', 'Simulato streak di 5 giorni con 3 giorni persi. Riapri l\'app per vedere il modal di recupero.');
-              }}
-              activeOpacity={0.7}>
-              <Text style={[styles.debugButtonText, {color: colors.text}]}>TEST RECOVERY</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.debugButton, {backgroundColor: '#FF6B00'}]}
-              onPress={() => {
-                // Test level up - simula passaggio dal livello corrente al prossimo
-                const currentLevel = useLevelStore.getState().level;
-                const nextLevel = Math.min(currentLevel + 1, 10);
-                const creditReward = nextLevel <= 10 ? [0, 5, 10, 20, 35, 50, 65, 80, 90, 95, 100][nextLevel] : 0;
-                useLevelUpStore.getState().triggerLevelUp(currentLevel, nextLevel, creditReward);
-              }}
-              activeOpacity={0.7}>
-              <Text style={[styles.debugButtonText, {color: '#FFFFFF'}]}>TEST LEVEL UP</Text>
-            </TouchableOpacity>
           </ScrollView>
         )}
 
@@ -609,7 +660,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
                       style={styles.prizeSlideWrapper}
                       onPress={handlePrizePress}
                       activeOpacity={0.95}>
-                      <View style={[styles.prizeSlide, {backgroundColor: colors.card}]}>
+                      <View style={[styles.prizeSlide, {backgroundColor: '#FFF5E6'}]}>
                         <View style={[styles.prizeImageContainer, isTimerActive && styles.prizeImageContainerCompact]}>
                           <Image
                             source={{uri: prize.imageUrl}}
@@ -617,7 +668,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
                             resizeMode="contain"
                           />
                         </View>
-                        <View style={styles.prizeNameContainer}>
+                        <View style={[styles.prizeNameContainer, {backgroundColor: colors.card, borderBottomLeftRadius: RADIUS.xl - 2, borderBottomRightRadius: RADIUS.xl - 2}]}>
                           <Text style={[styles.prizeName, {color: colors.text}]} numberOfLines={2}>
                             {prize.name}
                           </Text>
@@ -660,15 +711,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         <View style={styles.bottomButtonContainer}>
           {/* Ticket Counter */}
           <View style={styles.ticketCounterRow}>
-            <View style={styles.creditsDisplay}>
-              <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 24, height: 24}} />
-              <Text style={[styles.creditsText, {color: colors.text}]}>
-                {user?.credits ?? 0} crediti
-              </Text>
+            <ShimmerCreditsDisplay credits={user?.credits ?? 0} />
+            <View style={styles.ticketCounterDisplay}>
+              <Ionicons name="ticket" size={28} color={COLORS.primary} />
+              <Text style={styles.ticketCounterValue}>{ticketsPurchasedToday}/{DAILY_LIMITS.MAX_TICKETS_PER_DAY}</Text>
             </View>
-            <Text style={[styles.ticketCounterText, {color: colors.text}]}>
-              Biglietti oggi: <Text style={styles.ticketCounterValue}>{ticketsPurchasedToday}/{DAILY_LIMITS.MAX_TICKETS_PER_DAY}</Text>
-            </Text>
           </View>
 
           {/* Watch Ad Button */}
@@ -690,10 +737,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               ) : cooldownSeconds > 0 ? (
                 <Text style={styles.watchAdText}>{`ATTENDI ${formatAdCooldown(cooldownSeconds)}`}</Text>
               ) : (
-                <Text style={styles.watchAdText}>GUARDA ADS +1</Text>
-              )}
-              {!isBettingLocked && !isWatchingAd && cooldownSeconds <= 0 && (
-                <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 24, height: 24}} />
+                <View style={{flexDirection: 'row', alignItems: 'center', gap: 2}}>
+                  <Text style={styles.watchAdText}>GUARDA ADS E RICEVI</Text>
+                  <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 36, height: 36, marginRight: -10}} />
+                  <Text style={styles.watchAdText}>+1</Text>
+                </View>
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -842,6 +890,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
             <Text style={[styles.creditModalSubtitle, {color: colors.textMuted}]}>
               Hai ottenuto 1 credito guardando la pubblicità
             </Text>
+            <View style={styles.creditModalXPRow}>
+              <Ionicons name="star" size={16} color="#FFD700" />
+              <Text style={[styles.creditModalXPText, {color: colors.textMuted}]}>
+                Ogni pubblicità ti fa guadagnare {xpRewards.WATCH_AD} punti esperienza
+              </Text>
+            </View>
             <Text style={[styles.creditModalBalance, {color: COLORS.primary}]}>
               Saldo: {user?.credits ?? 0} crediti
             </Text>
@@ -1100,7 +1154,7 @@ const styles = StyleSheet.create({
   },
   prizeImageContainer: {
     height: height * 0.30,
-    backgroundColor: '#FFF8F0',
+    backgroundColor: '#FFF5E6',
     justifyContent: 'center',
     alignItems: 'center',
     borderTopLeftRadius: RADIUS.xl - 2,
@@ -1176,14 +1230,17 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
   },
-  ticketCounterText: {
-    fontSize: FONT_SIZE.sm,
-    fontFamily: FONT_FAMILY.bold,
-    fontWeight: FONT_WEIGHT.bold,
+  ticketCounterDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   ticketCounterValue: {
+    fontSize: 16,
     color: COLORS.primary,
+    fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
+    lineHeight: 36,
   },
   watchAdButton: {
     borderRadius: RADIUS.lg,
@@ -1270,6 +1327,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minWidth: Platform.OS === 'ios' ? 100 : 90,
     minHeight: Platform.OS === 'ios' ? 90 : 80,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     gap: 4,
   },
   ticketOptionQty: {
@@ -1316,6 +1375,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: SPACING.md,
     lineHeight: 20,
+  },
+  creditModalXPRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: '#FFD70015',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.lg,
+    marginBottom: SPACING.md,
+  },
+  creditModalXPText: {
+    fontSize: FONT_SIZE.xs,
+    fontFamily: FONT_FAMILY.medium,
+    flex: 1,
   },
   creditModalBalance: {
     fontSize: FONT_SIZE.md,

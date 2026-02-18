@@ -36,6 +36,7 @@ interface LevelState {
   getTotalXPForCurrentLevel: () => number;
   getNextLevelReward: () => number;
   resetLevel: () => void;
+  syncFromServer: () => void;
 }
 
 // Dynamic level helpers - reads from game config store with fallback to hardcoded
@@ -136,7 +137,9 @@ export const useLevelStore = create<LevelState>()(
     const currentLevelInfo = getLevelByNumber(level);
     const xpInCurrentLevel = totalXP - currentLevelInfo.minXP;
     const xpNeededForLevel = currentLevelInfo.maxXP - currentLevelInfo.minXP;
-    return Math.min((xpInCurrentLevel / xpNeededForLevel) * 100, 100);
+    if (xpNeededForLevel <= 0) return 100;
+    const progress = (xpInCurrentLevel / xpNeededForLevel) * 100;
+    return Math.max(0, Math.min(progress, 100));
   },
 
   getXPForNextLevel: () => {
@@ -163,6 +166,44 @@ export const useLevelStore = create<LevelState>()(
     if (nextLevel > 10) return 0;
     const nextLevelInfo = getLevelByNumber(nextLevel);
     return nextLevelInfo.creditReward || 0;
+  },
+
+  syncFromServer: () => {
+    try {
+      const {useAuthStore} = require('./useAuthStore');
+      const user = useAuthStore.getState().user;
+      if (!user) return;
+
+      const serverXP = user.xp ?? 0;
+      const serverLevel = user.level ?? 0;
+      const {totalXP, level} = get();
+
+      // Only sync if server has more XP (avoid overwriting local gains not yet synced)
+      if (serverXP > totalXP || (serverXP > 0 && totalXP === 0)) {
+        const newLevel = calculateLevel(serverXP);
+        const levelInfo = getLevelByNumber(newLevel);
+        const currentXPInLevel = serverXP - levelInfo.minXP;
+
+        // Mark all levels up to current as claimed to avoid re-triggering rewards
+        const claimed: number[] = [];
+        for (let i = 1; i <= newLevel; i++) {
+          claimed.push(i);
+        }
+
+        set({
+          totalXP: serverXP,
+          currentXP: currentXPInLevel,
+          level: newLevel,
+          claimedLevelRewards: claimed,
+        });
+        console.log(`[LevelStore] Synced from server: XP=${serverXP}, Level=${newLevel}`);
+      } else if (serverLevel > level && serverXP === totalXP) {
+        // Server level is higher but XP same - sync level
+        set({level: serverLevel});
+      }
+    } catch (error) {
+      console.log('[LevelStore] syncFromServer error:', error);
+    }
   },
 
   resetLevel: () => {

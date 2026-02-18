@@ -296,13 +296,13 @@ $recent_winners = $wpdb->get_results(
             background: #f8f9fa;
             border-radius: 10px;
         }
-        .rm-stat-item.purple { background: #f3f0ff; }
+        .rm-stat-item.purple { background: #eef2ff; }
         .rm-stat-value {
             font-size: 28px;
             font-weight: 700;
             color: #FF6B00;
         }
-        .rm-stat-item.purple .rm-stat-value { color: #6c5ce7; }
+        .rm-stat-item.purple .rm-stat-value { color: #3b82f6; }
         .rm-stat-label {
             font-size: 12px;
             color: #666;

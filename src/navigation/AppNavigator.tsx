@@ -28,6 +28,7 @@ import {EmailVerificationScreen} from '../screens/auth';
 import {StreakScreen} from '../screens/streak';
 import {SupportChatScreen} from '../screens/support';
 import {FaqScreen} from '../screens/faq';
+import {PrivacyPolicyScreen, TermsScreen, CookiePolicyScreen} from '../screens/legal';
 import {AdminChatListScreen, AdminChatDetailScreen} from '../screens/admin';
 import {AvatarCustomizationScreen} from '../screens/avatar';
 
@@ -46,6 +47,9 @@ export type RootStackParamList = {
   Streak: undefined;
   SupportChat: undefined;
   Faq: undefined;
+  PrivacyPolicy: undefined;
+  Terms: undefined;
+  CookiePolicy: undefined;
   AvatarCustomization: undefined;
   // Admin screens
   AdminChatList: undefined;
@@ -183,6 +187,21 @@ const MainStack: React.FC = () => {
         name="Faq"
         component={FaqScreen}
         options={{title: 'FAQ'}}
+      />
+      <Stack.Screen
+        name="PrivacyPolicy"
+        component={PrivacyPolicyScreen}
+        options={{title: 'Privacy Policy'}}
+      />
+      <Stack.Screen
+        name="Terms"
+        component={TermsScreen}
+        options={{title: 'Termini di Servizio'}}
+      />
+      <Stack.Screen
+        name="CookiePolicy"
+        component={CookiePolicyScreen}
+        options={{title: 'Cookie Policy'}}
       />
       <Stack.Screen
         name="AvatarCustomization"

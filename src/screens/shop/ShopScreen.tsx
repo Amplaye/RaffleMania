@@ -80,12 +80,16 @@ const CreditPackageCard: React.FC<CreditPackageProps> = ({package_, onPress}) =>
           <Text style={styles.packageBadgeText}>{package_.badge}</Text>
         </View>
       )}
+      <Image
+        source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}}
+        style={styles.packageCreditIcon}
+      />
       <Text style={[styles.packageCredits, {color: colors.text}]}>{package_.credits}</Text>
       <Text style={[styles.packageCreditsLabel, {color: colors.textMuted}]}>CREDITI</Text>
       <Text style={styles.packagePrice}>{package_.price.toFixed(2)}€</Text>
-      {package_.discount && (
-        <Text style={styles.packageDiscount}>{package_.discount}</Text>
-      )}
+      <Text style={[styles.packageDiscount, !package_.discount && {opacity: 0}]}>
+        {package_.discount || '-'}
+      </Text>
     </TouchableOpacity>
   );
 };
@@ -417,7 +421,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           {/* AdMob Banner */}
-          <AdBanner />
+          <AdBanner style={{marginHorizontal: -16}} />
 
           {/* Info Row: Crediti Residui + Pagamenti Accettati */}
           <View style={styles.infoRow}>
@@ -495,8 +499,8 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({navigation: _navigation})
             ) : (
               <View style={{flexDirection: 'row', alignItems: 'center', gap: 2}}>
                 <Text style={styles.watchAdText}>GUARDA ADS E RICEVI</Text>
-                <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 24, height: 24}} />
-                <Text style={styles.watchAdText}>x1</Text>
+                <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 36, height: 36, marginRight: -10}} />
+                <Text style={styles.watchAdText}>+1</Text>
               </View>
             )}
           </LinearGradient>
@@ -630,6 +634,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: `${COLORS.primary}20`,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   infoBoxTitle: {
     fontSize: 10,
@@ -658,14 +667,18 @@ const styles = StyleSheet.create({
   },
   packageCard: {
     width: '31%',
-    padding: SPACING.md,
+    padding: SPACING.sm,
     borderRadius: RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 120,
     borderWidth: 1,
     borderColor: `${COLORS.primary}20`,
     position: 'relative',
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   packageCardHighlighted: {
     // Border rimosso
@@ -689,6 +702,11 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     textTransform: 'uppercase',
+  },
+  packageCreditIcon: {
+    width: 40,
+    height: 40,
+    marginBottom: 4,
   },
   packageCredits: {
     fontSize: FONT_SIZE.xl,
@@ -733,6 +751,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: COLORS.primary,
     gap: SPACING.xs,
+    shadowColor: COLORS.primary,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   removeBannerText: {
     fontSize: FONT_SIZE.xs,

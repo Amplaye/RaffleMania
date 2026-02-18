@@ -220,6 +220,11 @@ if (isset($_GET['edit'])) {
 }
 ?>
 
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/confirmDate/confirmDate.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/it.js"></script>
+
 <div class="wrap rafflemania-prizes-wrap">
     <h1>
         <span class="dashicons dashicons-gift" style="font-size: 30px; margin-right: 10px; color: #FF6B00;"></span>
@@ -265,7 +270,7 @@ if (isset($_GET['edit'])) {
         /* Stats cards */
         .rafflemania-stats-row {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(6, 1fr);
             gap: 16px;
             margin-bottom: 24px;
         }
@@ -549,6 +554,196 @@ if (isset($_GET['edit'])) {
             font-size: 13px;
             color: #666;
         }
+
+        /* Toggle switch */
+        .rm-toggle-label {
+            display: flex !important;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            margin: 0 !important;
+        }
+        .rm-toggle-track {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 26px;
+            flex-shrink: 0;
+        }
+        .rm-toggle-track input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+        .rm-toggle-thumb {
+            position: absolute;
+            inset: 0;
+            background: #ccc;
+            border-radius: 26px;
+            transition: background 0.25s ease;
+            cursor: pointer;
+        }
+        .rm-toggle-thumb::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+            transition: transform 0.25s ease;
+        }
+        .rm-toggle-track input:checked + .rm-toggle-thumb {
+            background: #FF6B00;
+        }
+        .rm-toggle-track input:checked + .rm-toggle-thumb::after {
+            transform: translateX(22px);
+        }
+        .rm-toggle-text {
+            font-weight: 600;
+            font-size: 14px;
+            color: #444;
+        }
+
+        /* Schedule input */
+        .rm-schedule-input-wrap {
+            position: relative;
+            max-width: 300px;
+        }
+        .rm-schedule-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 18px !important;
+            width: 18px !important;
+            height: 18px !important;
+            color: #FF6B00;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .rm-schedule-input {
+            width: 100%;
+            padding: 10px 36px 10px 38px !important;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+            background: #FAFAFA;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+        .rm-schedule-input:focus,
+        .rm-schedule-input.active {
+            border-color: #FF6B00;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(255,107,0,0.12);
+            background: white;
+        }
+        .rm-schedule-input:hover {
+            border-color: #FF6B00;
+        }
+        .rm-schedule-clear {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #e0e0e0;
+            color: #666;
+            font-size: 16px;
+            line-height: 22px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+            z-index: 1;
+        }
+        .rm-schedule-clear:hover {
+            background: #dc3545;
+            color: white;
+        }
+
+        /* Flatpickr theme overrides */
+        .flatpickr-calendar {
+            border-radius: 12px !important;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15) !important;
+            border: none !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        }
+        .flatpickr-months .flatpickr-month {
+            background: #FF6B00 !important;
+            border-radius: 12px 12px 0 0 !important;
+            height: 44px !important;
+        }
+        .flatpickr-current-month {
+            color: white !important;
+            font-weight: 600 !important;
+        }
+        .flatpickr-current-month .flatpickr-monthDropdown-months {
+            background: #FF6B00 !important;
+            color: white !important;
+            font-weight: 600 !important;
+        }
+        .flatpickr-current-month input.cur-year {
+            color: white !important;
+            font-weight: 600 !important;
+        }
+        .flatpickr-months .flatpickr-prev-month,
+        .flatpickr-months .flatpickr-next-month {
+            fill: white !important;
+            color: white !important;
+        }
+        .flatpickr-months .flatpickr-prev-month:hover svg,
+        .flatpickr-months .flatpickr-next-month:hover svg {
+            fill: #ffffffcc !important;
+        }
+        span.flatpickr-weekday {
+            color: #FF6B00 !important;
+            font-weight: 700 !important;
+            font-size: 12px !important;
+        }
+        .flatpickr-day {
+            border-radius: 8px !important;
+            font-weight: 500 !important;
+            transition: all 0.15s ease !important;
+        }
+        .flatpickr-day:hover {
+            background: #fff0e6 !important;
+            border-color: #FF6B00 !important;
+        }
+        .flatpickr-day.selected,
+        .flatpickr-day.selected:hover {
+            background: #FF6B00 !important;
+            border-color: #FF6B00 !important;
+            color: white !important;
+        }
+        .flatpickr-day.today {
+            border-color: #FF6B00 !important;
+        }
+        .flatpickr-day.today:hover {
+            background: #FF6B00 !important;
+            color: white !important;
+        }
+        .flatpickr-time {
+            border-top: 1px solid #eee !important;
+        }
+        .flatpickr-time input {
+            font-weight: 600 !important;
+            font-size: 15px !important;
+        }
+        .flatpickr-time input:focus {
+            border-color: #FF6B00 !important;
+            box-shadow: 0 0 0 2px rgba(255,107,0,0.15) !important;
+        }
+        .numInputWrapper:hover {
+            background: #fff0e6 !important;
+        }
     </style>
 
     <!-- Stats Row -->
@@ -617,17 +812,27 @@ if (isset($_GET['edit'])) {
                 </div>
 
                 <div class="rafflemania-form-row">
-                    <label>
-                        <input type="checkbox" name="is_active" <?php checked($editing->is_active ?? true, 1); ?>>
-                        Premio Attivo
+                    <label>Stato</label>
+                    <label class="rm-toggle-label" style="margin-top:4px;">
+                        <span class="rm-toggle-track">
+                            <input type="checkbox" name="is_active" <?php checked($editing->is_active ?? true, 1); ?>>
+                            <span class="rm-toggle-thumb"></span>
+                        </span>
+                        <span class="rm-toggle-text">Premio Attivo</span>
                     </label>
                 </div>
                 <input type="hidden" name="timer_duration" value="86400">
 
-                <div class="rafflemania-form-row">
-                    <label>Programma Pubblicazione (opzionale)</label>
-                    <input type="datetime-local" name="publish_at" value="<?php echo $editing && $editing->publish_at ? date('Y-m-d\TH:i', strtotime($editing->publish_at)) : ''; ?>" style="max-width: 280px;">
-                    <p class="description" style="font-size: 12px; color: #888; margin-top: 4px;">
+                <div class="rafflemania-form-row rm-schedule-row">
+                    <label>Programma Pubblicazione <span style="font-weight:400;color:#999;">(opzionale)</span></label>
+                    <div class="rm-schedule-input-wrap">
+                        <span class="dashicons dashicons-calendar-alt rm-schedule-icon"></span>
+                        <input type="text" name="publish_at" id="rm-flatpickr" class="rm-schedule-input" placeholder="Seleziona data e ora..." value="<?php echo $editing && $editing->publish_at ? date('Y-m-d H:i', strtotime($editing->publish_at)) : ''; ?>" readonly>
+                        <?php if ($editing && $editing->publish_at): ?>
+                        <span class="rm-schedule-clear" id="rm-flatpickr-clear" title="Rimuovi data">&times;</span>
+                        <?php endif; ?>
+                    </div>
+                    <p class="description" style="font-size: 12px; color: #888; margin-top: 6px;">
                         Se impostato nel futuro, il premio sara disattivato e apparira in "Raffle Futuri" nell'app fino alla data impostata.
                     </p>
                 </div>
@@ -847,4 +1052,42 @@ setTimeout(function() {
     var toasts = document.querySelectorAll('.rafflemania-toast');
     toasts.forEach(function(t) { t.style.display = 'none'; });
 }, 4000);
+
+// Flatpickr init
+var fpInput = document.getElementById('rm-flatpickr');
+if (fpInput) {
+    var fp = flatpickr(fpInput, {
+        enableTime: true,
+        time_24hr: true,
+        dateFormat: 'Y-m-d H:i',
+        locale: 'it',
+        minDate: 'today',
+        disableMobile: true,
+        allowInput: false,
+        onOpen: function() { fpInput.classList.add('active'); },
+        onClose: function() { fpInput.classList.remove('active'); },
+        onChange: function(selectedDates, dateStr) {
+            // Show clear button when date is selected
+            var wrap = fpInput.closest('.rm-schedule-input-wrap');
+            var clearBtn = wrap.querySelector('.rm-schedule-clear');
+            if (!clearBtn && dateStr) {
+                clearBtn = document.createElement('span');
+                clearBtn.className = 'rm-schedule-clear';
+                clearBtn.id = 'rm-flatpickr-clear';
+                clearBtn.title = 'Rimuovi data';
+                clearBtn.innerHTML = '&times;';
+                clearBtn.onclick = function() { fp.clear(); this.remove(); };
+                wrap.appendChild(clearBtn);
+            }
+        }
+    });
+
+    var clearBtn = document.getElementById('rm-flatpickr-clear');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+            fp.clear();
+            this.remove();
+        });
+    }
+}
 </script>

@@ -171,6 +171,7 @@ export const useAuthStore = create<AuthState>()(
 
       // Sync streak store from server after login
       import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
+      import('./useLevelStore').then(m => m.useLevelStore.getState().syncFromServer()).catch(() => {});
     } catch (error) {
       set({isLoading: false});
       throw new Error(getErrorMessage(error));
@@ -250,6 +251,7 @@ export const useAuthStore = create<AuthState>()(
 
         // Sync streak store from server after login
         import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
+      import('./useLevelStore').then(m => m.useLevelStore.getState().syncFromServer()).catch(() => {});
 
         return {isNewUser: !!isNewUser};
       } else {
@@ -380,6 +382,7 @@ export const useAuthStore = create<AuthState>()(
 
       // Sync streak store from server after login
       import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
+      import('./useLevelStore').then(m => m.useLevelStore.getState().syncFromServer()).catch(() => {});
 
       return {isNewUser: !!isNewUser};
     } catch (error: any) {
@@ -451,6 +454,21 @@ export const useAuthStore = create<AuthState>()(
       await AsyncStorage.removeItem('@rafflemania_remember_me').catch(() => {});
       await AsyncStorage.removeItem('@rafflemania_saved_email').catch(() => {});
       await Keychain.resetGenericPassword({service: 'rafflemania_saved_password'}).catch(() => {});
+      // Clear all persisted store data so no stale data on next login
+      // This ensures ad cooldown, tickets, levels, etc. are per-account
+      await AsyncStorage.multiRemove([
+        'rafflemania-tickets-storage',
+        'rafflemania-level-storage',
+        'rafflemania-credits-storage',
+        'rafflemania-streak-storage',
+        'rafflemania-referral-storage',
+        'rafflemania-prizes-sort',
+        'rafflemania-avatar-storage',
+        'rafflemania-auth-storage',
+        'rafflemania-game-config-storage',
+        'rafflemania-settings-storage',
+        'rafflemania-theme-storage',
+      ]).catch(() => {});
       // Unlink user from OneSignal
       OneSignal.logout();
     } catch (error) {
@@ -497,7 +515,16 @@ export const useAuthStore = create<AuthState>()(
         await tokenManager.clearTokens();
         await AsyncStorage.multiRemove([
           'rafflemania-auth-storage',
+          'rafflemania-tickets-storage',
+          'rafflemania-level-storage',
+          'rafflemania-credits-storage',
+          'rafflemania-streak-storage',
           'rafflemania-referral-storage',
+          'rafflemania-prizes-sort',
+          'rafflemania-avatar-storage',
+          'rafflemania-game-config-storage',
+          'rafflemania-settings-storage',
+          'rafflemania-theme-storage',
           'pending_referral_code',
           'pending_referral_username',
           '@rafflemania_remember_me',
@@ -551,6 +578,7 @@ export const useAuthStore = create<AuthState>()(
 
         // Sync streak store from server on app reopen
         import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
+      import('./useLevelStore').then(m => m.useLevelStore.getState().syncFromServer()).catch(() => {});
       }
     } catch {
       await tokenManager.clearTokens();
@@ -572,8 +600,9 @@ export const useAuthStore = create<AuthState>()(
 
       const response = await apiClient.get('/users/me');
       if (response.data.success) {
-        const userData = response.data.data.user;
         set({user: mapApiUserToUser(response.data.data.user)});
+        // Sync level store with fresh server data
+        import('./useLevelStore').then(m => m.useLevelStore.getState().syncFromServer()).catch(() => {});
       }
     } catch (error) {
     }
