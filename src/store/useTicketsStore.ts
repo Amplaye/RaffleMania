@@ -18,6 +18,8 @@ import {
   getAllAssignedNumbersForDraw,
   resetDrawRegistry,
 } from '../services/ticketNumberService';
+import {useAuthStore} from './useAuthStore';
+import {usePrizesStore} from './usePrizesStore';
 
 export interface ExtractionResult {
   isWinner: boolean;
@@ -164,7 +166,6 @@ export const useTicketsStore = create<TicketsState>()(
       if (apiActiveTickets.length === 0 && localActiveTickets.length > 0) {
         // API says no active tickets - only keep local ones for currently active prizes
         try {
-          const {usePrizesStore} = await import('./usePrizesStore');
           const activePrizeIds = new Set(
             usePrizesStore.getState().prizes
               .filter(p => p.isActive && p.timerStatus === 'countdown')
@@ -192,7 +193,6 @@ export const useTicketsStore = create<TicketsState>()(
 
       // Enrich local tickets with prize names from prizes store (for cached tickets missing prizeName)
       try {
-        const {usePrizesStore} = await import('./usePrizesStore');
         const allPrizes = usePrizesStore.getState().prizes;
         if (allPrizes.length > 0) {
           const enrichTicket = (t: Ticket): Ticket => {
@@ -220,7 +220,6 @@ export const useTicketsStore = create<TicketsState>()(
   addTicket: async (source: 'ad' | 'credits', drawId: string, prizeId: string) => {
     // Usa addTicketsBatch con quantity=1 per garantire unicità
     // Estrai timerStartedAt dal drawId se possibile
-    const {usePrizesStore} = await import('./usePrizesStore');
     const prize = usePrizesStore.getState().prizes.find(p => p.id === prizeId);
     const timerStartedAt = prize?.timerStartedAt;
 
@@ -249,8 +248,6 @@ export const useTicketsStore = create<TicketsState>()(
     // Limita la quantità al numero rimanente
     const actualQuantity = Math.min(quantity, remainingToday);
 
-    // Import auth store to check if user is guest
-    const {useAuthStore} = await import('./useAuthStore');
     const user = useAuthStore.getState().user;
     const updateUser = useAuthStore.getState().updateUser;
     const userId = user?.id || 'user_001';
@@ -267,7 +264,6 @@ export const useTicketsStore = create<TicketsState>()(
     );
 
     // Get prize name from prizes store for local display
-    const {usePrizesStore} = await import('./usePrizesStore');
     const prize = usePrizesStore.getState().prizes.find(p => String(p.id) === String(prizeId));
 
     // Converti le assegnazioni in Ticket objects
@@ -316,15 +312,12 @@ export const useTicketsStore = create<TicketsState>()(
     const state = get();
 
     if (state.lastResetDate !== today) {
-      // È un nuovo giorno - reset contatori
-      // Usa setTimeout per evitare setState durante render
-      setTimeout(() => {
-        set({
-          todayAdsWatched: 0,
-          todayTicketsPurchased: 0,
-          lastResetDate: today,
-        });
-      }, 0);
+      // È un nuovo giorno - reset contatori (sincrono per evitare race condition)
+      set({
+        todayAdsWatched: 0,
+        todayTicketsPurchased: 0,
+        lastResetDate: today,
+      });
     }
   },
 
@@ -555,16 +548,13 @@ export const useTicketsStore = create<TicketsState>()(
 
     // Update local user winsCount if user won
     if (isWinner) {
-      // Import dynamically to avoid circular dependency
-      import('./useAuthStore').then(({useAuthStore}) => {
-        const user = useAuthStore.getState().user;
-        const updateUser = useAuthStore.getState().updateUser;
-        if (user) {
-          updateUser({
-            winsCount: (user.winsCount || 0) + 1,
-          });
-        }
-      });
+      const authUser = useAuthStore.getState().user;
+      const authUpdateUser = useAuthStore.getState().updateUser;
+      if (authUser) {
+        authUpdateUser({
+          winsCount: (authUser.winsCount || 0) + 1,
+        });
+      }
     }
 
     return {
@@ -628,15 +618,13 @@ export const useTicketsStore = create<TicketsState>()(
     });
 
     // Update local user winsCount (forceWin always wins)
-    import('./useAuthStore').then(({useAuthStore}) => {
-      const user = useAuthStore.getState().user;
-      const updateUser = useAuthStore.getState().updateUser;
-      if (user) {
-        updateUser({
-          winsCount: (user.winsCount || 0) + 1,
-        });
-      }
-    });
+    const authUser = useAuthStore.getState().user;
+    const authUpdateUser = useAuthStore.getState().updateUser;
+    if (authUser) {
+      authUpdateUser({
+        winsCount: (authUser.winsCount || 0) + 1,
+      });
+    }
 
     return {
       isWinner: true,
@@ -650,9 +638,6 @@ export const useTicketsStore = create<TicketsState>()(
 
   // Sync extraction to backend (for authenticated users)
   syncExtractionToBackend: async (prizeId: string, winningNumber: number, userTicketId?: string) => {
-    // Import auth store to check if user is guest
-    const {useAuthStore} = await import('./useAuthStore');
-    const {usePrizesStore} = await import('./usePrizesStore');
     const token = useAuthStore.getState().token;
     const isGuestUser = token?.startsWith('guest_token_');
 
@@ -720,7 +705,6 @@ export const useTicketsStore = create<TicketsState>()(
 
   cleanupExtractedTickets: async () => {
     try {
-      const {usePrizesStore} = await import('./usePrizesStore');
       const {completedDraws} = usePrizesStore.getState();
       const {activeTickets, pastTickets} = get();
 

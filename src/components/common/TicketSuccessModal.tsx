@@ -110,11 +110,6 @@ export const TicketSuccessModal: React.FC<TicketSuccessModalProps> = ({
           <Text style={styles.title}>
             {isBatch ? `${ticketCount} Numeri Ottenuti!` : 'Nuovo Numero Ottenuto!'}
           </Text>
-          <Text style={styles.subtitle}>
-            {isBatch
-              ? `Hai ${ticketCount} nuovi numeri per l'estrazione`
-              : 'Hai un nuovo numero per l\'estrazione'}
-          </Text>
 
           {/* Ticket Numbers Card */}
           <Animated.View
@@ -172,22 +167,10 @@ export const TicketSuccessModal: React.FC<TicketSuccessModalProps> = ({
             </LinearGradient>
           </Animated.View>
 
-          {/* Total Numbers Info */}
-          {ticketInfo.totalUserNumbers && ticketInfo.totalUserNumbers.length > 0 && (
-            <View style={styles.totalNumbersContainer}>
-              <Ionicons name="ticket" size={16} color={COLORS.primary} />
-              <Text style={styles.totalNumbersText}>
-                Hai {ticketInfo.totalUserNumbers.length} numer{ticketInfo.totalUserNumbers.length === 1 ? 'o' : 'i'} per questo premio
-              </Text>
-            </View>
-          )}
-
           {/* XP Info */}
           <View style={styles.xpInfoContainer}>
-            <Ionicons name="star" size={16} color="#FFD700" />
-            <Text style={styles.xpInfoText}>
-              Ogni biglietto riscattato ti fa guadagnare {xpRewards.PURCHASE_TICKET} punti esperienza
-            </Text>
+            <Ionicons name="star" size={20} color="#1E90FF" />
+            <Text style={styles.xpBadgeText}>+{ticketCount * xpRewards.PURCHASE_TICKET} XP</Text>
           </View>
 
           {/* Good Luck Message */}
@@ -354,17 +337,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
-    backgroundColor: '#FFD70015',
+    backgroundColor: '#1E90FF15',
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.md,
     borderRadius: RADIUS.lg,
     marginBottom: SPACING.md,
   },
-  xpInfoText: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.medium,
-    color: COLORS.textMuted,
-    flex: 1,
+  xpBadgeText: {
+    fontSize: FONT_SIZE.xl,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: '#1E90FF',
   },
   luckContainer: {
     flexDirection: 'row',

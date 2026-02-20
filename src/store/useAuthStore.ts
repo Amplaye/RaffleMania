@@ -16,6 +16,9 @@ import {API_CONFIG} from '../utils/constants';
 import * as Keychain from 'react-native-keychain';
 import apiClient, {tokenManager, getErrorMessage} from '../services/apiClient';
 import {syncNotificationTags} from './useSettingsStore';
+import {useReferralStore} from './useReferralStore';
+import {useStreakStore} from './useStreakStore';
+import {useLevelStore} from './useLevelStore';
 
 // Configure Google Sign-In
 GoogleSignin.configure({
@@ -170,8 +173,8 @@ export const useAuthStore = create<AuthState>()(
       });
 
       // Sync streak store from server after login
-      import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
-      import('./useLevelStore').then(m => m.useLevelStore.getState().syncFromServer()).catch(() => {});
+      useStreakStore.getState().syncFromServer();
+      useLevelStore.getState().syncFromServer();
     } catch (error) {
       set({isLoading: false});
       throw new Error(getErrorMessage(error));
@@ -250,8 +253,8 @@ export const useAuthStore = create<AuthState>()(
         });
 
         // Sync streak store from server after login
-        import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
-      import('./useLevelStore').then(m => m.useLevelStore.getState().syncFromServer()).catch(() => {});
+        useStreakStore.getState().syncFromServer();
+        useLevelStore.getState().syncFromServer();
 
         return {isNewUser: !!isNewUser};
       } else {
@@ -381,8 +384,8 @@ export const useAuthStore = create<AuthState>()(
       });
 
       // Sync streak store from server after login
-      import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
-      import('./useLevelStore').then(m => m.useLevelStore.getState().syncFromServer()).catch(() => {});
+      useStreakStore.getState().syncFromServer();
+      useLevelStore.getState().syncFromServer();
 
       return {isNewUser: !!isNewUser};
     } catch (error: any) {
@@ -577,8 +580,8 @@ export const useAuthStore = create<AuthState>()(
         });
 
         // Sync streak store from server on app reopen
-        import('./useStreakStore').then(m => m.useStreakStore.getState().syncFromServer()).catch(() => {});
-      import('./useLevelStore').then(m => m.useLevelStore.getState().syncFromServer()).catch(() => {});
+        useStreakStore.getState().syncFromServer();
+        useLevelStore.getState().syncFromServer();
       }
     } catch {
       await tokenManager.clearTokens();
@@ -602,7 +605,7 @@ export const useAuthStore = create<AuthState>()(
       if (response.data.success) {
         set({user: mapApiUserToUser(response.data.data.user)});
         // Sync level store with fresh server data
-        import('./useLevelStore').then(m => m.useLevelStore.getState().syncFromServer()).catch(() => {});
+        useLevelStore.getState().syncFromServer();
       }
     } catch (error) {
     }
@@ -680,8 +683,6 @@ export const useAuthStore = create<AuthState>()(
 
         // Process referral if code was provided
         if (pendingReferralCode) {
-          // Import referral store dynamically to avoid circular dependency
-          const {useReferralStore} = await import('./useReferralStore');
           // Set the referrer for this user (mock: we create a fake referrer)
           useReferralStore.getState().setReferrer({
             id: 'referrer_' + pendingReferralCode,

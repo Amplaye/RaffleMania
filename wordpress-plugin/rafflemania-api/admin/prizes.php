@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_prize_non
                 'image_url' => esc_url_raw($_POST['image_url']),
                 'value' => floatval($_POST['value']),
                 'goal_ads' => intval($_POST['goal_ads']),
-                'timer_duration' => intval($_POST['timer_duration']),
+                'timer_duration' => (floatval($_POST['value']) <= 25) ? 300 : 43200,
                 'is_active' => $is_active,
                 'publish_at' => $publish_at,
                 'stock' => max(0, intval($_POST['stock'] ?? 1))
@@ -77,7 +77,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rafflemania_prize_non
             $prize_id = intval($_POST['prize_id']);
             $prize = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table_prizes} WHERE id = %d", $prize_id));
             if ($prize && $prize->timer_status === 'waiting') {
-                $scheduled_at = gmdate('Y-m-d H:i:s', time() + $prize->timer_duration);
+                $prize_value = (float) $prize->value;
+                $duration = ($prize_value <= 25) ? 300 : 43200;
+                $scheduled_at = gmdate('Y-m-d H:i:s', time() + $duration);
                 $wpdb->update($table_prizes, [
                     'timer_status' => 'countdown',
                     'timer_started_at' => current_time('mysql'),
@@ -821,7 +823,7 @@ if (isset($_GET['edit'])) {
                         <span class="rm-toggle-text">Premio Attivo</span>
                     </label>
                 </div>
-                <input type="hidden" name="timer_duration" value="86400">
+                <!-- timer_duration is now computed server-side from prize value -->
 
                 <div class="rafflemania-form-row rm-schedule-row">
                     <label>Programma Pubblicazione <span style="font-weight:400;color:#999;">(opzionale)</span></label>

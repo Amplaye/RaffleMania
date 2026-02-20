@@ -11,6 +11,9 @@ import {rewardEvents} from './src/services/rewardEvents';
 import {extractionEvents} from './src/services/extractionEvents';
 import {initIAP, endIAPConnection} from './src/services/paymentService';
 import {initializeAds, preloadRewardedAd} from './src/services/adService';
+import {useSettingsStore} from './src/store/useSettingsStore';
+import {usePrizesStore} from './src/store/usePrizesStore';
+import {useAuthStore} from './src/store/useAuthStore';
 
 // Suppress all development-only warnings and known deprecation errors
 LogBox.ignoreAllLogs(true);
@@ -63,7 +66,6 @@ const App: React.FC = () => {
         OneSignal.User.pushSubscription.optIn();
       }
       // Sync the settings store toggle with actual permission state
-      const {useSettingsStore} = require('./src/store/useSettingsStore');
       const currentPrefs = useSettingsStore.getState().notifications;
       if (currentPrefs.pushEnabled !== hasPermission) {
         useSettingsStore.setState({
@@ -77,7 +79,6 @@ const App: React.FC = () => {
       if (accepted) {
         // Permission granted - immediately opt in and sync state
         OneSignal.User.pushSubscription.optIn();
-        const {useSettingsStore} = require('./src/store/useSettingsStore');
         const prefs = useSettingsStore.getState().notifications;
         if (!prefs.pushEnabled) {
           useSettingsStore.setState({
@@ -86,7 +87,6 @@ const App: React.FC = () => {
         }
       } else if (Platform.OS === 'ios') {
         // Permission denied on iOS - prompt to enable in Settings
-        const {useSettingsStore} = require('./src/store/useSettingsStore');
         const prefs = useSettingsStore.getState().notifications;
         if (prefs.pushEnabled) {
           useSettingsStore.setState({
@@ -109,8 +109,8 @@ const App: React.FC = () => {
       }
     });
 
-    // Also sync after a delay (for cases where OneSignal needs time to initialize)
-    setTimeout(syncPushState, 3000);
+    // Sync push state (async and non-blocking)
+    syncPushState();
 
     // Re-check permission when app comes back from Settings
     const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
@@ -143,8 +143,6 @@ const App: React.FC = () => {
       if (data?.type === 'prize_delivered') {
         notification.display();
         setTimeout(() => {
-          const {usePrizesStore} = require('./src/store/usePrizesStore');
-          const {useAuthStore} = require('./src/store/useAuthStore');
           const userId = useAuthStore.getState().user?.id;
           if (userId) {
             usePrizesStore.getState().fetchMyWins(userId);
@@ -174,8 +172,6 @@ const App: React.FC = () => {
         navigate('PrizeDetail', {prizeId: data.prize_id});
       } else if (data?.type === 'prize_delivered') {
         // Refresh wins data and navigate to MyWins
-        const {usePrizesStore} = require('./src/store/usePrizesStore');
-        const {useAuthStore} = require('./src/store/useAuthStore');
         const userId = useAuthStore.getState().user?.id;
         if (userId) {
           usePrizesStore.getState().fetchMyWins(userId);

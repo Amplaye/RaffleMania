@@ -13,7 +13,7 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {AnimatedBackground, AdBanner} from '../../components/common';
-import {useTicketsStore, usePrizesStore} from '../../store';
+import {useTicketsStore, usePrizesStore, useAuthStore} from '../../store';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {Ticket} from '../../types';
 import {getTotalPoolTickets} from '../../services/mock';
@@ -308,6 +308,7 @@ export const TicketsScreen: React.FC<TicketsScreenProps> = ({navigation}) => {
   const [activeTab, setActiveTab] = useState<TabType>('active');
   const {activeTickets, pastTickets, fetchTickets, forceRefreshTickets} = useTicketsStore();
   const {prizes, myWins} = usePrizesStore();
+  const user = useAuthStore(state => state.user);
   const [refreshing, setRefreshing] = useState(false);
   const contentOpacity = useRef(new Animated.Value(1)).current;
 

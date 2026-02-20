@@ -233,19 +233,40 @@ export const usePrizesStore = create<PrizesState>()(
         }
       }
 
-      // Use server timer state as-is - trust the server as source of truth.
-      // If a prize has countdown with expired scheduledAt, keep it:
-      // the timer interval in AppNavigator will detect it and trigger
-      // handleOfflineExtraction() which calls POST /draws (with dedup).
+      // Use server timer state, but protect active countdown timers from being
+      // overwritten with significantly different scheduledAt values (timezone safety)
+      const currentPrizes = get().prizes;
+      const currentPrizeMap = new Map(currentPrizes.map(p => [p.id, p]));
+
+      const protectedApiPrizes = apiPrizes.map(apiPrize => {
+        const local = currentPrizeMap.get(apiPrize.id);
+        // If local prize has an active countdown and API also shows countdown,
+        // keep the local scheduledAt if the API value differs by more than 2 minutes
+        // (protects against timezone conversion issues between server and client)
+        if (
+          local &&
+          local.timerStatus === 'countdown' &&
+          apiPrize.timerStatus === 'countdown' &&
+          local.scheduledAt &&
+          apiPrize.scheduledAt
+        ) {
+          const localTime = new Date(local.scheduledAt).getTime();
+          const apiTime = new Date(apiPrize.scheduledAt).getTime();
+          if (Math.abs(apiTime - localTime) > 120000) {
+            // API scheduledAt differs by >2 min from local - keep local value
+            return {...apiPrize, scheduledAt: local.scheduledAt};
+          }
+        }
+        return apiPrize;
+      });
 
       // Preserve deactivated prizes that user has won (not returned by API anymore)
       // so MyWinsScreen can still display prize names/images
-      const apiPrizeIds = new Set(apiPrizes.map(p => p.id));
-      const currentPrizes = get().prizes;
+      const apiPrizeIds = new Set(protectedApiPrizes.map(p => p.id));
       const preservedWonPrizes = currentPrizes.filter(p =>
         !apiPrizeIds.has(p.id) && !p.isActive,
       );
-      const mergedPrizes = [...apiPrizes, ...preservedWonPrizes];
+      const mergedPrizes = [...protectedApiPrizes, ...preservedWonPrizes];
 
       console.log('Loaded prizes from API:', apiPrizes.length, preservedWonPrizes.length > 0 ? `(+${preservedWonPrizes.length} won prizes preserved)` : '');
       set({prizes: mergedPrizes, isLoading: false});

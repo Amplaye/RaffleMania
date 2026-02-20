@@ -429,8 +429,8 @@ class DrawsController extends WP_REST_Controller {
                             'winnerUserId' => null,
                             'totalTickets' => 0,
                             'status' => 'no_tickets',
-                            'extractedAt' => current_time('mysql'),
-                            'createdAt' => current_time('mysql')
+                            'extractedAt' => gmdate('Y-m-d\TH:i:s.000\Z'),
+                            'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z')
                         ],
                         'no_tickets' => true
                     ]
@@ -727,8 +727,8 @@ class DrawsController extends WP_REST_Controller {
             'winnerUserId' => $draw->winner_user_id ? (string) $draw->winner_user_id : null,
             'totalTickets' => (int) $draw->total_tickets,
             'status' => $draw->status,
-            'extractedAt' => $draw->extracted_at,
-            'createdAt' => $draw->created_at
+            'extractedAt' => PrizesController::to_utc_iso($draw->extracted_at),
+            'createdAt' => PrizesController::to_utc_iso($draw->created_at)
         ];
     }
 

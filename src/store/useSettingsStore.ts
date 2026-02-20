@@ -3,6 +3,7 @@ import {persist, createJSONStorage} from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../services/apiClient';
 import axios from 'axios';
+import {useAuthStore} from './useAuthStore';
 
 // Base URL for direct PHP endpoints (bypasses REST API cache)
 const DIRECT_SETTINGS_URL = 'https://www.rafflemania.it/wp-content/plugins/rafflemania-api/get-settings.php';
@@ -254,7 +255,6 @@ export const useSettingsStore = create<SettingsState>()(
 
         // Sync all preferences to server (non-blocking)
         try {
-          const {useAuthStore} = await import('./useAuthStore');
           const user = useAuthStore.getState().user;
           const token = useAuthStore.getState().token;
           const isGuest = token?.startsWith('guest_token_');

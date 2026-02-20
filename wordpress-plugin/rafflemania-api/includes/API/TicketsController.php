@@ -276,9 +276,12 @@ class TicketsController extends WP_REST_Controller {
 
         // Check if goal reached and timer should start
         if ($new_current_ads >= $prize->goal_ads && $prize->timer_status === 'waiting') {
+            // Compute duration based on prize value (≤25€ = 5 min, >25€ = 12h)
+            $prize_value = (float) $prize->value;
+            $duration = ($prize_value <= 25) ? 300 : 43200;
             $update_data['timer_status'] = 'countdown';
             $update_data['timer_started_at'] = current_time('mysql');
-            $update_data['scheduled_at'] = date('Y-m-d H:i:s', strtotime('+' . $prize->timer_duration . ' seconds'));
+            $update_data['scheduled_at'] = date('Y-m-d H:i:s', strtotime('+' . $duration . ' seconds'));
         }
 
         $wpdb->update($table_prizes, $update_data, ['id' => $prize_id]);
@@ -314,14 +317,25 @@ class TicketsController extends WP_REST_Controller {
     }
 
     private function format_prize($prize) {
+        // Compute remaining seconds using MySQL's own timezone (safe)
+        $scheduled_at_utc = null;
+        if ($prize->timer_status === 'countdown' && $prize->scheduled_at) {
+            global $wpdb;
+            $remaining = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT GREATEST(0, TIMESTAMPDIFF(SECOND, NOW(), %s))", $prize->scheduled_at
+            ));
+            if ($remaining > 0) {
+                $scheduled_at_utc = gmdate('Y-m-d\TH:i:s.000\Z', time() + $remaining);
+            }
+        }
         return [
             'id' => (string) $prize->id,
             'name' => $prize->name,
             'currentAds' => (int) $prize->current_ads,
             'goalAds' => (int) $prize->goal_ads,
             'timerStatus' => $prize->timer_status,
-            'scheduledAt' => $prize->scheduled_at,
-            'timerStartedAt' => $prize->timer_started_at
+            'scheduledAt' => $scheduled_at_utc,
+            'timerStartedAt' => PrizesController::to_utc_iso($prize->timer_started_at)
         ];
     }
 
@@ -550,7 +564,7 @@ class TicketsController extends WP_REST_Controller {
                     'drawId' => $draw_id,
                     'source' => $source,
                     'status' => 'active',
-                    'createdAt' => current_time('mysql')
+                    'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z')
                 ];
             }
 
@@ -560,9 +574,12 @@ class TicketsController extends WP_REST_Controller {
 
             // Check if goal reached and timer should start
             if ($new_current_ads >= $prize->goal_ads && $prize->timer_status === 'waiting') {
+                // Compute duration based on prize value (≤25€ = 5 min, >25€ = 12h)
+                $prize_value = (float) $prize->value;
+                $duration = ($prize_value <= 25) ? 300 : 43200;
                 $update_data['timer_status'] = 'countdown';
                 $update_data['timer_started_at'] = current_time('mysql');
-                $update_data['scheduled_at'] = date('Y-m-d H:i:s', strtotime('+' . $prize->timer_duration . ' seconds'));
+                $update_data['scheduled_at'] = date('Y-m-d H:i:s', strtotime('+' . $duration . ' seconds'));
             }
 
             $wpdb->update($table_prizes, $update_data, ['id' => $prize_id]);
@@ -662,7 +679,7 @@ class TicketsController extends WP_REST_Controller {
             'source' => $ticket->source,
             'status' => $ticket->status,
             'isWinner' => (bool) $ticket->is_winner,
-            'createdAt' => $ticket->created_at
+            'createdAt' => PrizesController::to_utc_iso($ticket->created_at)
         ];
     }
 

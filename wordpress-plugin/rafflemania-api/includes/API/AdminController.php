@@ -403,7 +403,12 @@ class AdminController extends WP_REST_Controller {
         $duration = (int) $request->get_param('duration');
         $table = $wpdb->prefix . 'rafflemania_prizes';
 
-        if ($duration <= 0) $duration = 86400; // default 24h
+        if ($duration <= 0) {
+            // Compute duration based on prize value
+            $prize = $wpdb->get_row($wpdb->prepare("SELECT value FROM {$table} WHERE id = %d", $prize_id));
+            $prize_value = $prize ? (float) $prize->value : 0;
+            $duration = ($prize_value <= 25) ? 300 : 43200; // 5 min for ≤25€, 12h for >25€
+        }
 
         $now = current_time('mysql');
         $scheduled = date('Y-m-d H:i:s', strtotime($now) + $duration);

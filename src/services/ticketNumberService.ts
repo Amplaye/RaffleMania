@@ -10,6 +10,7 @@
 
 import {API_CONFIG} from '../utils/constants';
 import apiClient, {getErrorMessage} from './apiClient';
+import {useAuthStore} from '../store/useAuthStore';
 
 // Struttura per tracciare i numeri assegnati per ogni draw
 interface DrawTicketRegistry {
@@ -164,7 +165,6 @@ export const requestTickets = async (
   let assignedNumbers: number[];
 
   // Determina se usare mock o API
-  const {useAuthStore} = await import('../store/useAuthStore');
   const token = useAuthStore.getState().token;
   const isGuestUser = token?.startsWith('guest_token_');
   const useMockMode = API_CONFIG.USE_MOCK_DATA || isGuestUser;

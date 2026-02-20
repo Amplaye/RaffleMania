@@ -4,6 +4,8 @@ import {useSettingsStore} from './useSettingsStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../services/apiClient';
 import {useAuthStore} from './useAuthStore';
+import {useTicketsStore} from './useTicketsStore';
+import {usePrizesStore} from './usePrizesStore';
 const SEEN_DRAW_IDS_KEY = 'rafflemania_seen_draw_ids';
 
 export interface MissedExtraction {
@@ -190,7 +192,6 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
         const wins = missed.filter(m => m.isWinner);
         if (wins.length > 0) {
           try {
-            const {useTicketsStore} = await import('./useTicketsStore');
             const {activeTickets, pastTickets} = useTicketsStore.getState();
             const now = new Date().toISOString();
             let updatedActive = [...activeTickets];
@@ -243,7 +244,6 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
             }, 2000);
 
             // Also refresh myWins from server
-            const {usePrizesStore} = await import('./usePrizesStore');
             if (user?.id) {
               usePrizesStore.getState().fetchMyWins(user.id);
             }

@@ -120,7 +120,12 @@ class PrizesController extends WP_REST_Controller {
         }
 
         $prizes = $wpdb->get_results(
-            "SELECT * FROM {$table_prizes} {$where} {$order_sql}"
+            "SELECT *,
+                CASE WHEN timer_status = 'countdown' AND scheduled_at IS NOT NULL
+                    THEN GREATEST(0, TIMESTAMPDIFF(SECOND, NOW(), scheduled_at))
+                    ELSE NULL
+                END AS remaining_seconds
+            FROM {$table_prizes} {$where} {$order_sql}"
         );
 
         $formatted = array_map([$this, 'format_prize'], $prizes);
@@ -208,8 +213,9 @@ class PrizesController extends WP_REST_Controller {
         // Check if goal reached and timer should start
         $timer_just_started = false;
         if ($new_count >= $prize->goal_ads && $prize->timer_status === 'waiting') {
-            // Use MySQL NOW() directly to avoid timezone mismatches
-            $duration = (int) $prize->timer_duration;
+            // Compute duration based on prize value (≤25€ = 5 min, >25€ = 12h)
+            $prize_value = (float) $prize->value;
+            $duration = ($prize_value <= 25) ? 300 : 43200;
             $wpdb->query($wpdb->prepare(
                 "UPDATE {$table_prizes} SET current_ads = %d, timer_status = 'countdown', timer_started_at = NOW(), scheduled_at = DATE_ADD(NOW(), INTERVAL %d SECOND) WHERE id = %d",
                 $new_count, $duration, $prize_id
@@ -261,7 +267,12 @@ class PrizesController extends WP_REST_Controller {
         $prize_id = $request->get_param('id');
 
         $prize = $wpdb->get_row($wpdb->prepare(
-            "SELECT id, timer_status, scheduled_at, timer_started_at, current_ads, goal_ads FROM {$table_prizes} WHERE id = %d",
+            "SELECT id, timer_status, scheduled_at, timer_started_at, current_ads, goal_ads,
+                CASE WHEN timer_status = 'countdown' AND scheduled_at IS NOT NULL
+                    THEN GREATEST(0, TIMESTAMPDIFF(SECOND, NOW(), scheduled_at))
+                    ELSE NULL
+                END AS remaining_seconds
+            FROM {$table_prizes} WHERE id = %d",
             $prize_id
         ));
 
@@ -269,20 +280,17 @@ class PrizesController extends WP_REST_Controller {
             return new WP_Error('not_found', 'Premio non trovato', ['status' => 404]);
         }
 
-        $remaining_seconds = 0;
-        if ($prize->timer_status === 'countdown' && $prize->scheduled_at) {
-            $scheduled_time = strtotime($prize->scheduled_at);
-            $remaining_seconds = max(0, $scheduled_time - time());
-        }
+        $remaining = (int)($prize->remaining_seconds ?? 0);
+        $scheduled_at_utc = $remaining > 0 ? gmdate('Y-m-d\TH:i:s.000\Z', time() + $remaining) : null;
 
         return new WP_REST_Response([
             'success' => true,
             'data' => [
                 'prizeId' => (int) $prize->id,
                 'timerStatus' => $prize->timer_status,
-                'scheduledAt' => $prize->scheduled_at,
-                'timerStartedAt' => $prize->timer_started_at,
-                'remainingSeconds' => $remaining_seconds,
+                'scheduledAt' => $scheduled_at_utc,
+                'timerStartedAt' => self::to_utc_iso($prize->timer_started_at),
+                'remainingSeconds' => $remaining,
                 'currentAds' => (int) $prize->current_ads,
                 'goalAds' => (int) $prize->goal_ads,
                 'progress' => $prize->goal_ads > 0 ? round(($prize->current_ads / $prize->goal_ads) * 100, 2) : 0
@@ -342,7 +350,26 @@ class PrizesController extends WP_REST_Controller {
         return base64_decode(strtr($data, '-_', '+/'));
     }
 
+    /**
+     * Convert MySQL datetime (server local time) to UTC ISO 8601 format.
+     * Uses PHP strtotime which should match server timezone.
+     * For time-critical fields (scheduledAt), use remaining_seconds from MySQL instead.
+     */
+    public static function to_utc_iso($mysql_datetime) {
+        if (!$mysql_datetime) return null;
+        $ts = strtotime($mysql_datetime);
+        return $ts ? gmdate('Y-m-d\TH:i:s.000\Z', $ts) : null;
+    }
+
     private function format_prize($prize) {
+        // For scheduledAt: use MySQL-computed remaining_seconds (timezone-safe)
+        // MySQL computes TIMESTAMPDIFF(SECOND, NOW(), scheduled_at) using its own timezone
+        // consistently, then we reconstruct the UTC timestamp from current UTC time + remaining
+        $scheduled_at_utc = null;
+        if (isset($prize->remaining_seconds) && $prize->remaining_seconds !== null) {
+            $scheduled_at_utc = gmdate('Y-m-d\TH:i:s.000\Z', time() + (int)$prize->remaining_seconds);
+        }
+
         return [
             'id' => (string) $prize->id,
             'name' => $prize->name,
@@ -355,11 +382,11 @@ class PrizesController extends WP_REST_Controller {
             'goalAds' => (int) $prize->goal_ads,
             'timerStatus' => $prize->timer_status,
             'timerDuration' => (int) $prize->timer_duration,
-            'scheduledAt' => $prize->scheduled_at,
-            'timerStartedAt' => $prize->timer_started_at,
-            'extractedAt' => $prize->extracted_at,
-            'publishAt' => $prize->publish_at ?? null,
-            'createdAt' => $prize->created_at
+            'scheduledAt' => $scheduled_at_utc,
+            'timerStartedAt' => self::to_utc_iso($prize->timer_started_at),
+            'extractedAt' => self::to_utc_iso($prize->extracted_at),
+            'publishAt' => self::to_utc_iso($prize->publish_at),
+            'createdAt' => self::to_utc_iso($prize->created_at)
         ];
     }
 
@@ -386,11 +413,13 @@ class PrizesController extends WP_REST_Controller {
             return new WP_Error('not_found', 'Premio non trovato', ['status' => 404]);
         }
 
-        // When starting a countdown, use MySQL NOW() directly to avoid
-        // timezone mismatches between PHP/frontend (UTC) and MySQL (local)
+        // When starting a countdown, always compute scheduled_at server-side using DATE_ADD(NOW(), ...)
+        // to avoid timezone mismatches between app (UTC) and MySQL (server local time)
         if ($timer_status === 'countdown' && $prize->timer_status !== 'countdown') {
-            $duration = (int) $prize->timer_duration;
             $ads = ($current_ads !== null) ? (int) $current_ads : (int) $prize->current_ads;
+            // Compute duration based on prize value (≤25€ = 5 min, >25€ = 12h)
+            $prize_value = (float) $prize->value;
+            $duration = ($prize_value <= 25) ? 300 : 43200;
             $wpdb->query($wpdb->prepare(
                 "UPDATE {$table_prizes} SET timer_status = 'countdown', timer_started_at = NOW(), scheduled_at = DATE_ADD(NOW(), INTERVAL %d SECOND), current_ads = %d WHERE id = %d",
                 $duration, $ads, $prize_id

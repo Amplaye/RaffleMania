@@ -24,6 +24,7 @@ import apiClient from '../../services/apiClient';
 import {showRewardedAd, isRewardedAdReady, preloadRewardedAd, scheduleAdReadyNotification} from '../../services/adService';
 import {listenToPrizeUpdates, LivePrizeState} from '../../services/firebasePrizes';
 import {useTicketsStore, usePrizesStore, useLevelStore, useStreakStore, useCreditsStore, useAuthStore, useSettingsStore, useExtractionStore, useGameConfigStore, useReferralStore, DAILY_LIMITS, getUrgentThresholdForPrize, BETTING_LOCK_SECONDS, setMidnightStreakCallback} from '../../store';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useThemeColors} from '../../hooks/useThemeColors';
 import {
   COLORS,
@@ -135,6 +136,7 @@ interface HomeScreenProps {
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
+  const insets = useSafeAreaInsets();
   const {colors, gradientColors, isDark} = useThemeColors();
   const {fetchTickets, addTicket, addTicketsBatch, incrementAdsWatched, canPurchaseTicket, getTicketsPurchasedToday, getAdCooldownRemaining, getAdCooldownSeconds, checkAndResetDaily, resetDailyLimit, cleanupExtractedTickets} = useTicketsStore();
   const {prizes, fetchPrizes, fetchDraws, incrementAdsForPrize, fillPrizeToGoal, startTimerForPrize} = usePrizesStore();
@@ -214,11 +216,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
             p.currentAds === state.currentAds &&
             p.timerStatus === state.timerStatus
           ) return p;
+
+          // Difesa: se un timer countdown è già attivo localmente,
+          // non sovrascrivere scheduledAt con un valore più lontano dal server
+          // (evita che il server con timer_duration=86400 sovrascriva il timer locale corretto)
+          let newScheduledAt = state.scheduledAt ?? p.scheduledAt;
+          if (
+            p.timerStatus === 'countdown' &&
+            state.timerStatus === 'countdown' &&
+            p.scheduledAt &&
+            newScheduledAt
+          ) {
+            const localTime = new Date(p.scheduledAt).getTime();
+            const remoteTime = new Date(newScheduledAt).getTime();
+            // Mantieni il valore più vicino (timer più corto)
+            if (remoteTime > localTime + 60000) {
+              newScheduledAt = p.scheduledAt;
+            }
+          }
+
           return {
             ...p,
             currentAds: state.currentAds ?? p.currentAds,
             timerStatus: (state.timerStatus as any) ?? p.timerStatus,
-            scheduledAt: state.scheduledAt ?? p.scheduledAt,
+            scheduledAt: newScheduledAt,
             timerStartedAt: state.timerStartedAt ?? p.timerStartedAt,
           };
         }),
@@ -407,15 +428,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     setShowTicketModal(false);
     setIsBuyingTicket(true);
 
-    // Deduct all credits at once (no flickering)
-    const creditsDeducted = spendCreditsForTickets(quantity);
-    if (!creditsDeducted) {
-      setIsBuyingTicket(false);
-      Alert.alert('Errore', 'Crediti insufficienti.');
-      return;
-    }
-
     try {
+      // Deduct all credits at once (no flickering)
+      const creditsDeducted = spendCreditsForTickets(quantity);
+      if (!creditsDeducted) {
+        Alert.alert('Errore', 'Crediti insufficienti.');
+        return;
+      }
+
       // ATOMIC BATCH: Richiede tutti i biglietti in un'unica operazione
       // Garantisce numeri univoci anche con acquisti concorrenti
       const tickets = await addTicketsBatch('credits', currentPrize.id, currentPrize.timerStartedAt, quantity);
@@ -452,17 +472,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         totalPoolTickets: totalPool,
       });
       setShowTicketSuccessModal(true);
+
+      refreshUserData().catch(() => {});
     } catch (error) {
       console.error('[HomeScreen] Batch ticket purchase failed:', error);
       // Refund credits locally if batch purchase failed
       addCredits(quantity, 'other');
       Alert.alert('Errore', 'Impossibile riscattare i biglietti. I crediti sono stati ripristinati.');
+    } finally {
       setIsBuyingTicket(false);
-      return;
     }
-
-    setIsBuyingTicket(false);
-    refreshUserData().catch(() => {});
   };
 
   // Guarda pubblicità - dà solo 1 credito (no biglietto)
@@ -708,7 +727,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         </View>
 
         {/* Bottom Buttons */}
-        <View style={styles.bottomButtonContainer}>
+        <View style={[styles.bottomButtonContainer, {marginBottom: 50 + (Platform.OS === 'android' ? Math.max(insets.bottom, 8) : insets.bottom) + (Platform.OS === 'ios' ? 8 : 0) + SPACING.md}]}>
           {/* Ticket Counter */}
           <View style={styles.ticketCounterRow}>
             <ShimmerCreditsDisplay credits={user?.credits ?? 0} />
@@ -887,18 +906,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               <Image source={{uri: 'https://www.rafflemania.it/wp-content/uploads/2026/02/ICONA-CREDITI-senza-sfondo-Copia.png'}} style={{width: 40, height: 40}} />
               <Text style={[styles.creditModalTitle, {color: colors.text}]}>+1 Credito!</Text>
             </View>
-            <Text style={[styles.creditModalSubtitle, {color: colors.textMuted}]}>
-              Hai ottenuto 1 credito guardando la pubblicità
-            </Text>
             <View style={styles.creditModalXPRow}>
-              <Ionicons name="star" size={16} color="#FFD700" />
-              <Text style={[styles.creditModalXPText, {color: colors.textMuted}]}>
-                Ogni pubblicità ti fa guadagnare {xpRewards.WATCH_AD} punti esperienza
-              </Text>
+              <Ionicons name="star" size={20} color="#1E90FF" />
+              <Text style={styles.creditModalXPBadge}>+{xpRewards.WATCH_AD} XP</Text>
             </View>
-            <Text style={[styles.creditModalBalance, {color: COLORS.primary}]}>
-              Saldo: {user?.credits ?? 0} crediti
-            </Text>
             <TouchableOpacity
               style={styles.creditModalButton}
               onPress={() => setShowCreditModal(false)}
@@ -1046,11 +1057,12 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   buyTicketGradient: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: RADIUS.lg,
+    minHeight: Platform.OS === 'ios' ? 56 : 48,
     paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     gap: 4,
   },
   buyTicketText: {
@@ -1059,7 +1071,6 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.bold,
     fontWeight: FONT_WEIGHT.bold,
     textAlign: 'center',
-    paddingHorizontal: SPACING.sm,
   },
   buttonDisabled: {
     opacity: 0.5,
@@ -1211,7 +1222,6 @@ const styles = StyleSheet.create({
   // Bottom Buttons
   bottomButtonContainer: {
     marginHorizontal: SPACING.md,
-    marginBottom: 90,
     gap: SPACING.sm,
   },
   ticketCounterRow: {
@@ -1325,10 +1335,11 @@ const styles = StyleSheet.create({
   ticketOptionGradient: {
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: Platform.OS === 'ios' ? 100 : 90,
-    minHeight: Platform.OS === 'ios' ? 90 : 80,
+    minWidth: 90,
+    minHeight: 80,
+    borderRadius: RADIUS.lg,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.md,
     gap: 4,
   },
   ticketOptionQty: {
@@ -1379,17 +1390,19 @@ const styles = StyleSheet.create({
   creditModalXPRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: SPACING.xs,
-    backgroundColor: '#FFD70015',
+    backgroundColor: '#1E90FF15',
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.md,
     borderRadius: RADIUS.lg,
     marginBottom: SPACING.md,
   },
-  creditModalXPText: {
-    fontSize: FONT_SIZE.xs,
-    fontFamily: FONT_FAMILY.medium,
-    flex: 1,
+  creditModalXPBadge: {
+    fontSize: FONT_SIZE.xl,
+    fontFamily: FONT_FAMILY.bold,
+    fontWeight: FONT_WEIGHT.bold,
+    color: '#1E90FF',
   },
   creditModalBalance: {
     fontSize: FONT_SIZE.md,

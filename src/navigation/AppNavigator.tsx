@@ -627,13 +627,11 @@ export const AppNavigator: React.FC = () => {
       });
 
       // Trigger server-side extraction check, then fetch missed extractions
-      apiClient.post('/extractions/check').catch(() => {});
-      const t1 = setTimeout(() => {
+      apiClient.post('/extractions/check').then(() => {
         fetchMissedExtractions();
-      }, 3000);
-      return () => {
-        clearTimeout(t1);
-      };
+      }).catch(() => {
+        fetchMissedExtractions();
+      });
     }
     if (!isAuthenticated || !sessionActive) {
       missedChecked.current = false;
@@ -644,10 +642,7 @@ export const AppNavigator: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated && sessionActive && !rewardChecked.current) {
       rewardChecked.current = true;
-      // Delay to let missed extractions show first
-      setTimeout(() => {
-        fetchRewardNotifications();
-      }, 4000);
+      fetchRewardNotifications();
     }
     if (!isAuthenticated || !sessionActive) {
       rewardChecked.current = false;
@@ -662,13 +657,12 @@ export const AppNavigator: React.FC = () => {
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
         // App came to foreground - trigger server extraction check, then fetch results
-        apiClient.post('/extractions/check').catch(() => {});
-        setTimeout(() => {
+        apiClient.post('/extractions/check').then(() => {
           fetchMissedExtractions();
-        }, 1500);
-        setTimeout(() => {
-          fetchRewardNotifications();
-        }, 3000);
+        }).catch(() => {
+          fetchMissedExtractions();
+        });
+        fetchRewardNotifications();
       }
       appStateRef.current = nextAppState;
     });
